@@ -4,10 +4,10 @@
 ;;; named A, B, and C, on a table named T. See user manual.
 
 
-(in-package :pl)  ;required
+(in-package :ww)  ;required
 
 
-(setq *depth_cutoff* 2)  ;max # of steps to goal
+(setq *depth-cutoff* 2)  ;max # of steps to goal
 
 
 (define-types
@@ -21,15 +21,18 @@
     (height support !real))
 
 
+(define-derived-relations
+  (cleartop> ?block)  (not (exists (?b block)
+                             (on ?b ?block))))
+
+
 (define-action put
     0
     (?block block ?support support)
-    (and (not (exists (?b block)
-                      (on ?b ?block)))
+    (and (cleartop> ?block)
          (or (table ?support)
              (and (block ?support)
-                  (not (exists (?b block)
-                         (on ?b ?support))))))
+                  (cleartop> ?support))))
    (?block block ?support support)
    (and (on ?block ?support)
         (exists (?s support)
