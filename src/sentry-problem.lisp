@@ -4,10 +4,10 @@
 ;;; See sentry-problem in user manual appendix.
 
 
-(in-package :pl)  ;required
+(in-package :ww)  ;required
 
  
-(setq *depth_cutoff* 16)
+(setq *depth-cutoff* 16)
 
 
 (define-types
@@ -82,10 +82,10 @@
 (define-constraint
   ;Constraints only needed for happening events that can kill or delay an action.
   ;Global constraints included here. Return t if constraint violated.
-  (exists (?s sentry ?a area)
-    (and (loc me ?a)
-         (loc ?s ?a)
-         (not (disabled> ?s)))))
+  (not (exists (?s sentry ?a area)
+         (and (loc me ?a)
+              (loc ?s ?a)
+              (not (disabled> ?s))))))
 
 
 (define-action move
@@ -169,6 +169,7 @@
   (loc box1 area4)
   (red switch1)
   ;static
+  (always-true)
   (watches gun1 area2)
   (controls switch1 gun1)
   (los area1 gun1)
