@@ -27,10 +27,15 @@
 (defun segregate-plist (plist)
   "Returns two lists, the list of properties and the list of values in plist.
    Ex call: (destructuring-bind (properties values) (segregate-plist plist) ..."
-  (loop for (property value) on plist by #'cddr
-        collect property into properties
-        collect value into values
-      finally (return (list properties values))))
+  (loop with properties and values
+      for (property value) on plist by #'cddr
+      if (listp property)
+      do (loop for item in property do
+               (push item properties)
+               (push value values))
+      else do (push property properties)
+        (push value values)
+     finally (return (list (nreverse properties) (nreverse values)))))
 
 
 (defun walk-tree-until (fun tree)
@@ -45,12 +50,12 @@
                             t))))))
 
 
-(defun delete-subsets (set_of_sets)
-  "Destructively modifies set_of_sets with all subsets deleted."
-  (declare (list set_of_sets))
-  (setq set_of_sets (delete-duplicates set_of_sets :test #'subsetp))
-  (setq set_of_sets (nreverse set_of_sets))
-  (delete-duplicates set_of_sets :test #'subsetp))
+(defun delete-subsets (set-of-sets)
+  "Destructively modifies set-of-sets with all subsets deleted."
+  (declare (list set-of-sets))
+  (setq set-of-sets (delete-duplicates set-of-sets :test #'subsetp))
+  (setq set-of-sets (nreverse set-of-sets))
+  (delete-duplicates set-of-sets :test #'subsetp))
 
 
 (defun intersperse (element lst)
@@ -71,3 +76,33 @@
     (coerce regrouping 'list)))
 
 
+(defgeneric show (object &rest rest)
+  (:documentation "Displays an object in a user-friendly format."))
+
+
+(defmethod show ((table hash-table) &key (sort-by 'key))
+  "Displays a hash table line-by-line, sorted either by key or value."
+  (declare (hash-table table))
+  (let (alist)
+    (maphash (lambda (key value)
+               (push (cons (format nil "~A" key)
+                           (format nil "~A" value))
+                     alist))
+             table)
+    (setf alist (sort alist #'string< :key (ecase sort-by (key #'car) (value #'cdr))))
+    (loop for (key . value) in alist
+        do (format t "~&~A ->~10T ~A~%" key value)))
+  table)
+
+
+(defmethod show ((function function) &rest rest)
+  (declare (ignore rest))
+  (format t "~A~%" (function-lambda-expression function))
+  function)
+
+
+(defmethod show ((object t) &rest rest)
+  "Prints any basic lisp object."
+  (declare (ignore rest))
+  (format t "~A~%" object)
+  object)

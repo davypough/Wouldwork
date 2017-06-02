@@ -3,7 +3,7 @@
 ;;; Support functions for planning.
 
 
-(in-package :pl)
+(in-package :ww)
 
 
 (defun either (&rest types)
@@ -11,7 +11,7 @@
       append (gethash type *types*)))
 
 
-(defun distinct_instantiations (types)
+(defun distinct-instantiations (types)
   (declare (list types) (special *types*))
   (if types
     (let* ((objects (map 'list #'(lambda (type)
@@ -20,19 +20,19 @@
                                            append (gethash typ *types*))
                                      (gethash type *types*)))
                                types))
-           (all_instantiations (apply #'alexandria:map-product #'list objects))
+           (all-instantiations (apply #'alexandria:map-product #'list objects))
            ;next get list of all possible unique variable instantiations
-           (distinct_instantiations (delete-if-not #'alexandria:setp 
-                                                   all_instantiations)))
-      distinct_instantiations)
+           (distinct-instantiations (delete-if-not #'alexandria:setp 
+                                                   all-instantiations)))
+      distinct-instantiations)
     (list nil)))
 
 
-(defun achieve_goal (db)
+(defun achieve-goal (db)
   (funcall (symbol-function '*goal*) db))
 
 
-(defun symmetric_type_indexes (types)
+(defun symmetric-type-indexes (types)
   ;Returns the set of type indexes for the multi-types of a symmetric relation.
   (loop for remaining on types
       for i from 0
@@ -42,17 +42,17 @@
                   collect j into indices
                   finally (when indices
                             (push i indices))
-                          (return indices)) into index_sets
-      finally (return (first (ut::delete-subsets (remove nil index_sets))))))
+                          (return indices)) into index-sets
+      finally (return (first (ut::delete-subsets (remove nil index-sets))))))
 
 
-(defun convert_lambda_lists_to_fns ()
+(defun convert-lambda-lists-to-fns ()
   (declare (special *actions* *constraint* *goal*))
   (format t "Converting lambda lists to functions...")
   (dolist (action *actions*)
-    (with-slots (precondition precondition_lambda effect effect_lambda) action
-      (setf precondition (coerce precondition_lambda 'function))
-      (setf effect (coerce effect_lambda 'function))))
+    (with-slots (precondition precondition-lambda effect effect-lambda) action
+      (setf precondition (coerce precondition-lambda 'function))
+      (setf effect (coerce effect-lambda 'function))))
   (when *constraint*
     (setf (symbol-function '*constraint*)
       (coerce *constraint* 'function)))
@@ -60,8 +60,8 @@
     (coerce *goal* 'function)))
 
 
-(defun compile_lambda_fns ()
-  (declare (special *actions* *constraint* *function_names* *goal*))
+(defun compile-lambda-fns ()
+  (declare (special *actions* *constraint* *function-names* *goal*))
   (dolist (action *actions*)
     (with-slots (name precondition effect) action
       (format t "~&Compiling ~A precondition..." name)
@@ -72,9 +72,9 @@
     (format t "~&Compiling constraint...")
     (setf (symbol-function '*constraint*)
       (compile nil (symbol-function '*constraint*))))
-  (when *function_names*
+  (when *function-names*
    (format t "~&Compiling functions...")
-    (loop for fn-name in *function_names* do
+    (loop for fn-name in *function-names* do
           (setf (symbol-function fn-name)
             (compile nil (symbol-function fn-name)))))
   (format t "~&Compiling goal...")
@@ -82,93 +82,93 @@
     (compile nil (symbol-function '*goal*))))
 
 
-(defun get_prop_key&values (proposition)
+(defun get-prop-key&values (proposition)
   (declare (special *relations* *types*))
-  (loop for prop_item in proposition
-      for rel_item in (cons (car proposition)
+  (loop for prop-item in proposition
+      for rel-item in (cons (car proposition)
                             (gethash (car proposition) *relations*))
-        if (or (eq prop_item rel_item)   ;it's the leading predicate
-               (member prop_item (gethash rel_item *types*)))  ;it's a constant
-           collect prop_item into key
-        else if (varp #\! rel_item)
-                if (let ((value_type (extract_type rel_item)))
-                     (or (typep prop_item value_type)  ;it's a lisp type, eg real
-                         (member prop_item (gethash value_type *types*))))  ;it's a problem type
-                   collect prop_item into values
-                else do (error "In get_prop_key&values: ~a ~a" prop_item rel_item)
+        if (or (eq prop-item rel-item)   ;it's the leading predicate
+               (member prop-item (gethash rel-item *types*)))  ;it's a constant
+           collect prop-item into key
+        else if (varp #\! rel-item)
+                if (let ((value-type (extract-type rel-item)))
+                     (or (typep prop-item value-type)  ;it's a lisp type, eg real
+                         (member prop-item (gethash value-type *types*))))  ;it's a problem type
+                   collect prop-item into values
+                else do (error "In get-prop-key&values: ~a ~a" prop-item rel-item)
         finally (return (list key values))))
 
 
-(defun add_prop (proposition db)
+(defun add-prop (proposition db)
   ;Adds a literal proposition to the database.
-  (let ((key (remove-if #'realp proposition))
-        (fluents (remove-if-not #'realp proposition)))
+  (let ((key (cull-fluents proposition))
+        (fluents (get-fluents proposition)))
     (if (null fluents)
         (setf (gethash key db) t)
       (setf (gethash key db) fluents))))
 
 
-(defun del_prop (proposition db)
-  (let ((key (remove-if #'numberp proposition))
-        (fluents (remove-if-not #'numberp proposition)))
+(defun del-prop (proposition db)
+  (let ((key (cull-fluents proposition))
+        (fluents (get-fluents proposition)))
     (if (null fluents)
         (remhash proposition db)
       (remhash key db))))
   
 
-(defun add_proposition (proposition db)
+(defun add-proposition (proposition db)
   ;Adds all the symmetries of a proposition to the database.
   (declare (hash-table db *symmetrics*) (special *symmetrics*))
-  (let ((symmetric_indexes (gethash (car proposition) *symmetrics*)))
-    (if (null symmetric_indexes)
-      (add_prop proposition db)
-      (let ((symmetric_instances (loop for index in symmetric_indexes
+  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
+    (if (null symmetric-indexes)
+      (add-prop proposition db)
+      (let ((symmetric-instances (loop for index in symmetric-indexes
                                      collect (nth index (cdr proposition)))))
         (alexandria:map-permutations
           #'(lambda (perm)
               (loop for instance in perm
-                    for index in symmetric_indexes
+                    for index in symmetric-indexes
                     do ;(ut::prt instance index)
                        (setf (nth (1+ index) proposition) instance)
-                    finally (add_prop (copy-list proposition) db)))
-          symmetric_instances)))))
+                    finally (add-prop (copy-list proposition) db)))
+          symmetric-instances)))))
 
 
-(defun delete_proposition (proposition db)
+(defun delete-proposition (proposition db)
   (declare (hash-table db *symmetrics*) (special *symmetrics*))
-  (let ((symmetric_indexes (gethash (car proposition) *symmetrics*)))
-    (if (null symmetric_indexes)
-      (del_prop proposition db)  ;not symmetric proposition
-      (let ((symmetric_instances (loop for index in symmetric_indexes
+  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
+    (if (null symmetric-indexes)
+      (del-prop proposition db)  ;not symmetric proposition
+      (let ((symmetric-instances (loop for index in symmetric-indexes
                                        collect (nth index (cdr proposition)))))
         (alexandria:map-permutations
           #'(lambda (perm)
               (loop for instance in perm
-                    for index in symmetric_indexes
+                    for index in symmetric-indexes
                     do (setf (nth (1+ index) proposition) instance)
-                    finally (del_prop proposition db)))
-         symmetric_instances)))))
+                    finally (del-prop proposition db)))
+         symmetric-instances)))))
 
 
-(defun apply_effect (einsts fluent_values action state)
+(defun apply-effect (einsts fluent-values action state)
   ;Returns list of new db updates with einsts.
     (let* ((update (apply (action-effect action)
-                          `(,state ,@einsts ,@fluent_values)))
-           (new_einsts (map 'list #'(lambda (sym)
+                          `(,state ,@einsts ,@fluent-values)))
+           (new-einsts (map 'list #'(lambda (sym)
                                       (ut::walk-tree-until (lambda (x)
                                                              (eq x sym))
                                                            update))
                              einsts)))
-      (list update new_einsts)))
+      (list update new-einsts)))
 
 
-(defun order_update (db_update)
+(defun order-update (db-update)
   ;NOTs first so addhash db not removed by later remhash
-  (list (order_propositions (first db_update))
-        (second db_update)))
+  (list (order-propositions (first db-update))
+        (second db-update)))
 
 
-(defun order_propositions (props)
+(defun order-propositions (props)
   ;NOTs first so addhash db not removed by later remhash
   (sort props #'(lambda (x y) 
                   (declare (ignore y))
@@ -179,13 +179,13 @@
   ;Use for simple list of literals.
   (loop for literal in literals
       do (if (eq (car literal) 'not)
-             (delete_proposition (cadr literal) db)
-           (add_proposition literal db))
+             (delete-proposition (cadr literal) db)
+           (add-proposition literal db))
       finally (return db)))
 
 
-(defun complement_literals (literals)
-  (order_propositions
+(defun complement-literals (literals)
+  (order-propositions
    (map 'list #'(lambda (lit)
                   (if (eq (car lit) 'not)
                       (cadr lit)
@@ -193,11 +193,11 @@
      literals)))
 
 
-(defun assign_fluents (fluents fluent_accessor db)
+(defun assign-fluents (fluents fluent-accessor db)
   ;Assigns fluents to their current values.
   (loop for fluent in fluents
       for value in ;(or 
-                   (gethash fluent_accessor db)
+                   (gethash fluent-accessor db)
                    ;(make-list (length fluents) :initial-element 0))
       do (cond ((symbolp fluent) (set fluent value))
                ((realp fluent) (when (not (= fluent value)) (return nil)))
@@ -213,11 +213,11 @@
   (format t "Initializing...~%")
   (when (> (length *happenings*) 0)
     (setq *happenings* (sort *happenings* #'< :key #'car)))
-  (convert_lambda_lists_to_fns)
-  (compile_lambda_fns))
+  (convert-lambda-lists-to-fns)
+  (compile-lambda-fns))
 
 
-(defun expand_into_plist (parameters)
+(defun expand-into-plist (parameters)
   ;Return alternating plist of variable/type from input parameter list.
   (loop for (vars type) on parameters by #'cddr
       if (listp vars)
@@ -232,31 +232,47 @@
   (or (numberp item) (varp #\$ item)))
 
 
-(defun varp (lead_char var)
+(defun varp (lead-char var)
   (and (symbolp var)
-       (char= (elt (symbol-name var) 0) lead_char)))
+       (char= (elt (symbol-name var) 0) lead-char)))
 
 
-(defun get_vars (lead_char form)
-  ;Returns all vars in form starting with lead_char.
+(defun get-vars (lead-char form)
+  ;Returns all vars in form starting with lead-char.
     (remove-if-not #'(lambda (item)
                        (and (symbolp item)
-                            (char= (elt (symbol-name item) 0) lead_char)))
+                            (char= (elt (symbol-name item) 0) lead-char)))
                    form))
 
 
-(defun extract_type (value_symbol)
-  (intern (subseq (symbol-name value_symbol) 1)))
+(defun extract-type (value-symbol)
+  (intern (subseq (symbol-name value-symbol) 1)))
 
 
-(defun get_fluents (form)
-  (remove-if-not #'fluentp form))
+(defun get-fluents (form)
+  (loop with rel = (car form)
+      with rel-args = (gethash rel *relations*)
+      for arg in (cdr form)
+      for rel-arg in rel-args
+      when (or (varp #\$ arg) (varp #\! rel-arg))
+        collect arg))
 
 
-(defun cull_fluents (form)
-  (remove-if #'fluentp form))
+(defun cull-fluents (form)
+  (loop with rel = (car form)
+      with rel-args = (gethash rel *relations*)
+      for arg in (cdr form)
+      for rel-arg in rel-args
+      when (not (or (varp #\$ arg) (varp #\! rel-arg)))
+      collect arg into nonfluents
+        finally (return (cons rel nonfluents))))
 
 
-(defun form_has_fluents (form)
-  (find-if #'fluentp form))
+(defun form-has-fluents (form)
+  (loop with rel = (car form)
+      with rel-args = (gethash rel *relations*)
+      for arg in (cdr form)
+      for rel-arg in rel-args
+      when (or (varp #\$ arg) (varp #\! rel-arg))
+        do (return t)))
 
