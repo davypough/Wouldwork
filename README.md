@@ -39,5 +39,5 @@ The Wouldwork Planner is yet one more in a long line of classical planners.  A b
 
 -Output diagnostics describing details of the search
 
-For additional information, please see the Wouldwork user manual in the doc directory.
+For additional information, please see the Wouldwork user manual.
 Dave Brown, davypough@gmail.com
