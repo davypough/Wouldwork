@@ -20,14 +20,12 @@
   ;for greater efficiency to avoid searching redundant states.  States are
   ;the same depending on same-state below.
   (declare (problem-state state))
-;;  (problem-state-db state))
   (problem-state-idb state))
 
 
 (defun same-state (state1 state2)
   ;Test to determine if two states are the same.
   (declare (problem-state state1 state2))
-;;  (hash-table-key-equality (problem-state-db state1) (problem-state-db state2)))
   (hash-table-key-equality (problem-state-idb state1) (problem-state-idb state2)))
 
 
@@ -169,17 +167,23 @@
                 (when (>= *debug* 3)
                   (ut::prt db-updates))
                 (dolist (db-update db-updates)
-                  (let ((act-state (initialize-act-state action state db-update)))
+                  (let ((act-state (initialize-act-state action state db-update))
+                        net-state)
                      ;(ut::prt act-state)
                      (when act-state  ;no new act-state if wait action is cancelled
-                       (let ((net-state (update-happenings state act-state)))
-                         ;(ut::show (problem-state-idb net-state))
-                         (when (>= *debug* 3)
-                           (if net-state
-                             (format t "~&    ***NO CONSTRAINT VIOLATION***")
-                             (format t "~&    ***CONSTRAINT VIOLATION***")))
-                         (when net-state
-                           (pushnew net-state children :test #'same-state))))))))))))
+                       (if *happenings*
+                         (setf net-state (update-happenings state act-state))
+                         (if (and *constraint* 
+                                  (not (funcall (symbol-function '*constraint*) act-state))) ;violated
+                           (setf net-state nil)
+                           (setf net-state act-state)))
+                       ;(ut::show (problem-state-idb net-state))
+                       (when (>= *debug* 3)
+                         (if net-state
+                           (format t "~&    ***NO CONSTRAINT VIOLATION***")
+                           (format t "~&    ***CONSTRAINT VIOLATION***")))
+                       (when net-state
+                         (pushnew net-state children :test #'same-state)))))))))))
     children))
 
 
@@ -216,7 +220,6 @@
                        (second db-update))
      :happenings (copy-tree (problem-state-happenings state))  ;to be updated by happenings
      :time (+ (problem-state-time state) duration)
-;;     :db (revise (alexandria:copy-hash-table (problem-state-db state)) (first db-update))
      :idb (revise (alexandria:copy-hash-table (problem-state-idb state)) (first db-update)))))
 
 

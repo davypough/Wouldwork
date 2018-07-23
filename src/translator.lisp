@@ -109,12 +109,17 @@
              ($vars (remove-if-not #'$varp vars))
              (*current-precondition-fluents* $vars)
              (*current-effect-fluents* $vars))
-        `(some (lambda ,?vars
-                 (let ,$vars
-                   (declare (special ,@$vars))  ;needed for (set $var ...)
-                   ,(translate body flag)))
-               ,@(mapcar (lambda (x) `(quote ,x))
-                         (ut::regroup (type-instantiations types))))))))
+        (if $vars
+          `(some (lambda ,?vars
+                   (let ,$vars
+                     (declare (special ,@$vars))  ;needed for (set $var ...)
+                     ,(translate body flag)))
+                 ,@(mapcar (lambda (x) `(quote ,x))
+                     (ut::regroup (type-instantiations types))))
+          `(some (lambda ,?vars
+                   ,(translate body flag))
+                 ,@(mapcar (lambda (x) `(quote ,x))
+                     (ut::regroup (type-instantiations types)))))))))
          
 
 (defun translate-universal (form flag)
@@ -130,13 +135,34 @@
              ($vars (remove-if-not #'$varp vars))
              (*current-precondition-fluents* $vars)
              (*current-effect-fluents* $vars))
-        `(every (lambda ,?vars
-                  (let ,$vars
-                    (declare (special ,@$vars))  ;needed for (set $var ...)
-                    ,(translate body flag)))
-                ,@(mapcar (lambda (x) `(quote ,x))
-                          (ut::regroup (type-instantiations types))))))))
+        (if $vars
+          `(every (lambda ,?vars
+                    (let ,$vars
+                      (declare (special ,@$vars))  ;needed for (set $var ...)
+                      ,(translate body flag)))
+                  ,@(mapcar (lambda (x) `(quote ,x))
+                      (ut::regroup (type-instantiations types))))
+          `(every (lambda ,?vars
+                    ,(translate body flag))
+                  ,@(mapcar (lambda (x) `(quote ,x))
+                      (ut::regroup (type-instantiations types)))))))))
 
+
+(defun translate-forfluent (form flag)
+  ;The forfluent construction provides a parameter list for fluents, similar to the
+  ;existential & universal quantifiers for generated vars. It provides binding for fluents for pre & eff.
+  (let ((parameters (second form))
+        (body (third form)))
+    (destructuring-bind (vars types) (dissect-parameters parameters)
+      (check-type vars (satisfies list-of-variables))
+      (check-type types (satisfies list-of-parameter-types))
+      (let* (($vars (remove-if-not #'$varp vars))
+             (*current-precondition-fluents* $vars)
+             (*current-effect-fluents* $vars))
+        `(let ,$vars
+           (declare (special ,@$vars))  ;needed for (set $var ...)
+           ,(translate body flag))))))
+  
 
 (defun translate-connective (form flag)
   ;Translates and, or, not.
@@ -159,8 +185,8 @@
 (defun translate-derived (form flag)
   ;Translates a derived relation.
   (declare (hash-table *derived*))
-  (let* ((alist (pairlis (get-all-vars (first (gethash (car form) *derived*)))
-                         (get-all-vars (cdr form))))
+  (let* ((alist (pairlis (first (gethash (car form) *derived*))
+                         (cdr form)))
          (new-form (sublis alist (second (gethash (car form) *derived*)))))
     (translate new-form flag)))
 
@@ -175,9 +201,14 @@
 
 
 (defun translate-let (form flag)
-  ;Translates a let clause. Used in functions to bind & initialize variables.
-  `(let ,(second form) ,@(loop for statement in (cddr form)
-                             collect (translate statement flag))))
+  ;Translates a let clause. Used to bind & initialize $ variables.
+  (let* (($vars (second form))
+         (*current-precondition-fluents* $vars)
+         (*current-effect-fluents* $vars))
+    `(let ,(second form)
+       (declare (special ,@(second form)))
+       ,@(loop for statement in (cddr form)
+               collect (translate statement flag)))))
 
 
 (defun translate-setq (form flag)  ;always need to return t
@@ -195,8 +226,9 @@
   (cond ((atom form) form)  ;atom translates as itself
         ((eql form nil) t)  ;if form=nil simply continue processing
         ((eql (car form) 'assert) (translate-assertion form flag))
-        ((eql (car form) 'exists) (translate-existential form flag))  ;specialty first
+        ((member (car form) '(forsome exists exist)) (translate-existential form flag))  ;specialty first
         ((eql (car form) 'forall) (translate-universal form flag))
+        ((member (car form) '(forfluent forfluents)) (translate-forfluent form flag))
         ((eql (car form) 'if) (translate-conditional form flag))
         ((eql (car form) 'bind) (translate-binding form flag))
         ((eql (car form) 'let) (translate-let form flag))

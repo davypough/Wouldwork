@@ -108,8 +108,6 @@
         (setf (gethash (car condition) *derived*)
           (list (loop for item in (cdr condition)
                       do (check-type item (or (satisfies varp) symbol))
-                     when (or (?varp item)
-                              ($varp item))
                      collect item)
                  body))))
 
@@ -144,6 +142,7 @@
   (when (getf plist :interrupt)
     (setf (get object :interrupt) `(lambda (state)
                                      ,(translate (getf plist :interrupt) 'pre))))
+  (fix-if-ignore-state (get object :interrupt))
   (when (getf plist :repeat)
     (setf (get object :repeat) (getf plist :repeat)))
   ;(when (get object :rebound) 
@@ -153,63 +152,48 @@
   (push object *happenings*))
            
 
-(defmacro define-precondition-function (name args params &rest body)
-  `(install-precondition-function ',name ',args ',params ',body))
+(defmacro define-precondition-function (name args body)
+  `(install-precondition-function ',name ',args ',body))
 
 
-(defun install-precondition-function (name args params body)
+(defun install-precondition-function (name args body)
   (format t "Installing ~A precondition function...~%" name)
   (check-type args (satisfies list-of-variables))
-;  (fmakunbound `,name)  ;avoid redefinition warning
-  (destructuring-bind (vars types) (dissect-parameters params)
-    (check-type vars (satisfies list-of-variables))
-    (check-type types (satisfies list-of-parameter-types))
-    (let (($vars (remove-if-not #'$varp vars)))
-      (setq *current-precondition-fluents* $vars)
-      (let* ((translation (translate (car body) 'pre))
-             (lambda-expr `(lambda (state ,@args)
-                             ,(if (find 'state (alexandria:flatten translation))
-                                '(declare (ignore))
-                                '(declare (ignore state)))
-                             (let ,$vars
-                               (declare (special ,@$vars))
-                               ,translation))))
-        (setf (symbol-value `,name) lambda-expr)
-        (push `,name *function-names*)))))
-  
-
-(defmacro define-effect-function (name args params &rest body)
-  `(install-effect-function ',name ',args ',params ',body))
+  (setf (get `,name 'formula) body)
+  (setf (get `,name 'fn) `(lambda (state ,@args)
+                            ,(translate body 'pre)))
+  (fix-if-ignore-state (get `,name 'fn))
+  (setf (symbol-value `,name) (copy-tree (get `,name 'fn)))
+  (push `,name *function-names*))
 
 
-(defun install-effect-function (name args params body)
+(defmacro define-effect-function (name args body)
+  `(install-effect-function ',name ',args ',body))
+
+
+(defun install-effect-function (name args body)
   (format t "Installing ~A effect function...~%" name)
   (check-type args (satisfies list-of-variables))
-  (destructuring-bind (vars types) (dissect-parameters params)
-    (check-type vars (satisfies list-of-variables))
-    (check-type types (satisfies list-of-parameter-types))
-    (let (($vars (remove-if-not #'$varp vars)))
-      (setq *current-effect-fluents* $vars)
-      (let* ((translation (translate (car body) 'eff))
-             (lambda-expr `(lambda (state ,@args)
-                             ,(if (find 'state (alexandria:flatten translation))
-                                '(declare (ignore))
-                                '(declare (ignore state)))
-                             (let (changes ,@$vars)
-                               (declare (special ,@$vars))
-                               ,translation
-                               changes))))
-        (setf (symbol-value `,name) lambda-expr)
-        (push `,name *function-names*)))))
-  
+  (setf (get `,name 'formula) body)
+  (setf (get `,name 'fn) `(lambda (state ,@args)
+                                 (let (changes)
+                                   ,(translate body 'eff)
+                                   changes)))
+  (fix-if-ignore-state (get `,name 'fn))
+  (setf (symbol-value `,name) (copy-tree (get `,name 'fn)))
+  (push `,name *function-names*))
 
+  
 (defmacro define-constraint (form)
   `(install-constraint ',form))
 
 
 (defun install-constraint (form)
   (format t "Installing constraint...~%")
-  (setq *constraint* `(lambda (state) ,(translate form 'pre))))
+  (setf (get '*constraint* 'formula) form)
+  (setf (get '*constraint* 'fn) `(lambda (state) ,(translate form 'pre)))
+  (fix-if-ignore-state (get '*constraint* 'fn))
+  (setf *constraint* (copy-tree (get '*constraint* 'fn))))
         
 
 (defmacro define-action (name duration pre-params precondition eff-params effect)
@@ -257,13 +241,9 @@
                                            (let (changes ,@(ut::list-difference eff-$vars pre-$vars))
                                              ,(translate effect 'eff)
                                              changes))
-                         :effect-adds nil)))
-            (dolist (form (list (action-precondition-lambda action) 
-                                (action-effect-lambda action)))
-              (when (not (ut::walk-tree-until (lambda (x)
-                                                (eql x 'state))
-                                              (cddr form))) ;db in the lambda body?
-                (push '(declare (ignore state)) (cddr form))))
+                          :effect-adds nil)))
+            (fix-if-ignore-state (action-precondition-lambda action))
+            (fix-if-ignore-state (action-effect-lambda action))
             (loop with effect = (action-effect-lambda action)
                   for var in eff-vars
                   when (not (ut::walk-tree-until (lambda (x)
@@ -317,12 +297,8 @@
                                              ,(translate effect 'eff)
                                              changes))
                          :effect-adds nil)))
-            (dolist (form (list (action-precondition-lambda action) 
-                                (action-effect-lambda action)))
-              (when (not (ut::walk-tree-until (lambda (x)
-                                                (eq x 'state))
-                                              (cddr form))) ;db in the lambda body?
-                 (push '(declare (ignore state)) (cddr form))))
+            (fix-if-ignore-state (action-precondition-lambda action))
+            (fix-if-ignore-state (action-effect-lambda action))
             (loop with effect = (action-effect-lambda action)
                   for var in eff-vars
                   when (not (ut::walk-tree-until (lambda (x)
@@ -357,5 +333,7 @@
 (defun install-goal (form)
   (format t "Installing goal...~%")
   (setf (get '*goal* 'formula) form)  ;save user's goal for summary printout
-  (setq *goal* `(lambda (state) ,(translate form 'pre)))
+  (setf (get '*goal* 'fn) `(lambda (state) ,(translate form 'pre)))  ;save uncoded goal translation
+  (fix-if-ignore-state (get '*goal* 'fn))
+  (setq *goal* (copy-tree (get '*goal* 'fn)))  ;to be compiled
   (setup))

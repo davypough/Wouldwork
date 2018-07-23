@@ -28,20 +28,25 @@
 
 
 (defun convert-lambdas-to-fns ()
-  (format t "Converting lambda expressions to functions...")
+  (format t "~&Converting lambda expressions to functions...~%")
   (iter (for fname in *function-names*)
+        (format t "~&~A...~%" fname)
         (when (fboundp `,fname)
           (fmakunbound `,fname))
         (eval `(defun ,fname ,@(cdr (eval fname))))
         (compile `,fname))
   (when *constraint*
+    (format t "~&~A...~%" '*constraint*)
     (setf (symbol-function '*constraint*)
       (compile nil *constraint*)))
   (iter (for object in *happenings*)
+        (format t "~&~A...~%" object)
         (setf (get object :interrupt-fn) (compile nil (eval object))))
+  (format t "~&~A...~%" '*goal*)
   (setf (symbol-function '*goal*)
     (compile nil *goal*))
   (dolist (action *actions*)
+    (format t "~&~A...~%" (action-name action))
     (with-slots (iprecondition-lambda iprecondition ieffect-lambda ieffect) action
       (setf iprecondition (compile nil iprecondition-lambda))
       (setf ieffect (compile nil ieffect-lambda)))))
@@ -248,11 +253,11 @@
                    form))
 
 
-(defun get-all-vars (args)
-  ;Returns all variables in arg list.
-  (loop for arg in args
-      when (varp arg)
-        collect arg))    
+;(defun get-all-vars (args)
+;  ;Returns all variables in arg list.
+;  (loop for arg in args
+;      when (varp arg)
+;        collect arg))    
 
 
 (defun different (sym1 sym2)
@@ -360,8 +365,34 @@
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (type) (gethash type *types*))
                               nonfluent-types))
-           (bag-instances (apply #'alexandria:map-product 'list instances)))
-      (remove-if-not #'alexandria:setp bag-instances))))  ;set-instances
+           (product-instances (apply #'alexandria:map-product 'list instances)))
+      (get-set-instances nonfluent-types product-instances))))
+
+
+(defun get-set-instances (symbol-types product-instances)
+  ;Culls out duplicate instances of the same type from product-instances.
+  (iter (for product-instance in product-instances)
+        (unless (duplicate-product-instance symbol-types product-instance)
+          (collect product-instance))))
+
+
+(defun duplicate-product-instance (symbol-types product-instance)
+  ;Tests whether a product-instance contains duplicate type assignments of constants.
+  (iter (for common-values in (get-common-values symbol-types product-instance))
+        (when (not (alexandria:setp common-values))  ;duplicate values
+          (return t))
+        (finally (return nil))))
+
+
+(defun get-common-values (symbol-types product-instance)
+  ;Returns a set of product-instance values for equivalent types in symbol-types.
+  (iter (with types-set = (remove-duplicates symbol-types))
+        (for type in types-set)
+        (collect (iter (for sym-type in symbol-types)
+                       (for value in product-instance)
+                       (for i from 0)
+                       (when (eq sym-type type)
+                         (collect value))))))
 
 
 (defun dissect-parameters (parameter-list)
@@ -380,4 +411,12 @@
                     (member partial-key partial-keys :test #'equal))
             (return-from duplicate-db-entry-test t)
             (push partial-key partial-keys)))))
-        
+
+
+(defun fix-if-ignore-state (lambda-expr)
+  (when (not (ut::walk-tree-until (lambda (x)
+                                    (eql x 'state))
+                                  (cddr lambda-expr))) ;db in the lambda body?
+    (push '(declare (ignore state)) (cddr lambda-expr))))
+
+

@@ -10,8 +10,8 @@
   ;Creates hap-state with happenings up through the action completion time for all happenings.
   ;Returns net-state = act-state + hap-state, and checks for constraint violation.
   (declare (problem-state state act-state))
-  (when (null *happenings*)
-    (return-from update-happenings act-state))
+;  (when (null *happenings*)
+;    (return-from update-happenings act-state))
   (let ((hap-state (copy-problem-state state))  ;to be updated
         (net-state (copy-problem-state act-state)) ;add happenings to hap-state & net-state
         (next-happenings (copy-tree (problem-state-happenings state))) ;process each next happening
@@ -29,15 +29,14 @@
           (when (null following-happening) (next-iteration))
           (when (/= (first (second following-happening)) index)  ;happening is not interrupted
             (when (>= *debug* 3) (ut::prt updates))
-;;            (revise (problem-state-db hap-state) updates)
-;;            (revise (problem-state-db net-state) updates))
             (revise (problem-state-idb hap-state) updates)
             (revise (problem-state-idb net-state) updates))
           (push following-happening next-happenings)) ;keep looking until past action-completion-time
    (setf (problem-state-happenings hap-state) following-happenings)
    (setf (problem-state-happenings net-state) following-happenings)
    (when (>= *debug* 3) (ut::prt net-state))
-   (if (constraint-violated act-state hap-state net-state)
+    (if (and *constraint*
+             (constraint-violated-in-act-hap-net act-state hap-state net-state))
      (return-from update-happenings nil)
      (return-from update-happenings net-state))))
 
@@ -73,7 +72,7 @@
              (funcall ut::it new-state)))
  
 
-(defun constraint-violated (act-state hap-state net-state)
+(defun constraint-violated-in-act-hap-net (act-state hap-state net-state)
   ;Determines whether the input states violate a constraint or not.
   (declare (problem-state act-state hap-state net-state))
   (or (and (not (funcall (symbol-function '*constraint*) act-state))

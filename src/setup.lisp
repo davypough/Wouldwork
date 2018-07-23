@@ -126,8 +126,6 @@
 
 (defparameter *db* (make-hash-table :test #'equal))  ;initial database of dynamic relations
 
-;(defparameter *idb* (make-hash-table))
-
 (defparameter *static-db* (make-hash-table :test #'equal))  ;the database of static relations
 
 (defparameter *static-idb* (make-hash-table))  ;the integer database of static relations
@@ -200,7 +198,13 @@
 (defun relation (rel)
   (declare (hash-table *relations*))
   (and (listp rel)
-       (equal (gethash (car rel) *relations*) (cdr rel))))
+       (iter (for rel-type in (cdr rel))
+             (for type in (gethash (car rel) *relations*))
+             (unless (or (eq rel-type type)
+                         (member rel-type (cdr type))  ;either type
+                         (alexandria:set-equal rel-type type))
+               (return nil))
+             (finally (return t)))))
 
 (defun negative-relation (neg-rel)
   (and (listp neg-rel)
