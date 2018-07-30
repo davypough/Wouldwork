@@ -175,10 +175,10 @@
 
 (defun type-description (descrip)
   (declare (hash-table *types*))
-  (or (gethash descrip *types*)
+  (or (nth-value 1 (gethash descrip *types*))
       (eql descrip 'fluent)
       (and ($varp descrip)
-           (or (gethash (extract-type descrip) *types*)
+           (or (nth-value 1 (gethash (extract-type descrip) *types*))
                (symbolp (extract-type descrip))))
       (and (consp descrip)
            (eql (car descrip) 'either)
@@ -192,17 +192,19 @@
        (every (lambda (typ)
                 (and (symbolp typ)
                      (or (eql typ 'fluent)
-                         (gethash typ *types*))))
+                         (nth-value 1 (gethash typ *types*)))))
               lst)))
 
 (defun relation (rel)
   (declare (hash-table *relations*))
   (and (listp rel)
-       (iter (for rel-type in (cdr rel))
-             (for type in (gethash (car rel) *relations*))
-             (unless (or (eq rel-type type)
-                         (member rel-type (cdr type))  ;either type
-                         (alexandria:set-equal rel-type type))
+       (iter (for rel-item in (cdr rel))
+             (for rel-type in (gethash (car rel) *relations*))
+             (unless (or (eq rel-item rel-type)
+                         (and (listp rel-type)
+                              (member rel-item (cdr rel-type)))  ;either type
+                         (subsetp (gethash rel-item *types*) (gethash rel-type *types*)))
+                         ;(alexandria:set-equal rel-item rel-type))
                (return nil))
              (finally (return t)))))
 
@@ -232,7 +234,7 @@
                                (reduce #'union 
                                        (mapcar (lambda (typ)
                                                  (gethash (extract-type typ) *types*))
-                                                 (cdr typ)))))
+                                               (cdr typ)))))
                         (typep const (extract-type typ))))
               (cdr prop) (or (gethash (car prop) *relations*)
                              (gethash (car prop) *static-relations*))))))

@@ -6,6 +6,7 @@
 (in-package :ww)
 
 
+
 (defun do-integer-conversion ()
   (associate-objects-with-integers)
   (iter (for (type constants) in-hashtable *types*)
@@ -34,6 +35,7 @@
   (let (objects)  ;build list of all object constants requiring conversion
     (push 'always-true objects)
     (push 'waiting objects)
+    (push nil objects)
     (iter (with flat-codes = (append (alexandria:flatten *goal*) (alexandria:flatten *constraint*)))
           (for item in flat-codes)
           (when (numberp item)

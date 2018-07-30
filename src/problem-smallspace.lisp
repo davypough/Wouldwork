@@ -1,7 +1,7 @@
-;;;; Filename: problem-crater.lisp
+;;;; Filename: problem-smallspace.lisp
 
 ;;; Problem specification (in Talos Principle)
-;;; for the (second) Nexus-2 crater problem in Road to Gehenna.
+;;; for the small space problem in Road to Gehenna sigil dome.
 
 
 (in-package :ww)  ;required
@@ -11,30 +11,29 @@
 
 (setq *tree-or-graph* 'tree)
 
-;(setq *first-solution-sufficient* t)
+(setq *first-solution-sufficient* t)
 
 
 (define-types
   myself      (me)
-  gate        (gate4 gate5 gate6)
-  barrier     (barrier3 barrier4)
-  jammer      (jammer1)
-  connector   (connector2 connector3 connector4 connector5 connector6)
-  box         (box1 box2 box3 box4 box5)
-  fan         (fan1 fan2 fan3 fan4)
-  gears       (gears2 gears3)
-  ladder      (ladder3 ladder4)
-  rostrum     (rostrum2)
+  gate        (gate1 gate2)
+  barrier     ()
+  jammer      ()
+  connector   (connector1 connector2)
+  box         ()
+  fan         ()
+  gears       ()
+  ladder      ()
+  rostrum     ()
   hue         (blue red)
-  transmitter (transmitter2)
-  receiver    (receiver7 receiver8 receiver9 receiver10 receiver11 receiver12
-               receiver13 receiver14)
-  area        (area1 area2 area8 area9 area10 area11 area12)
-  divider     (either gate barrier)
-  cargo       (either jammer connector box fan)
+  transmitter (transmitter1 transmitter2)
+  receiver    (receiver1 receiver2)
+  area        (area1 area2 area3 area4 area5 area6 area7 area8)
+  cargo       (either connector)
   target      (either gate gears)
+  divider     (either gate barrier)
   terminus    (either transmitter receiver connector)
-  fixture     (either transmitter receiver gears ladder rostrum)
+  fixture     (either transmitter receiver)
   station     (either fixture gate)
   support     (either box rostrum))
 
@@ -47,8 +46,8 @@
   (attached fan gears)
   (jamming jammer $target)
   (connecting terminus terminus)
-  (active (either connector gate gears))
-  (inactive (either connector gate gears))
+  (active (either connector gate))
+  (inactive (either connector gate))
   (color terminus $hue))
 
 
@@ -58,8 +57,8 @@
   (separates divider area area)
   (climbable> ladder area area)
   (height support $real)
-  (controls receiver (either gate gears))
-  (controls2 receiver receiver gate)  ;gate controlled by two receivers together
+  (controls receiver $gate)
+  (controls2 receiver receiver $gate)  ;gate controlled by two receivers together
   (los0 area (either gate fixture))  ;clear los from an area to a gate/fixture
   (los1 area divider (either gate fixture))
   (los2 area divider divider (either gate fixture))
@@ -70,8 +69,8 @@
 
 (define-complementary-relations  
   (holding myself $cargo) -> (not (free myself))
-  (active (either gears connector gate)) -> (not (inactive (either gate gears connector)))
-  (inactive (either connector gears gate)) -> (not (active (either connector gate gears))))
+  (active (either connector gate)) -> (not (inactive (either connector gate)))
+  (inactive (either connector gate)) -> (not (active (either connector gate))))
 
 
 (define-derived-relations
@@ -154,33 +153,19 @@
 
 
   ;derived relations for simplifying effects
-  
-  (color-terminus* ?hue ?connector ?terminus)   (if (hue ?hue)
-                                                  (color ?connector ?hue)
-                                                  (if (colorable* ?terminus)
-                                                    (color ?terminus ?hue)))
-  
-  (disconnect-connector* ?connector)    (assert (if (active ?connector)
-                                                  (not (active ?connector)))
-                                                (forall (?t terminus)
-                                                  (if (connecting ?connector ?t)
-                                                    (assert (not (connecting ?connector ?t))
-                                                            (if (and (active ?connector)
-                                                                     (receiver ?t))
-                                                              (disengage-receiver* ?t ?connector))
-                                                            (if (and (active ?connector)
-                                                                     (connector ?t))
-                                                              (disengage-connector! ?t ?connector))))))
 
-  (disengage-receiver* ?receiver ?connector)  (if (not (alternate-receiver-source* ?receiver ?connector))
-                                                (forall (?gate gate)
-                                                  (if (controls ?receiver ?gate)
-                                                    (inactive ?gate))))
-                                                
-  (alternate-receiver-source* ?receiver ?connector)  (exists (?c connector)
-                                                       (and (not (eql ?c ?connector))
-                                                            (active ?c)
-                                                            (connecting ?c ?receiver)))
+
+  (disconnect-connector* ?connector)  (forall (?t terminus)
+                                        (if (connecting ?connector ?t)
+                                          (assert (not (connecting ?connector ?t))
+                                                  (if (and (active ?t)
+                                                           (not (exists (?s (either transmitter connector))
+                                                                  (and (connecting ?t ?s)
+                                                                       (source* ?s)))))
+                                                      (assert (inactive ?t)
+                                                              (bind (color ?t $hue))
+                                                            (if (not (eql $hue nil))  ;(color ?t $hue1)
+                                                              (not (color ?t $hue))))))))
 
   (activate-terminus1-given-terminus2* ?terminus1 ?terminus2)  (if (and (connector ?terminus1)
                                                                         (inactive ?terminus1)
@@ -193,7 +178,7 @@
   (let ($h $s)
     (height ?support $h)
     (bind (on ?support $s))
-    (if (not (support $s))
+    (if (eql $s nil)
       (return-from elevation! $h)
       (return-from elevation! (+ $h (elevation! state $s))))))
 
@@ -204,30 +189,6 @@
                      (and (different ?j ?jammer)
                           (jamming ?j ?target))))
             (assert (active ?target)))))
-
-
-(define-effect-function alternate-connector-source! (?connector ?previous-connector)
-  (or (exists (?t transmitter)
-        (connecting ?t ?connector))
-      (exists (?c connector)
-          (and (connecting ?c ?connector)
-               (not (eql ?c ?previous-connector))
-               (alternate-connector-source! ?c ?connector)))))
-
-
-(define-effect-function disengage-connector! (?connector ?previous-connector)
-  (if (not (alternate-connector-source! ?connector ?previous-connector))
-    (assert (inactive ?connector)
-            (let ($hue)
-              (if (color ?connector $hue))
-                (not (color ?connector $hue)))
-            (forall (?r receiver)
-              (if (connecting ?connector ?r)
-                (disengage-receiver* ?r ?connector)))
-            (forall (?c connector)
-              (if (connecting ?connector ?c)
-                (disengage-connector! ?c ?connector))))))
-
 
 
 (define-action connect-to-2-terminus  ;using held connector
@@ -246,21 +207,20 @@
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
           (connecting $cargo ?terminus2)
-          (color-terminus* $hue1 $cargo ?terminus2)
-          (color-terminus* $hue2 $cargo ?terminus1)
+          (if (not (eql $hue1 nil))
+            (assert (color $cargo $hue1)
+                    (if (colorable* ?terminus2)
+                      (color ?terminus2 $hue1))))
+          (if (not (eql $hue2 nil))
+            (assert (color $cargo $hue2)
+                    (if (colorable* ?terminus1)
+                      (color ?terminus1 $hue2))))
           (activate-terminus1-given-terminus2* ?terminus1 ?terminus2)
           (activate-terminus1-given-terminus2* ?terminus2 ?terminus1)
-    (if (source* ?terminus1)
-      (assert (active $cargo)
-              (doall (?g gate)
-                (if (controls ?terminus2 ?g)
-                  (inactive ?g)))))
-    (if (source* ?terminus2)
-      (assert (active $cargo)
-              (doall (?g gate)
-                (if (controls ?terminus1 ?g)
-                  (inactive ?g)))))))
-        
+          (if (or (source* ?terminus1)
+                  (source* ?terminus2))
+            (active $cargo))))
+
 
 (define-action connect-to-1-terminus  ;using held connector
     1
@@ -274,7 +234,7 @@
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus)
-          (if (hue $hue)
+          (if (not (eql $hue nil))
             (color $cargo $hue))
           (activate-terminus1-given-terminus2* $cargo ?terminus)))
 
@@ -303,7 +263,7 @@
   (?jammer jammer ($area $target) fluent)
   (assert (holding me ?jammer)
           (not (loc ?jammer $area))
-          (if (target $target)
+          (if (not (eql $target nil))
             (disengage-jammer! ?jammer $target))))
 
 
@@ -317,8 +277,10 @@
   (?connector connector ($area $hue) fluent)
   (assert (holding me ?connector)
           (not (loc ?connector $area))
-          (if (hue $hue)
+          (if (not (eql $hue nil))
             (not (color ?connector $hue)))
+          (if (active ?connector)
+            (not (active ?connector)))
           (disconnect-connector* ?connector)))
 
 
@@ -375,59 +337,70 @@
 (define-init
   ;dynamic
   (loc me area1)
+  (loc connector1 area4)
+  (loc connector2 area7)
   (free me)
-  (loc jammer1 area1)
-  (loc connector2 area2) (loc connector3 area8) (loc connector4 area10)
-  (loc connector5 area11) (loc connector6 area11)
-  (loc box1 area2) (loc box3 area1) (loc box4 area1) (loc box5 area1)
-  (on box3 box4)
-  (loc fan2 area12) (loc fan3 area2) (loc fan1 area1)
-  (attached fan3 gears3)
-  (on connector2 box1)
-  (active gate4) (active gate5) (active gate6)
+  (active gate1)
+  (active gate2)
   
   ;static
-  (adjacent area8 area9)
-  (height box2 1) (height box3 1) (height box4 1) (height box5 1)
-  (height rostrum2 0.5)
-  (locale transmitter2 area8)
-  (locale rostrum2 area10)
-  (locale ladder3 area10) (locale ladder4 area10)
-  (locale gears2 area10) (locale gears3 area2)
-  (locale receiver7 area9) (locale receiver8 area10) (locale receiver9 area10) 
-  (locale receiver10 area10) (locale receiver11 area11)  (locale receiver12 area11)
-  (locale receiver13 area11) (locale receiver14 area2)
+  (adjacent area1 area2)
+  (adjacent area2 area3)
+  (adjacent area3 area4)
+  (adjacent area4 area5)
+  (adjacent area6 area7)
+  (locale transmitter1 area4)
+  (locale transmitter2 area7)
+  (locale receiver1 area4)
+  (locale receiver2 area8)
+  (color transmitter1 blue)
   (color transmitter2 red)
-  (color receiver7 blue) (color receiver8 blue) (color receiver9 blue) 
-  (color receiver10 red) (color receiver11 red) (color receiver12 blue) 
-  (color receiver13 red) (color receiver14 red)
-  (controls receiver7 gate4) (controls receiver8 gate4) (controls receiver9 gears2) 
-  (controls receiver10 gate5) (controls receiver11 gate5) (controls receiver12 gate6) 
-  (controls receiver13 gate6) (controls receiver14 gears3)
-  (separates barrier3 area1 area8) (separates barrier4 area1 area11)
-  (separates gate4 area9 area10) (separates gate5 area10 area11) (separates gate6 area11 area12)
-  (climbable> ladder3 area10 area8) (climbable> ladder4 area10 area11)
+  (color receiver1 blue)
+  (color receiver2 red)
+  (controls receiver1 gate1)
+  (controls receiver2 gate2)
+  (separates gate1 area4 area7)
+  (separates gate2 area7 area8)
 
 ;los is from an area to a fixed station
-  (los0 area1 transmitter2) (los0 area2 transmitter2)
-  (los0 area1 receiver7) (los0 area8 receiver7)
-  (los0 area1 gate4) (los0 area8 gate4) (los1 area11 gate5 gate4)    
-  (los1 area11 gate5 receiver8)
-  (los1 area9 gate4 receiver9) (los1 area11 gate5 receiver9)
-  (los1 area9 gate4 receiver10)
-  (los0 area1 gate5) (los1 area9 gate4 gate5) (los1 area12 gate6 gate5)
-  (los0 area1 receiver11) (los1 area12 gate6 receiver11)
-  (los2 area9 gate4 gate5 receiver12) (los1 area10 gate5 receiver12) (los1 area12 gate6 receiver12)
-  (los2 area9 gate4 gate5 receiver13) (los1 area10 gate5 receiver13) (los1 area12 gate6 receiver13)
-  (los1 area10 gate5 gate6)
-  (los0 area1 receiver14) (los1 area10 gate5 receiver14) (los0 area11 receiver14)
+  (los0 area2 transmitter1)
+  (los0 area3 transmitter1)
+  (los0 area5 transmitter1)
+  (los0 area6 transmitter1)
+  (los0 area8 transmitter1)
+  (los1 area7 gate1 transmitter1)
+  (los0 area6 transmitter2)
+  (los1 area8 gate2 transmitter2)
+  (los0 area3 receiver1)
+  (los0 area5 receiver1)
+  (los0 area5 receiver2)
+  (los1 area7 gate2 receiver2)
+  (los2 area3 gate1 gate2 receiver2)
+  (los2 area4 gate1 gate2 receiver2)
 
 ;visibility is from an area to an area potentially containing a movable target or terminus
-  (visible0 area1 area9) (visible0 area8 area2)
-  (visible1 area1 gate4 area10) 
-  (visible1 area8 gate4 area10) 
-  (visible2 area9 gate4 gate5 area11)
-  (visible1 area10 gate5 area1) (visible2 area10 gate5 gate6 area12) 
+  (visible0 area1 area3)
+  (visible0 area1 area4)
+  (visible0 area1 area5)
+  (visible1 area1 gate1 area7) 
+  (visible0 area2 area4)
+  (visible0 area2 area5)
+  (visible0 area2 area6)
+  (visible1 area2 gate1 area7) 
+  (visible2 area2 gate1 gate2 area8)
+  (visible0 area3 area5)
+  (visible0 area3 area6)
+  (visible1 area3 gate1 area7) 
+  (visible2 area3 gate1 gate2 area8)
+  (visible0 area4 area6)
+  (visible0 area4 area8)
+  (visible1 area4 gate1 area7) 
+  (visible1 area4 gate1 area6) 
+  (visible2 area4 gate1 gate2 area8)
+  (visible0 area5 area6)
+  (visible0 area5 area8)
+  (visible1 area5 gate1 area7) 
+  (visible1 area6 gate2 area8) 
 )
 
 
@@ -475,19 +448,6 @@
 
 
 (define-goal  ;always put this last
-    (and (free me)
-         (loc me area10)
-         (loc jammer1 area1)
-         (jamming jammer1 gate4)
-         (inactive gate4)
-         (loc connector3 area8)
-         (connecting connector3 transmitter2)
-         (color connector3 red)
-         (active connector3)
-         (loc connector4 area10)
-         (connecting connector4 connector3)
-         (connecting connector4 receiver10)
-         (color connector4 red)
-         (active connector4))
+  (inactive gate2)
 )
 

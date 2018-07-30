@@ -429,7 +429,7 @@
            (parent (node-parent current-node)))
       
       ;Stop at specified node, for debugging <action name> <instantiations> <depth>
-;      (probe current-node 'ww::jam '(ww::sentry1 ww::area7 ww::jammer1 ww::area6) 14)
+;      (probe current-node 'ww::wait '(1 ww::area4) 11)
       
       (when (>= ww::*debug* 2)
         (format t "~%Current node selected:~%~S" current-node))

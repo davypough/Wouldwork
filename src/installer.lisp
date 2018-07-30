@@ -159,12 +159,12 @@
 (defun install-precondition-function (name args body)
   (format t "Installing ~A precondition function...~%" name)
   (check-type args (satisfies list-of-variables))
+  (push `,name *function-names*)
   (setf (get `,name 'formula) body)
   (setf (get `,name 'fn) `(lambda (state ,@args)
                             ,(translate body 'pre)))
   (fix-if-ignore-state (get `,name 'fn))
-  (setf (symbol-value `,name) (copy-tree (get `,name 'fn)))
-  (push `,name *function-names*))
+  (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
 
 (defmacro define-effect-function (name args body)
@@ -174,14 +174,14 @@
 (defun install-effect-function (name args body)
   (format t "Installing ~A effect function...~%" name)
   (check-type args (satisfies list-of-variables))
+  (push `,name *function-names*)
   (setf (get `,name 'formula) body)
   (setf (get `,name 'fn) `(lambda (state ,@args)
                                  (let (changes)
                                    ,(translate body 'eff)
                                    changes)))
   (fix-if-ignore-state (get `,name 'fn))
-  (setf (symbol-value `,name) (copy-tree (get `,name 'fn)))
-  (push `,name *function-names*))
+  (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
   
 (defmacro define-constraint (form)
@@ -223,8 +223,8 @@
                          :duration duration
                          :precondition-variables pre-vars
                          :precondition-types pre-types
-                         :precondition-instantiations (or (type-instantiations pre-types)
-                                                          '(nil))
+                         :precondition-instantiations (type-instantiations pre-types)
+                                                                 
                          :precondition-lits nil
                          :precondition-lambda `(lambda (state ,@pre-?vars)
                                                  (let ,pre-$vars

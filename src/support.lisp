@@ -201,14 +201,14 @@
       finally (return t)))
 
 
-(defun sort-either-types (type-list)
-  ;Alphabetically sorts the 'either' types in a type-list.
+(defun sort-either-types (relation)
+  ;Alphabetically sorts the 'either' types in a relation.
   (mapcar (lambda (item)  ;cannonically orders 'either' types
             (if (symbolp item)
               item
               (cons 'either (sort (cdr item) #'string< 
                                   :key #'symbol-name))))
-          type-list))
+          relation))
             
             
 (defun expand-into-plist (parameters)
@@ -251,13 +251,6 @@
                        (and (symbolp item)
                             (char= (elt (symbol-name item) 0) lead-char)))
                    form))
-
-
-;(defun get-all-vars (args)
-;  ;Returns all variables in arg list.
-;  (loop for arg in args
-;      when (varp arg)
-;        collect arg))    
 
 
 (defun different (sym1 sym2)
@@ -337,7 +330,7 @@
 
 
 (defun consolidate-types (type-list)
-  ;Processes a list of types, including 'either' multi-types.
+  ;Processes a list of types & symbols, including 'either' multi-types.
   (mapcar (lambda (type)
             (cond ((symbolp type) 
                      type)
@@ -360,13 +353,18 @@
             
             
 (defun type-instantiations (symbol-types)
-  ;Returns lists of possible variable(?$) instantiations for a list of type symbols.
+  ;Returns lists of possible variable(?$) instantiations for a list of (only) type symbols.
   (when (and symbol-types (remove 'fluent symbol-types))
     (let* ((nonfluent-types (remove 'fluent symbol-types))
-           (instances (mapcar (lambda (type) (gethash type *types*))
-                              nonfluent-types))
-           (product-instances (apply #'alexandria:map-product 'list instances)))
-      (get-set-instances nonfluent-types product-instances))))
+           (instances (mapcar (lambda (item)
+                                (ut::if-it (gethash item *types*)
+                                  ut::it
+                                  (list item)))
+                        nonfluent-types)))
+      (when (member nil instances)
+        (return-from type-instantiations '(nil)))
+      (let ((product-instances (apply #'alexandria:map-product 'list instances)))
+        (get-set-instances nonfluent-types product-instances)))))
 
 
 (defun get-set-instances (symbol-types product-instances)

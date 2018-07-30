@@ -38,7 +38,7 @@
   (let ((fn-call (concatenate 'list (list (car form)) (list 'state) (cdr form))))
     (ecase flag
       ((pre ante) `,fn-call)
-      (eff `(append ,fn-call changes)))))
+      (eff `(setf changes (append ,fn-call changes))))))
 
 
 (defun translate-fluent-relation (form flag)
@@ -114,12 +114,14 @@
                    (let ,$vars
                      (declare (special ,@$vars))  ;needed for (set $var ...)
                      ,(translate body flag)))
-                 ,@(mapcar (lambda (x) `(quote ,x))
-                     (ut::regroup (type-instantiations types))))
+                 ,@(or (mapcar (lambda (x) `(quote ,x))
+                               (ut::regroup (type-instantiations types)))
+                       '(nil)))
           `(some (lambda ,?vars
                    ,(translate body flag))
-                 ,@(mapcar (lambda (x) `(quote ,x))
-                     (ut::regroup (type-instantiations types)))))))))
+                 ,@(or (mapcar (lambda (x) `(quote ,x))
+                               (ut::regroup (type-instantiations types)))
+                       '(nil))))))))
          
 
 (defun translate-universal (form flag)
@@ -140,29 +142,42 @@
                     (let ,$vars
                       (declare (special ,@$vars))  ;needed for (set $var ...)
                       ,(translate body flag)))
-                  ,@(mapcar (lambda (x) `(quote ,x))
-                      (ut::regroup (type-instantiations types))))
+                  ,@(or (mapcar (lambda (x) `(quote ,x))
+                               (ut::regroup (type-instantiations types)))
+                       '(nil)))
           `(every (lambda ,?vars
                     ,(translate body flag))
-                  ,@(mapcar (lambda (x) `(quote ,x))
-                      (ut::regroup (type-instantiations types)))))))))
+                  ,@(or (mapcar (lambda (x) `(quote ,x))
+                               (ut::regroup (type-instantiations types)))
+                       '(nil))))))))
 
 
-(defun translate-forfluent (form flag)
-  ;The forfluent construction provides a parameter list for fluents, similar to the
-  ;existential & universal quantifiers for generated vars. It provides binding for fluents for pre & eff.
+(defun translate-doall (form flag)
+  ;The doall form is a generator for all its variable instances. It always returns true. 
+  ;It can be used to do something for all instances of its variables.
   (let ((parameters (second form))
         (body (third form)))
     (destructuring-bind (vars types) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-variables))
       (check-type types (satisfies list-of-parameter-types))
-      (let* (($vars (remove-if-not #'$varp vars))
+      (let* ((?vars (remove-if-not #'?varp vars))
+             ($vars (remove-if-not #'$varp vars))
              (*current-precondition-fluents* $vars)
              (*current-effect-fluents* $vars))
-        `(let ,$vars
-           (declare (special ,@$vars))  ;needed for (set $var ...)
-           ,(translate body flag))))))
-  
+        (if $vars
+          `(mapcar (lambda ,?vars
+                     (let ,$vars
+                       (declare (special ,@$vars))  ;needed for (set $var ...)
+                       ,(translate body flag)))
+                   ,@(or (mapcar (lambda (x) `(quote ,x))
+                                 (ut::regroup (type-instantiations types)))
+                         '(nil)))
+          `(mapcar (lambda ,?vars
+                     ,(translate body flag))
+                   ,@(or (mapcar (lambda (x) `(quote ,x))
+                                 (ut::regroup (type-instantiations types)))
+                         '(nil))))))))
+
 
 (defun translate-connective (form flag)
   ;Translates and, or, not.
@@ -227,8 +242,8 @@
         ((eql form nil) t)  ;if form=nil simply continue processing
         ((eql (car form) 'assert) (translate-assertion form flag))
         ((member (car form) '(forsome exists exist)) (translate-existential form flag))  ;specialty first
-        ((eql (car form) 'forall) (translate-universal form flag))
-        ((member (car form) '(forfluent forfluents)) (translate-forfluent form flag))
+        ((member (car form) '(forall forevery every)) (translate-universal form flag))
+        ((eql (car form) 'doall) (translate-doall form flag))
         ((eql (car form) 'if) (translate-conditional form flag))
         ((eql (car form) 'bind) (translate-binding form flag))
         ((eql (car form) 'let) (translate-let form flag))
