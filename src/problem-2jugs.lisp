@@ -1,7 +1,8 @@
 ;;;; Filename: problem-2jugs.lisp
 
+
 ;;; Fluent problem specification for pouring between jugs
-;;; to achieve 1gal given 2gal-jug & 5gal-jug. See user manual.
+;;; to achieve 1 gal given 2-gal jug & 5-gal jug.
 
 
 (in-package :ww)  ;required
@@ -24,9 +25,9 @@
 
 (define-action fill
     1
-  (?jug jug ($amt $cap) fluent)
-  (and (contents ?jug $amt)
-       (capacity ?jug $cap)
+  (?jug jug)
+  (and (bind (contents ?jug $amt))
+       (bind (capacity ?jug $cap))
        (< $amt $cap))
   (?jug jug $cap fluent)
   (assert (contents ?jug $cap)))
@@ -34,28 +35,30 @@
 
 (define-action empty
     1
-  (?jug jug $amt fluent)
-  (and (contents ?jug $amt)
+  (?jug jug)
+  (and (bind (contents ?jug $amt))
        (> $amt 0))
   (?jug jug)
   (assert (contents ?jug 0)))
-        
+
 
 (define-action pour  ;A into B
     1
-  ((?jugA ?jugB) jug ($amtA $amtB $capB) fluent)
-  (and (contents ?jugA $amtA)
+  ((?jugA ?jugB) jug)
+  (and (bind (contents ?jugA $amtA))
        (> $amtA 0)
-       (contents ?jugB $amtB)
-       (capacity ?jugB $capB)
+       (bind (contents ?jugB $amtB))
+       (bind (capacity ?jugB $capB))
        (< $amtB $capB))
-  ((?jugA ?jugB) jug ($amtA $amtB $capB) fluent)
+  (?jugA jug $amtA fluent ?jugB jug $amtB fluent
+   $capB fluent)
   (assert (if (<= $amtA (- $capB $amtB))
-            (and (contents ?jugA 0)
-                 (contents ?jugB (+ $amtB $amtA)))
-            (and (contents ?jugA (- (+ $amtA $amtB) $capB))
-                 (contents ?jugB $capB)))))
-                 
+            (assert (contents ?jugA 0)
+                    (contents ?jugB (+ $amtB $amtA)))
+            (assert (contents ?jugA 
+                              (- (+ $amtA $amtB) $capB))
+                    (contents ?jugB $capB)))))
+
 
 (define-init
     (contents jug1 0)

@@ -1,13 +1,17 @@
 ;;; Filename: problem-captjohn.lisp
 
-;;; Brain Teaser logic problem, Capt John's Journey (part 1)
+
+;;; Brain Teaser logic problem, 
+;;; Capt John's Journey (part 1)
 
 
 (in-package :ww)
 
+
 (setq *tree-or-graph* 'tree)
 
-;(setq *first-solution-sufficient* t)
+
+(setq *first-solution-sufficient* t)
 
 
 (define-types
@@ -27,51 +31,65 @@
     (next-col $column))
 
 
-(define-derived-relations
-    (already-placed* ?object)  (let ($r $c)
-                                 (loc ?object $r $c))
+(define-query already-placed! (?object)
+  (bind (loc ?object $r $c)))
+
       
-    (in-same-row* ?object1 ?object2)  (let ($r1 $c1 $r2 $c2)
-                                        (loc ?object1 $r1 $c1)
-                                        (loc ?object2 $r2 $c2)
-                                        (= $r1 $r2))
 
-    (in-same-col* ?object1 ?object2)  (let ($r1 $c1 $r2 $c2)
-                                        (loc ?object1 $r1 $c1)
-                                        (loc ?object2 $r2 $c2)
-                                        (= $c1 $c2))
+
+(define-query in-same-row! (?object1 ?object2)
+  (and (bind (loc ?object1 $r1 $c1))
+       (bind (loc ?object2 $r2 $c2))
+       (= $r1 $r2)))
+
+
+(define-query in-same-col! (?object1 ?object2)
+  (and (bind (loc ?object1 $r1 $c1))
+       (bind (loc ?object2 $r2 $c2))
+       (= $c1 $c2)))
   
-    (in-col* ?object ?column)  (let ($r $c)
-                                 (loc ?object $r $c)
-                                 (= $c ?column))
-  
-    (vert-next-to* ?object1 ?object2)  (let ($r1 $c1 $r2 $c2)
-                                         (loc ?object1 $r1 $c1)
-                                         (loc ?object2 $r2 $c2)
-                                         (and (= $c1 $c2)
-                                              (or (= $r1 (1+ $r2))
-                                                  (= $r1 (1- $r2)))))
+
+(define-query in-col! (?object ?column)
+  (and (bind (loc ?object $r $c))
+       (= $c ?column)))
+
+
+(define-query vert-next-to! (?object1 ?object2)
+  (and (bind (loc ?object1 $r1 $c1))
+       (bind (loc ?object2 $r2 $c2))
+       (and (= $c1 $c2)
+       (or (= $r1 (1+ $r2))
+           (= $r1 (1- $r2))))))
+
  
-    (diag-next-to* ?object1 ?object2)  (let ($r1 $c1 $r2 $c2)
-                                         (loc ?object1 $r1 $c1)
-                                         (loc ?object2 $r2 $c2)
-                                         (or (and (= (1+ $r1) $r2)
-                                                  (= (1+ $c1) $c2))
-                                             (and (= (1+ $r1) $r2)
-                                                  (= (1- $c1) $c2))
-                                             (and (= (1- $r1) $r2)
-                                                  (= (1+ $c1) $c2))
-                                             (and (= (1- $r1) $r2)
-                                                  (= (1- $c1) $c2))))
-)
+(define-query diag-next-to! (?object1 ?object2)
+  (and (bind (loc ?object1 $r1 $c1))
+       (bind (loc ?object2 $r2 $c2))
+       (or (and (= (1+ $r1) $r2)
+                (= (1+ $c1) $c2))
+           (and (= (1+ $r1) $r2)
+                (= (1- $c1) $c2))
+           (and (= (1- $r1) $r2)
+                (= (1+ $c1) $c2))
+           (and (= (1- $r1) $r2)
+                (= (1- $c1) $c2)))))
 
   
+
+
+
+
+
+
+
+
+
 (define-action put
     1
-  (?object object ($row $col) fluent)
-  (and (not (already-placed* ?object))
-       (next-row $row)
-       (next-col $col))
+  (?object object)
+  (and (not (already-placed! ?object))
+       (bind (next-row $row))
+       (bind (next-col $col)))
   (?object object ($row $col) fluent)
   (assert (loc ?object $row $col)
           (if (= $col 3)
@@ -86,25 +104,25 @@
 
 
 (define-goal
-    (and (next-row 4)  ;if next-row /= 4, no need to check constraints
-         (and (not (in-same-row* wasp john))
-              (not (in-same-col* wasp john)))
-         (forall (?guard guard)
-           (and (not (in-same-row* john ?guard))
-                (not (in-same-col* john ?guard))))
-         (forall (?guard guard)
-           (not (in-col* ?guard 3)))
-         (forall (?guard guard)
-           (exists (?grass grass)
-             (vert-next-to* ?guard ?grass)))
-         (exists ((?guard1 ?guard2) guard)
-           (and (in-same-row* wasp ?guard1)
-                (in-same-col* wasp ?guard2)))
+  (and (next-row 4)  ;only check if on last row
+       (and (not (in-same-row! wasp john))
+            (not (in-same-col! wasp john)))
+       (forall (?guard guard)
+         (and (not (in-same-row! john ?guard))
+              (not (in-same-col! john ?guard))))
+       (forall (?guard guard)
+         (not (in-col! ?guard 3)))
+       (forall (?guard guard)
          (exists (?grass grass)
-           (forall (?crew crew)
-             (diag-next-to* ?grass ?crew)))
-         (exists (?grass grass)
-           (loc ?grass 1 2))
-         (exists ((?guard1 ?guard2) guard)
-           (and (not (in-same-row* ?guard1 ?guard2))
-                (not (in-same-col* ?guard1 ?guard2))))))
+           (vert-next-to! ?guard ?grass)))
+       (exists ((?guard1 ?guard2) guard)
+         (and (in-same-row! wasp ?guard1)
+              (in-same-col! wasp ?guard2)))
+       (exists (?grass grass)
+         (forall (?crew crew)
+           (diag-next-to! ?grass ?crew)))
+       (exists (?grass grass)
+         (loc ?grass 1 2))
+       (exists ((?guard1 ?guard2) guard)
+         (and (not (in-same-row! ?guard1 ?guard2))
+              (not (in-same-col! ?guard1 ?guard2))))))

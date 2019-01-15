@@ -84,24 +84,25 @@
                         precondition-instantiations precondition-lambda effect effect-variables effect-types
                         effect-instantiations effect-lambda)
           init-action
-        (when (>= *debug* 3)
+        (when (>= *debug* 4)
           (format t "~%~A ~A" name effect-variables))
         (let ((precondition (compile nil (coerce precondition-lambda 'function)))
               (effect (compile nil (coerce effect-lambda 'function)))
               pre-result)
-          (dolist (pinsts precondition-instantiations)
+          (dolist (pinsts (or precondition-instantiations '(nil)))
             ;precondition will evaluate to true or false given current db
             ;apply calls an action lambda expression & evaluates it
             (when (setq pre-result (apply precondition state pinsts))
-              (when (>= *debug* 4)
+             (when (= *debug* 5)
                 (ut::prt precondition-types precondition-variables 
                          pre-result))
               ;next update db since precondition satisfied
               (let* ((einstantiations (append pre-result effect-instantiations))
-                     (bag-einstantiations (apply #'alexandria:map-product 'list einstantiations))
+                     (bag-einstantiations (or (apply #'alexandria:map-product 'list einstantiations)
+                                              '(nil)))
                      (set-einstantiations (remove-duplicates bag-einstantiations :test #'equal))
                      db-update db-updates)
-                (when (>= *debug* 4)
+               (when (= *debug* 5)
                   (ut::prt effect-types effect-variables einstantiations set-einstantiations))
                 (dolist (einsts set-einstantiations)
                   ;each db update is a successful instantiation of the current action effect
@@ -109,8 +110,8 @@
                         (apply effect state einsts))
                   (when (car db-update) ;otherwise skip update if no updates available
                     (setq db-update (list (order-propositions db-update) einsts)) ;add instantiations
-                    (pushnew db-update db-updates :test #'equal))) ;throw out redundancies
-                (when (>= *debug* 3) 
+                    (push db-update db-updates)))
+                (when (>= *debug* 4) 
                   (ut::prt db-updates))
                 (dolist (db-update db-updates)
                     (loop for literal in (first db-update)
@@ -133,17 +134,20 @@
                         precondition-instantiations effect ieffect effect-variables effect-types
                         effect-instantiations)
           action
-        (when (>= *debug* 3) 
+        (when (>= *debug* 4) 
           (format t "~%~A" name))
+        ;---precondition---------------------------------------------------
         (let (pre-result)
-          (dolist (pinsts precondition-instantiations)
+          (dolist (pinsts (if (equal precondition-instantiations '(nil))
+                            nil
+                            precondition-instantiations))
             ;each pinsts is a list of var bindings associated with list of types
             ;apply calls an action lambda expression with var bindings & evaluates it
             (when (setq pre-result (apply iprecondition state pinsts))
-              (when (>= *debug* 4)
+             (when (= *debug* 5)
                 (ut::prt precondition-types precondition-variables pre-result))
               ;next update db since precondition satisfied
-              ;-------------------------------------------------------
+              ;---effect----------------------------------------------------
               (let* ((einstantiations (or (mapcar (lambda (instantiation)
                                                     (nreverse (cons instantiation (reverse pre-result))))
                                             effect-instantiations)
@@ -153,18 +157,17 @@
                                                (car (apply #'alexandria:map-product 'list instantiation)))
                                        einstantiations)))
                      db-update db-updates)
-                (when (>= *debug* 4)
+               (when (= *debug* 5)
                   (ut::prt effect-types effect-variables effect-instantiations einstantiations set-products))
                 (dolist (product set-products)
                   ;each db update is a successful instantiation of the current action effect
-                  (remhash '(waiting) (problem-state-idb state))  ;cancel any waiting before processing this action
+                  (remhash (gethash 'waiting *constant-integers*) (problem-state-idb state))  ;cancel any waiting before processing this action
                   (setq db-update   ;((literal1 literal2 ...) (inst1 inst2 ...))
                        (apply ieffect state product))
                   (when (car db-update) ;otherwise skip update if no updates available
                     (setq db-update (list (order-propositions db-update) product)) ;add new instantiations
-                    (pushnew db-update db-updates
-                             :test #'equal :key #'first))) ;throw out redundancies
-                (when (>= *debug* 3)
+                    (push db-update db-updates)))
+                (when (>= *debug* 4)
                   (ut::prt db-updates))
                 (dolist (db-update db-updates)
                   (let ((act-state (initialize-act-state action state db-update))
@@ -178,11 +181,12 @@
                            (setf net-state nil)
                            (setf net-state act-state)))
                        ;(ut::show (problem-state-idb net-state))
-                       (when (>= *debug* 3)
+                       (when (>= *debug* 4)
                          (if net-state
                            (format t "~&    ***NO CONSTRAINT VIOLATION***")
                            (format t "~&    ***CONSTRAINT VIOLATION***")))
                        (when net-state
+                         (setf net-state (process-trigger-updates net-state))
                          (pushnew net-state children :test #'same-state)))))))))))
     children))
 
@@ -208,6 +212,19 @@
   (let ((next-event-time (loop for (nil (nil time nil)) in (problem-state-happenings state)
                                minimize time)))
     next-event-time))
+
+
+(defun process-trigger-updates (state)
+  ;triggering forms saved previously during effect apply
+  (iter (for trigger in (nreverse *current-action-triggers*))
+        (for db-update = (apply (car trigger) state (cdr trigger)))  ;get update literals
+        (when (>= *debug* 4)
+          (ut::prt trigger db-update))
+        (revise (problem-state-idb state) db-update)
+        (when (>= *debug* 4)
+          (ut::prt state))
+        (finally (setf *current-action-triggers* nil)
+                 (return-from process-trigger-updates state))))
 
 
 (defun create-action-state (action state db-update)

@@ -9,7 +9,7 @@
  
 (setq *depth-cutoff* 9)
 
-(setq *tree-or-graph* 'tree)
+;(setq *tree-or-graph* 'tree)
 
 ;(setq *first-solution-sufficient* t)
 
@@ -47,8 +47,8 @@
   (attached fan gears)
   (jamming jammer $target)
   (connecting terminus terminus)
-  (active (either connector gate gears))
-  (inactive (either connector gate gears))
+  (active (either connector gate receiver gears))
+  (inactive (either connector gate receiver gears))
   (color terminus $hue))
 
 
@@ -70,135 +70,163 @@
 
 (define-complementary-relations  
   (holding myself $cargo) -> (not (free myself))
-  (active (either gears connector gate)) -> (not (inactive (either gate gears connector)))
-  (inactive (either connector gears gate)) -> (not (active (either connector gate gears))))
+  (active (either gears connector gate)) -> (not (inactive (either gate gears connector))))
+;  (inactive (either connector gears gate)) -> (not (active (either connector gate gears))))
 
 
-(define-derived-relations
-  ;predicates for simplifying preconditions and for testing the state of various objects
-
-  (passable* ?area1 ?area2)  (or (adjacent ?area1 ?area2)
-                                 (exists (?b (either barrier ladder))
-                                   (and (separates ?b ?area1 ?area2)
-                                        (free me)))  ;must drop cargo first
-                                 (exists (?g gate)
-                                   (and (separates ?g ?area1 ?area2)
-                                        (inactive ?g))))
-
-  (visible* ?area1 ?area2)  (or (visible0 ?area1 ?area2)
-                                (visible-thru-1-divider* ?area1 ?area2)
-                                (visible-thru-2-dividers* ?area1 ?area2))
-
-  (visible-thru-1-divider* ?area1 ?area2)  (exists (?d divider)
-                                             (and (visible1 ?area1 ?d ?area2)
-                                                  (or (barrier ?d)
-                                                      (and (gate ?d)
-                                                           (inactive ?d)))))
-
-  (visible-thru-2-dividers* ?area1 ?area2)  (exists ((?d1 ?d2) divider)
-                                              (and (visible2 ?area1 ?d1 ?d2 ?area2)
-                                                   (or (and (barrier ?d1)
-                                                            (barrier ?d2))
-                                                       (and (barrier ?d1)
-                                                            (gate ?d2)
-                                                            (inactive ?d2))
-                                                       (and (barrier ?d2)
-                                                            (gate ?d1)
-                                                            (inactive ?d1))
-                                                       (and (gate ?d1)
-                                                            (inactive ?d1)
-                                                            (gate ?d2)
-                                                            (inactive ?d2)))))
-
-  (los* ?area ?station)  (or (los0 ?area ?station)
-                             (los-thru-1-divider* ?area ?station)
-                             (los-thru-2-dividers* ?area ?station))
-
-  (los-thru-1-divider* ?area ?station)  (exists (?d divider)
-                                          (and (los1 ?area ?d ?station)
-                                               (or (barrier ?d)
-                                                   (and (gate ?d)
-                                                        (inactive ?d)))))
-
-  (los-thru-2-dividers* ?area ?station)  (exists ((?d1 ?d2) divider)
-                                           (and (los2 ?area ?d1 ?d2 ?station)
-                                                (or (and (barrier ?d1)
-                                                         (barrier ?d2))
-                                                    (and (barrier ?d1)
-                                                         (gate ?d2)
-                                                         (inactive ?d2))
-                                                    (and (barrier ?d2)
-                                                         (gate ?d1)
-                                                         (inactive ?d1))
-                                                    (and (gate ?d1)
-                                                         (inactive ?d1)
-                                                         (gate ?d2)
-                                                         (inactive ?d2)))))
-
-  (connectable* ?area ?terminus)  (or (los* ?area ?terminus)  ;from connector in area to terminus
-                                      (and (connector ?terminus)
-                                           (exists (?a area)
-                                             (and (loc ?terminus ?a)
-                                                  (visible* ?area ?a)))))
-  
-  (compatible-colors* ?hue1 ?hue2)  (or (eql ?hue1 ?hue2)
-                                        (eql ?hue1 nil)
-                                        (eql ?hue2 nil))
-
-  (source* ?terminus)  (or (transmitter ?terminus)
-                           (active ?terminus))
-                                       
-  (colorable* ?terminus)  (and (connector ?terminus)  ;same as inactive-connector*
-                               (inactive ?terminus))
+;;;;;;;;;;;;;;;;;;;;;;;; QUERY FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-
-  ;derived relations for simplifying effects
-  
-  (color-terminus* ?hue ?connector ?terminus)   (if (hue ?hue)
-                                                  (color ?connector ?hue)
-                                                  (if (colorable* ?terminus)
-                                                    (color ?terminus ?hue)))
-  
-  (disconnect-connector* ?connector)    (assert (if (active ?connector)
-                                                  (not (active ?connector)))
-                                                (forall (?t terminus)
-                                                  (if (connecting ?connector ?t)
-                                                    (assert (not (connecting ?connector ?t))
-                                                            (if (and (active ?connector)
-                                                                     (receiver ?t))
-                                                              (disengage-receiver* ?t ?connector))
-                                                            (if (and (active ?connector)
-                                                                     (connector ?t))
-                                                              (disengage-connector! ?t ?connector))))))
-
-  (disengage-receiver* ?receiver ?connector)  (if (not (alternate-receiver-source* ?receiver ?connector))
-                                                (forall (?gate gate)
-                                                  (if (controls ?receiver ?gate)
-                                                    (inactive ?gate))))
-                                                
-  (alternate-receiver-source* ?receiver ?connector)  (exists (?c connector)
-                                                       (and (not (eql ?c ?connector))
-                                                            (active ?c)
-                                                            (connecting ?c ?receiver)))
-
-  (activate-terminus1-given-terminus2* ?terminus1 ?terminus2)  (if (and (connector ?terminus1)
-                                                                        (inactive ?terminus1)
-                                                                        (source* ?terminus2))
-                                                                 (active ?terminus1))
-)
+(define-query elevation! (?support)
+  (do (bind (height ?support $h))
+      (bind (on ?support $s))
+      (if (not (support $s))
+        (return-from elevation! $h)
+        (return-from elevation! (+ $h (elevation! state $s))))))
 
 
-(define-precondition-function elevation! (?support)
-  (let ($h $s)
-    (height ?support $h)
-    (bind (on ?support $s))
-    (if (not (support $s))
-      (return-from elevation! $h)
-      (return-from elevation! (+ $h (elevation! state $s))))))
+(define-query same-color! (?terminus1 ?terminus2)
+  (and (bind (color ?terminus1 $hue1))
+       (bind (color ?terminus2 $hue2))
+       (eql $hue1 $hue2)))
 
 
-(define-effect-function disengage-jammer! (?jammer ?target)
+(define-query source! (?terminus)
+  (or (transmitter ?terminus)
+      (and (connector ?terminus)
+           (active ?terminus))))
+
+
+(define-query los-thru-2-dividers! (?area ?station)
+  (exists ((?d1 ?d2) divider)
+    (and (los2 ?area ?d1 ?d2 ?station)
+         (or (and (barrier ?d1)
+                  (barrier ?d2))
+             (and (barrier ?d1)
+                  (gate ?d2)
+                  (not (active ?d2)))
+             (and (barrier ?d2)
+                  (gate ?d1)
+                  (not (active ?d1)))
+             (and (gate ?d1)
+                  (not (active ?d1))
+                  (gate ?d2)
+                  (not (active ?d2)))))))
+
+
+(define-query los-thru-1-divider! (?area ?station)
+  (exists (?d divider)
+    (and (los1 ?area ?d ?station)
+         (or (barrier ?d)
+             (and (gate ?d)
+                  (not (active ?d)))))))
+
+
+(define-query los! (?area ?station)
+  (or (los0 ?area ?station)
+      (los-thru-1-divider! ?area ?station)
+      (los-thru-2-dividers! ?area ?station)))
+
+
+(define-query visible-thru-2-dividers! (?area1 ?area2)
+  (exists ((?d1 ?d2) divider)
+    (and (visible2 ?area1 ?d1 ?d2 ?area2)
+         (or (and (barrier ?d1)
+                  (barrier ?d2))
+             (and (barrier ?d1)
+                  (gate ?d2)
+                  (not (active ?d2)))
+             (and (barrier ?d2)
+                  (gate ?d1)
+                  (not (active ?d1)))
+             (and (gate ?d1)
+                  (not (active ?d1))
+                  (gate ?d2)
+                  (not (active ?d2)))))))
+
+
+(define-query visible-thru-1-divider! (?area1 ?area2)
+  (exists (?d divider)
+    (and (visible1 ?area1 ?d ?area2)
+         (or (barrier ?d)
+             (and (gate ?d)
+                  (not (active ?d)))))))
+
+
+(define-query visible! (?area1 ?area2)
+  (or (visible0 ?area1 ?area2)
+      (visible-thru-1-divider! ?area1 ?area2)
+      (visible-thru-2-dividers! ?area1 ?area2)))
+
+
+(define-query connectable! (?area ?terminus)
+  (or (los! ?area ?terminus)  ;from connector in area to terminus
+      (and (connector ?terminus)
+           (exists (?a area)
+             (and (loc ?terminus ?a)
+                  (visible! ?area ?a))))))
+
+
+(define-query passable! (?area1 ?area2)
+  (or (adjacent ?area1 ?area2)
+      (exists (?b (either barrier ladder))
+        (and (separates ?b ?area1 ?area2)
+             (free me)))  ;must drop cargo first
+             (exists (?g gate)
+               (and (separates ?g ?area1 ?area2)
+                    (not (active ?g))))))
+
+
+(define-query sourced! (?conn-or-rcvr $visits)
+  (do (push ?conn-or-rcvr $visits)   ;(ut::prt $visits) (break)
+      (or (exists (?t transmitter)
+            (connecting ?t ?conn-or-rcvr))
+          (exists (?c connector)
+            (and (connecting ?c ?conn-or-rcvr)  
+                 (active ?c)
+                 (not (member ?c $visits))
+                 (sourced! ?c $visits))))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;; UPDATE FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;
+
+
+(define-update activate-connector! (?connector ?hue)
+  (if (not (active ?connector))
+    (commit (active ?connector)
+            (color ?connector ?hue))))
+
+
+(define-update deactivate-connector! (?connector)
+  (if (and (active ?connector)
+           (bind (color ?connector $hue)))
+    (commit (not (active ?connector))
+            (not (color ?connector $hue)))))
+
+
+(define-update activate-receiver! (?receiver)
+  (if (not (active ?receiver))
+    (do (commit (active ?receiver))
+        (doall (?g gate)  
+          (if (controls ?receiver ?g)
+            (commit (not (active ?g))))))))
+
+
+(define-update deactivate-receiver! (?receiver)
+  (if (active ?receiver)
+    (do (commit (not (active ?receiver)))
+        (doall (?g gate)
+          (if (controls ?receiver ?g)
+            (commit (active ?g)))))))
+
+
+(define-update disconnect-connector! (?connector)
+  (doall (?t terminus)
+    (if (connecting ?connector ?t)
+      (commit (not (connecting ?connector ?t))))))
+
+
+(define-update disengage-jammer! (?jammer ?target)
   (assert (not (jamming ?jammer ?target))
           (if (not (exists (?j jammer)
                      (and (different ?j ?jammer)
@@ -206,122 +234,137 @@
             (assert (active ?target)))))
 
 
-(define-effect-function alternate-connector-source! (?connector ?previous-connector)
-  (or (exists (?t transmitter)
-        (connecting ?t ?connector))
-      (exists (?c connector)
+(define-update chain-activate! (?connector)
+  (if (and (active ?connector)
+           (bind (color ?connector $hue)))
+    (doall (?cr (either connector receiver))
+      (if (connecting ?connector ?cr)
+        (if (connector ?cr)
+          (if (not (active ?cr))
+            (do (activate-connector! ?cr $hue)
+                (chain-activate! ?cr)))
+          (if (receiver ?cr)
+            (if (and (not (active ?cr))
+                     (same-color! ?cr ?connector))
+              (activate-receiver! ?cr))))))))
+
+
+(define-update activate-connector-if! (?connector)
+  (if (exists (?t transmitter)
+        (and (connecting ?t ?connector)
+             (bind (color ?t $hue))))
+    (if (not (exists ((?t1 ?t2) transmitter)
+               (and (connecting ?t1 ?connector)
+                    (connecting ?t2 ?connector)
+                    (bind (color ?t1 $hue1))
+                    (bind (color ?t2 $hue2))
+                    (not (eql $hue1 $hue2)))))
+      (activate-connector! ?connector $hue))
+    (if (exists (?c connector)
           (and (connecting ?c ?connector)
-               (not (eql ?c ?previous-connector))
-               (alternate-connector-source! ?c ?connector)))))
+               (active ?c)
+               (bind (color ?c $hue))))
+      (if (not (exists ((?c1 ?c2) connector)
+                 (and (connecting ?c1 ?connector)
+                      (connecting ?c2 ?connector)
+                      (active ?c1)
+                      (active ?c2)
+                      (bind (color ?c1 $hue1))
+                      (bind (color ?c2 $hue2))
+                      (not (eql $hue1 $hue2)))))
+        (activate-connector! ?connector $hue)))))
 
 
-(define-effect-function disengage-connector! (?connector ?previous-connector)
-  (if (not (alternate-connector-source! ?connector ?previous-connector))
-    (assert (inactive ?connector)
-            (let ($hue)
-              (if (color ?connector $hue))
-                (not (color ?connector $hue)))
-            (forall (?r receiver)
-              (if (connecting ?connector ?r)
-                (disengage-receiver* ?r ?connector)))
-            (forall (?c connector)
-              (if (connecting ?connector ?c)
-                (disengage-connector! ?c ?connector))))))
+(define-update deactivate-any-orphans! ()
+  (do (doall (?c connector)
+        (if (and (active ?c)
+                 (not (sourced! ?c nil)))
+          (deactivate-connector! ?c)))
+      (doall (?r receiver)
+        (if (and (active ?r)
+                 (not (sourced! ?r nil)))
+          (deactivate-receiver! ?r)))))
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (define-action connect-to-2-terminus  ;using held connector
     1
-  ($cargo fluent (?terminus1 ?terminus2) terminus ($area $hue1 $hue2) fluent)
-  (and (holding me $cargo)
+  ((?terminus1 ?terminus2) terminus)
+  (and (bind (holding me $cargo))
        (connector $cargo)
-       (loc me $area)
-       (connectable* $area ?terminus1)
-       (connectable* $area ?terminus2)
-       (bind (color ?terminus1 $hue1))
-       (bind (color ?terminus2 $hue2))
-       (compatible-colors* $hue1 $hue2))
-  ($cargo fluent ?terminus1 terminus $hue1 fluent ?terminus2 terminus $hue2 fluent $area fluent)
-  (assert (not (holding me $cargo))
-          (loc $cargo $area)
-          (connecting $cargo ?terminus1)
-          (connecting $cargo ?terminus2)
-          (color-terminus* $hue1 $cargo ?terminus2)
-          (color-terminus* $hue2 $cargo ?terminus1)
-          (activate-terminus1-given-terminus2* ?terminus1 ?terminus2)
-          (activate-terminus1-given-terminus2* ?terminus2 ?terminus1)
-    (if (source* ?terminus1)
-      (assert (active $cargo)
-              (doall (?g gate)
-                (if (controls ?terminus2 ?g)
-                  (inactive ?g)))))
-    (if (source* ?terminus2)
-      (assert (active $cargo)
-              (doall (?g gate)
-                (if (controls ?terminus1 ?g)
-                  (inactive ?g)))))))
-        
+       (bind (loc me $area))
+       (connectable! $area ?terminus1)
+       (connectable! $area ?terminus2))
+  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
+  (do (assert (not (holding me $cargo))
+              (loc $cargo $area)
+              (connecting $cargo ?terminus1)
+              (connecting $cargo ?terminus2))
+      (next (activate-connector-if! $cargo))
+      (finally (chain-activate! $cargo))))
+
 
 (define-action connect-to-1-terminus  ;using held connector
     1
-  ($cargo fluent ?terminus terminus ($area $hue) fluent)
-  (and (holding me $cargo)
+  (?terminus terminus)
+  (and (bind (holding me $cargo))
        (connector $cargo)
-       (loc me $area)
-       (connectable* $area ?terminus)
-       (bind (color ?terminus $hue)))
-  ($cargo fluent ?terminus terminus ($hue $area) fluent)
-  (assert (not (holding me $cargo))
-          (loc $cargo $area)
-          (connecting $cargo ?terminus)
-          (if (hue $hue)
-            (color $cargo $hue))
-          (activate-terminus1-given-terminus2* $cargo ?terminus)))
+       (bind (loc me $area))
+       (connectable! $area ?terminus))
+  ($cargo fluent ?terminus terminus ($area $hue) fluent)
+  (do (assert (not (holding me $cargo))
+              (loc $cargo $area)
+              (connecting $cargo ?terminus))
+      (if (and (source! ?terminus)
+               (bind (color ?terminus $hue)))
+        (assert (active $cargo)
+                (color $cargo $hue)))))
 
 
 (define-action jam
     1
-  ($cargo fluent ?target target $area fluent)
-  (and (holding me $cargo)
+  (?target target)
+  (and (bind (holding me $cargo))
        (jammer $cargo)
-       (loc me $area)
-       (los* $area ?target))
+       (bind (loc me $area))
+       (los! $area ?target))
   (?target target $cargo fluent $area fluent)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (jamming $cargo ?target)
-          (inactive ?target)))
+          (not (active ?target))))
 
 
 (define-action pickup-jammer
     1
-  (?jammer jammer ($area $target) fluent)
+  (?jammer jammer)
   (and (free me)
-       (loc me $area)
-       (loc ?jammer $area)
-       (bind (jamming ?jammer $target)))
+       (bind (loc me $area))
+       (loc ?jammer $area))
   (?jammer jammer ($area $target) fluent)
-  (assert (holding me ?jammer)
-          (not (loc ?jammer $area))
-          (if (target $target)
-            (disengage-jammer! ?jammer $target))))
+  (do (assert (holding me ?jammer)
+              (not (loc ?jammer $area)))
+      (if (bind (jamming ?jammer $target))
+        (disengage-jammer! ?jammer $target))))
 
 
 (define-action pickup-connector
     1
-  (?connector connector ($area $hue) fluent)
+  (?connector connector)
   (and (free me)
-       (loc me $area)
-       (loc ?connector $area)
-       (bind (color ?connector $hue)))
-  (?connector connector ($area $hue) fluent)
-  (assert (holding me ?connector)
-          (not (loc ?connector $area))
-          (if (hue $hue)
-            (not (color ?connector $hue)))
-          (disconnect-connector* ?connector)))
+       (bind (loc me $area))
+       (loc ?connector $area))
+  (?connector connector $area fluent)
+  (do (assert (holding me ?connector)
+              (not (loc ?connector $area)))
+      (next (deactivate-connector! ?connector))
+      (next (disconnect-connector! ?connector))
+      (finally (deactivate-any-orphans!))))
 
 
+#|
 (define-action put
     1
   (?support support ($cargo $elev $area) fluent)
@@ -336,41 +379,46 @@
   (assert (on $cargo ?support)
           (loc $cargo $area)
           (not (holding me $cargo))))
+|#
 
 
 (define-action drop-cargo
     1
-  ($cargo fluent $area fluent)
-  (and (loc me $area)
-       (holding me $cargo))
+  ()
+  (and (bind (loc me $area))
+       (bind (holding me $cargo)))
   ($cargo fluent $area fluent)
   (assert (not (holding me $cargo))
           (loc $cargo $area)))
 
+
+(define-action move
+    1
+  (?area2 area)
+  (and (bind (loc me $area1))
+       (not (eql $area1 ?area2))
+       (passable! $area1 ?area2))
+  ($area1 fluent ?area2 area)
+  (assert (not (loc me $area1))
+          (loc me ?area2)))
+
+
 #|  ;doubles time to find 1st solution
 (define-action double-move
     2
-  ($area1 fluent (?area2 ?area3) area)
-  (and (loc me $area1)
+  ((?area2 ?area3) area)
+  (and (bind (loc me $area1))
        (different $area1 ?area2)
        (different $area1 ?area3)
-       (passable* $area1 ?area2)
-       (passable* ?area2 ?area3))
+       (passable! $area1 ?area2)
+       (passable! ?area2 ?area3))
   ($area1 fluent (?area2 ?area3) area)
   (assert (not (loc me $area1))
           (loc me ?area3)))
 |#
 
-(define-action move
-    1
-  ($area1 fluent ?area2 area)
-  (and (loc me $area1)
-       (different $area1 ?area2)
-       (passable* $area1 ?area2))
-  ($area1 fluent ?area2 area)
-  (assert (not (loc me $area1))
-          (loc me ?area2)))
-
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+           
 
 (define-init
   ;dynamic
@@ -466,12 +514,15 @@
   (assert (visible1 ?area1 ?divider ?area2)))
 
 
-(define-init-action inactive-connectors
+(define-init-action inactive-connectors+receivers
     0
-  (?connector connector)
+  ()
   (always-true)
-  (?connector connector)
-  (assert (inactive ?connector)))
+  ()
+  (assert (doall (?connector connector)
+            (inactive ?connector))
+          (doall (?receiver receiver)
+            (inactive ?receiver))))
 
 
 (define-goal  ;always put this last

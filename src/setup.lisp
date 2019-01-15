@@ -63,9 +63,9 @@
   ;Set this parameter to a number (n) to display debugging info.
   ;0 - no debugging
   ;1 - display full search tree
-  ;2 - display basic node info
-  ;3 - display full node info
-  ;4 - display full node info + break after each expansion cycle
+  ;3 - display basic node info
+  ;4 - display full node info
+  ;5 - display full node info + break after each expansion cycle
 
 (setq *print-right-margin* 140)
   ;Allows non-wrap printing of *search-tree* for deep trees.
@@ -104,7 +104,7 @@
 
 (defparameter *connectives* '(and or not))
 
-(defparameter *derived* (make-hash-table :test #'eq))
+;(defparameter *derived* (make-hash-table :test #'eq))
 
 (defparameter *function-names* nil)  ;list of all user-defined functions
 
@@ -116,11 +116,9 @@
 
 (defparameter *complements* (make-hash-table :test #'eq))
 
-(defparameter *current-precondition-fluents* nil)  ;list of fluents appearing in a precondition
-
-(defparameter *current-effect-fluents* nil)  ;list of fluents appearing in an effect
-
 (defparameter *fluent-relation-indices* (make-hash-table :test #'eq))  ;list of fluent argument indices for a relation
+
+(defparameter *current-action-triggers* nil)  ;alist of triggering predicates and arg list
 
 (defparameter *happenings* nil)  ;the list of objects having exogenous events
 
@@ -144,6 +142,7 @@
 
 (defun setup ()
   (format t "Setting up...~%")
+  (setf *function-names* (nreverse *function-names*))
   (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
   (dolist (action *actions*)
     (install-precondition-lits action)
@@ -169,9 +168,16 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Type Specifiers ;;;;;;;;;;;;;;;;;;
 
 
+(defun list-of-?variables (lst)
+  (and (listp lst)
+       (every #'?varp lst)))
+
 (defun list-of-variables (lst)
   (and (listp lst)
-       (every #'varp lst)))
+       (every (lambda (arg)
+                (or (varp arg)
+                    (symbolp arg)))
+              lst)))
 
 (defun type-description (descrip)
   (declare (hash-table *types*))

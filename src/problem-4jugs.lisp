@@ -24,18 +24,18 @@
 
 (define-action pour  ;A into B
     1
-  ((?jugA ?jugB) jug ($amtA $amtB $capB) fluent)
-  (and (contents ?jugA $amtA)
+  ((?jugA ?jugB) jug)
+  (and (bind (contents ?jugA $amtA))
        (> $amtA 0)
-       (contents ?jugB $amtB) ;(ut::prt ?jugA $amtA ?jugB $amtB $capB) 
-       (capacity ?jugB $capB) ;(print 4)
+       (bind (contents ?jugB $amtB)) 
+       (bind (capacity ?jugB $capB))
        (< $amtB $capB)) ;(print 5))
   ((?jugA ?jugB) jug ($amtA $amtB $capB) fluent)
   (assert (if (<= $amtA (- $capB $amtB))
-            (and (contents ?jugA 0)
-                 (contents ?jugB (+ $amtB $amtA)))
-            (and (contents ?jugA (- (+ $amtA $amtB) $capB))
-                 (contents ?jugB $capB)))))
+            (assert (contents ?jugA 0)
+                    (contents ?jugB (+ $amtB $amtA)))
+            (assert (contents ?jugA (- (+ $amtA $amtB) $capB))
+                    (contents ?jugB $capB)))))
                  
 
 (define-init

@@ -23,7 +23,7 @@
                (lambda (node stream depth)
                  ;Prints out a node. Used for debugging.
                  (declare (ignore depth) (node node) (stream stream))
-                 (format stream "NODE: STATE=~A~&   DEPTH=~:D ~%"   ;PARENT=~S~%"
+                 (format stream "NODE: STATE=~S~&   DEPTH=~:D ~%"   ;PARENT=~S~%"
                    (node-state node)
                    (node-depth node)
                    #|(ut::if-it (node-parent node) (node-state ut::it))|#))))
@@ -55,6 +55,10 @@
 
 (defparameter *program-cycles* 0)
   ;Increments each time the DFS program processes the next current node.
+
+
+(defparameter *max-depth-explored* 0)
+  ;Keeps track of the maximum depth reached so far during the search.
 
 
 (defparameter *average-branching-factor* 0.0)
@@ -112,12 +116,14 @@
     (exhausted (format t "~%~%Graph search process completed normally,~%")
                (format t "examining every state up to the depth cutoff.~%")))
   (format t "~%Depth cutoff = ~:D~%" ww::*depth-cutoff*)
+  (format t "~%Maximum depth explored = ~:D~%" *max-depth-explored*)
   (format t "~%Total states processed = ~:D~%" *total-states-processed*)
   (format t "~%Unique states encountered = ~:D~%" (unique-states-encountered-graph))
   (format t "~%Program cycles (state expansions) = ~:D~%" *program-cycles*)
   (format t "~%Average branching factor = ~F~%" *average-branching-factor*)
   (format t "~%Start state:~%~A~%" (ww::list-database (ww::problem-state-idb ww::*start-state*)))
   (format t "~%Goal:~%~A~%" (get 'ww::*goal* 'ww::formula))
+  (setf ww::*solutions* (nreverse ww::*solutions*))
   (if ww::*solutions*
     (let ((shallowest-depth (reduce #'min ww::*solutions* :key #'first :from-end t))
           (minimum-time (reduce #'min ww::*solutions*
@@ -128,10 +134,11 @@
       (format t "~%(Check ww::*solutions* for list of all solutions.)~%")
       (in-package :ww)  ;print without package prefix
       (format t "~%Number of steps in minimum path length solution = ~:D~%" shallowest-depth)
-      (format t "~%Shortest solution path from start state to goal state:~%")
+      (format t "~%Solution path from start state to goal state:~%")
       (let ((shallowest-depth-solution (find shallowest-depth ww::*solutions* :key #'first)))
         (printout-solution shallowest-depth-solution))
-      (if (eql shallowest-depth minimum-time)
+      (if (and (not ww::*first-solution-sufficient*)
+               (eql shallowest-depth minimum-time))
         (format t "~%Shortest path solution is also a minimum duration solution~%")
         (let ((minimum-time-solution (find minimum-time ww::*solutions*
                                            :key (lambda (soln)
@@ -148,7 +155,17 @@
           do (if (= (length act) 2)
                (format t "~vT~d:~a~%" (* 4 (second act)) (second act) (first act))
                (format t "~vT~d:~a ~a~%" (* 4 (second act)) (second act) (first act) (third act)))
+          finally (terpri)))
+  (when (= ww::*debug* 2)
+    (format t "~%Search tree:~%")
+    (loop for act in (cdr (reverse *search-tree*))
+          do (if (= (length act) 2)
+               (format t "~vT~d:~a~%" (* 4 (second act)) (second act) (first act))
+               (progn (format t "~vT~d:~a ~a~%" 
+                                (* 4 (second act)) (second act) (first act) (third act))
+                      (format t "~vT  ~a~%" (* 4 (second act)) (fourth act))))
           finally (terpri))))
+
 
  
 (defun summarize-search-results-tree (condition)
@@ -160,11 +177,13 @@
      (format t "~%~%Tree search process completed normally,~%")
      (format t "examining every state up to the depth cutoff.~%")))
   (format t "~%Depth cutoff = ~:D~%" ww::*depth-cutoff*)
+  (format t "~%Maximum depth explored = ~:D~%" *max-depth-explored*)
   (format t "~%Total states processed = ~:D~%" *total-states-processed*)
   (format t "~%Program cycles (states expanded) = ~:D~%" *program-cycles*)
   (format t "~%Average branching factor = ~F~%" *average-branching-factor*)
   (format t "~%Start state:~%~A~%" (ww::list-database (ww::problem-state-idb ww::*start-state*)))
   (format t "~%Goal:~%~A~%" (get 'ww::*goal* 'ww::formula))
+  (setf ww::*solutions* (nreverse ww::*solutions*))
   (if ww::*solutions*
       (let ((shallowest-depth (reduce #'min ww::*solutions* :key #'first :from-end t))
             (minimum-time (reduce #'min ww::*solutions*
@@ -175,10 +194,11 @@
         (format t "~%(Check ww::*solutions* for list of all solutions.)~%")
         (in-package :ww)  ;print without package prefix
         (format t "~%Number of steps in minimum path length solution = ~:D~%" shallowest-depth)
-        (format t "~%Shortest solution path from start state to goal state:~%")
+        (format t "~%Solution path from start state to goal state:~%")
         (let ((shallowest-depth-solution (find shallowest-depth ww::*solutions* :key #'first)))
           (printout-solution shallowest-depth-solution))
-        (if (eql shallowest-depth minimum-time)
+        (if (and (not ww::*first-solution-sufficient*)
+                 (eql shallowest-depth minimum-time))
             (format t "~%Shortest path solution is also a minimum duration solution~%")
           (let ((minimum-time-solution (find minimum-time ww::*solutions*
                                              :key (lambda (soln)
@@ -197,7 +217,16 @@
                  (* 4 (second act)) (second act) (first act))
              (format t "~vT~d:~a ~a~%" 
                (* 4 (second act)) (second act) (first act) (third act)))
-        finally (terpri))))
+        finally (terpri)))
+  (when (= ww::*debug* 2)
+    (format t "~%Search tree:~%")
+    (loop for act in (cdr (reverse *search-tree*))
+          do (if (= (length act) 2)
+               (format t "~vT~d:~a~%" (* 4 (second act)) (second act) (first act))
+               (progn (format t "~vT~d:~a ~a~%" 
+                                (* 4 (second act)) (second act) (first act) (third act))
+                      (format t "~vT~a~%" (* 4 (second act)) (fourth act))))
+          finally (terpri))))
 
 
 
@@ -223,7 +252,7 @@
                   (list goal-state))))
     (format t "~%New path to goal found at depth = ~:D~%" (1+ (node-depth current-node)))
     (push current-solution ww::*solutions*)
-    (when (>= ww::*debug* 2)
+    (when (>= ww::*debug* 3)
       (format t "~A~%" current-solution))))
 
 
@@ -282,8 +311,9 @@
   ;Determines if installing a nongoal successor to the current node will be
   ;pointless, based on it being at the max allowable depth.
   (declare (node current-node))
-  (when (> ww::*depth-cutoff* 0)
-    (= (node-depth current-node) (1- ww::*depth-cutoff*))))
+  (let ((depth (node-depth current-node)))
+    (when (> ww::*depth-cutoff* 0)
+      (= depth (1- ww::*depth-cutoff*)))))
 
 
 (defun get-next-node-for-expansion ()
@@ -308,7 +338,7 @@
       (node-depth node))
     (setq parent (node-parent node))
     (setf (node-parent node) nil)
-    (when (>= ww::*debug* 3)
+    (when (>= ww::*debug* 4)
       (format t "~2%Node closed by ~S:~%~S~%"
         (if potential? "cutoff" "deadend") node))
     (setq node parent)))
@@ -323,7 +353,7 @@
     (hs::pop-from-hash-stack *open*)
     (setq parent (node-parent node))
     (setf (node-parent node) nil)
-    (when (>= ww::*debug* 3)
+    (when (>= ww::*debug* 4)
       (format t "~%Node closed by ~S:~%~S~%"
         (if potential? "cutoff" "deadend") node))
     (setq node parent)))
@@ -335,7 +365,7 @@
   (let ((succ-node (make-node :state succ-state
                               :depth (1+ (node-depth current-node))
                               :parent current-node)))
-    (when (>= ww::*debug* 2)
+    (when (>= ww::*debug* 3)
       (format t "~2%Installing new or updated successor:~%~S" succ-node))
     (hs::push-onto-hash-stack succ-node *open*)))
 
@@ -347,11 +377,11 @@
   (incf *total-states-processed*)
   (print-search-progress-graph)       ;#nodes expanded so far
   (cond ((at-max-depth current-node)
-         (when (>= ww::*debug* 2)
+         (when (>= ww::*debug* 3)
            (format t "~%Deadend--state at max depth:~%~A" succ-state)) 
          "Deadend--state at max depth")
         ((hs::find-in-hash-stack (ww::state-key succ-state) *open*)
-         (when (>= ww::*debug* 2)
+         (when (>= ww::*debug* 3)
            (format t "~%Deadend--state already waiting in stack:~%~A" succ-state))
          "Deadend--state already waiting in stack")
         ((not (gethash (ww::state-key succ-state) *closed*)) ;not on *open* or *closed*
@@ -359,7 +389,7 @@
          t)
         ((>= (1+ (node-depth current-node))  ;depth greater than already closed state
              (gethash (ww::state-key succ-state) *closed*))
-         (when (>= ww::*debug* 2)
+         (when (>= ww::*debug* 3)
            (format t "~%Deadend--equal or shorter path to state exists:~%~A" succ-state))
          "Deadend--equal or shorter path to state exists")
         ;  ((= 0 (gethash (ww::state-key succ-state) *closed*)) ;previously closed barren
@@ -381,7 +411,7 @@
   (cond ((hs::find-in-hash-stack (ww::state-key succ-state) *open*)
          nil)              ;close deadend
         ((at-max-depth current-node)
-         (when (>= ww::*debug* 2)
+         (when (>= ww::*debug* 3)
            (format t "~%Deadend--at max depth:~%~A" succ-state))
          t)
         (t (generate-new-node current-node succ-state)    ;better node found
@@ -402,7 +432,7 @@
 ;               :key #'ww::problem-state-name)
 ;    (ut::prt states)
 ;    (terpri) (terpri)
-    states))
+   states))
 
 
 (defun check-for-barren-nodes (current-node potential?)
@@ -428,18 +458,16 @@
     (let* ((current-node (get-next-node-for-expansion))
            (parent (node-parent current-node)))
       
-      ;Stop at specified node, for debugging <action name> <instantiations> <depth>
-;      (probe current-node 'ww::wait '(1 ww::area4) 11)
+;     Stop at specified node, for debugging <action name> <instantiations> <depth>
+;     (probe current-node 'ww::wait '(1 ww::area4) 11)
+;     (probe current-node 'ww::connect-to-2-terminus
+;                         '(ww::CONNECTOR3 ww::TRANSMITTER1 ww::RECEIVER3 ww::AREA4) 10)
       
-      (when (>= ww::*debug* 2)
+      (when (>= ww::*debug* 3)
         (format t "~%Current node selected:~%~S" current-node))
-      (when (= ww::*debug* 1)
-        (let ((state (node-state current-node)))
-          (push (list `(,(ww::problem-state-name state) 
-                          ,@(ww::problem-state-instantiations state))
-                      (node-depth current-node))
-                *search-tree*)))
-      (setq *succ-states* (get-successors current-node parent))     ;find all children
+      (setq *succ-states* (get-successors current-node parent))
+      (update1-*search-tree* current-node)
+      (update-*max-depth-explored* current-node)
       (let (potential?)   ;current node's potential for further expansion
         (dolist (succ-state *succ-states*)
           (let (message)
@@ -454,17 +482,13 @@
               (setf message (ecase ww::*tree-or-graph*
                               (ww::graph (process-successor-graph current-node succ-state))
                               (ww::tree (process-successor-tree current-node succ-state))))) ;string or t
-            (when (eq message t) (setf potential? t))
-            (when (and (= ww::*debug* 1) (stringp message))  ;only push deadend states here
-              (push (list `(,(ww::problem-state-name succ-state)
-                               ,@(ww::problem-state-instantiations succ-state))
-                          (1+ (node-depth current-node))
-                          message)
-                    *search-tree*))))
+            (when (eq message t)
+              (setf potential? t))
+            (update2-*search-tree* current-node succ-state message)))
         (check-for-barren-nodes current-node potential?))
-      (when (>= ww::*debug* 2)
+      (when (>= ww::*debug* 3)
         (format t "-----------------------------------~%"))
-      (when (>= ww::*debug* 4)
+      (when (= ww::*debug* 5)
         (break))
       (when (search-space-is-exhausted)
         (ecase ww::*tree-or-graph*
@@ -479,12 +503,60 @@
     (when (and (eql (ww::problem-state-name state) name)
                (equal (ww::problem-state-instantiations state) instantiations)
                (= (node-depth current-node) depth))
-    (setq ww::*debug* 4))))
+    (setq ww::*debug* 5))))
+
+
+(defun update-*max-depth-explored* (current-node)
+  (let ((depth (node-depth current-node)))
+    (if *succ-states*
+      (when (> (1+ depth) *max-depth-explored*)
+        (setf *max-depth-explored* (1+ depth)))
+      (when (> depth *max-depth-explored*)
+        (setf *max-depth-explored* depth)))))
+
+
+(defun update1-*search-tree* (current-node)
+  (when (= ww::*debug* 1)
+    (let ((state (node-state current-node)))
+      (push (list `(,(ww::problem-state-name state) 
+                      ,@(ww::problem-state-instantiations state))
+                  (node-depth current-node)
+                  (if *succ-states*
+                    ""
+                    "No successor states"))
+            *search-tree*)))
+  (when (= ww::*debug* 2)
+    (let ((state (node-state current-node)))
+      (push (list `(,(ww::problem-state-name state) 
+                    ,@(ww::problem-state-instantiations state))
+                  (node-depth current-node)
+                  (if *succ-states*
+                    ""
+                    "No successor states")
+                  (ww::list-database (ww::problem-state-idb state)))
+            *search-tree*))))
+
+
+(defun update2-*search-tree* (current-node succ-state message)
+  (when (and (= ww::*debug* 1) (stringp message))  ;only push deadend states here
+    (push (list `(,(ww::problem-state-name succ-state)
+                  ,@(ww::problem-state-instantiations succ-state))
+                (1+ (node-depth current-node))
+                message)
+          *search-tree*))
+  (when (and (= ww::*debug* 2) (stringp message))  ;only push deadend states here
+    (push (list `(,(ww::problem-state-name succ-state)
+                  ,@(ww::problem-state-instantiations succ-state))
+                (1+ (node-depth current-node))
+                message
+                (ww::list-database (ww::problem-state-idb succ-state)))
+          *search-tree*)))
 
 
 (defun solve ()
   ;Runs a branch & bound search on the problem specification.
   (ww::initialize)
+  (format t "~%working ...~%")
   (time (df-bnb))
   (ww::finalize)
   (in-package :ww))

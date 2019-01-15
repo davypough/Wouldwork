@@ -23,20 +23,19 @@
   (size support $fixnum))
 
 
-(define-derived-relations
-  (cleartop* ?support)        (not (exists (?d disk)
-                                     (on ?d ?support)))
-)
+(define-query cleartop! (?support)
+  (not (exists (?d disk)
+         (on ?d ?support))))
 
 
 (define-action move
     1
-  (?disk disk (?support1 ?support2) support ($disk-size $support-size) fluent)
-  (and (cleartop* ?disk)
-       (size ?disk $disk-size)
+  (?disk disk (?support1 ?support2) support)
+  (and (cleartop! ?disk)
+       (bind (size ?disk $disk-size))
        (on ?disk ?support1)
-       (cleartop* ?support2)
-       (size ?support2 $support-size)
+       (cleartop! ?support2)
+       (bind (size ?support2 $support-size))
        (< $disk-size $support-size))
   (?disk disk (?support1 ?support2) support)
   (assert (not (on ?disk ?support1))

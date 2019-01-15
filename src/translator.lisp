@@ -30,72 +30,71 @@
     (eff `(push ,(translate-atom form) changes))))
 
 
-(defun translate-std-function (form flag)
+(defun translate-function (form flag)
   ;form consists only of the relation, ?vars, and/or objects.
-  ;Eg, (elevation* state ?support)  ;pre
-  ;    (append (disengage-jammer* ?jammer $target) changes)  ;eff
+  ;Eg, (elevation! ?support)  ;pre
+  ;    (append (disengage-jammer! ?jammer $target) changes)  ;eff
   (check-type form (satisfies function-formula))
-  (let ((fn-call (concatenate 'list (list (car form)) (list 'state) (cdr form))))
+  (let ((fn-call (concatenate 'list (list (car form))
+                                    (list 'state)
+                                    (mapcar (lambda (arg)
+                                              (if (and (symbolp arg)
+                                                       (not (varp arg)))
+                                                `(quote ,arg)
+                                                arg))
+                                            (cdr form)))))
     (ecase flag
       ((pre ante) `,fn-call)
-      (eff `(setf changes (append ,fn-call changes))))))
-
-
-(defun translate-fluent-relation (form flag)
-  ;Eg, (destructuring-setq '(?target) (gethash (list 'jamming ?jammer) (problem-state-db state))
-  ;Returns t if fluent binding occurs, nil if form not in db.
-  (declare (ignore flag))
-  `(ut::destructuring-setq ',(remove-if-not #'$varp form)
-                           (gethash ,(translate-atom (remove-if #'$varp form))
-                              ,(if (gethash (car form) *relations*)
-                                 '(problem-state-db state)
-                                 '*static-db*))))
-
-
-(defun translate-function (form flag)
-  ;Assigns value on first variable appearance, uses value subsequently
-  (if (first-fluent-appearance form flag)  ;a new fluent in form
-    (translate-std-function form flag)
-    (translate-std-function form flag))) ;no new fluents
-    
-    
-(defun translate-fluent-function (form flag)
-  (declare (ignore flag))
-  `(ut::destructuring-setq ',(remove-if-not #'$varp form)
-                           (gethash ,(translate-atom (remove-if #'$varp form))
-                              ,(if (gethash (car form) *relations*)
-                                 '(problem-state-db state)
-                                 '*static-db*))))
-
-
-(defun translate-relation (form flag)
-  ;Assigns value on first variable appearance, uses value subsequently
-  (if (first-fluent-appearance form flag)  ;a new fluent in form
-    (translate-fluent-relation form flag)
-    (translate-std-relation form flag))) ;no new fluents
+      (eff `(let ((new-changes ,fn-call))
+              (when new-changes
+                (setf changes (append changes new-changes))))))))
 
 
 (defun translate-negative-relation (form flag)
-  ;Translates a 'not literal' form (ie, a negated literal).
-  (if (first-fluent-appearance (second form) flag)  ;a new fluent in form
-      `(not ,(translate-fluent-relation (second form) flag))
+  ;Translates a negated form.
+  (declare (hash-table *relations*))
+  (if (gethash (car (second form)) *relations*)
     (ecase flag
       ((pre ante) `(not ,(translate-std-relation (second form) flag)))
-      (eff `(push (list 'not ,(translate-atom (second form))) changes))))) ;no new fluents
+      (eff `(push (list 'not ,(translate-atom (second form))) changes)))
+    (ecase flag
+      ((pre ante) `(not ,(translate (second form) flag)))
+      (eff (error "~%Error: Only literals allowed in effect statement negative assertions: ~A~2%"
+                  form)))))
 
 
 (defun translate-binding (form flag)
-  ;Translates a binding for a positive form (including nil) and always returns t.
+  ;Translates a binding for a positive form, returns nil if there are no value bindings.
   (declare (ignore flag))
-  `(progn (ut::destructuring-setq ',(remove-if-not #'$varp (second form))
-                                  (gethash ,(translate-atom (remove-if #'$varp (second form)))
-                                           ,(if (gethash (caadr form) *relations*)
-                                              '(problem-state-db state)
-                                              '*static-db*)))
-          t))  ;always return t after binding, even if binding = nil
+  `(iter (with values = (gethash ,(translate-atom (remove-if #'$varp (second form)))
+                                 ,(if (gethash (caadr form) *relations*)
+                                    '(problem-state-db state)
+                                    '*static-db*)))
+         (for var in ',(remove-if-not #'$varp (second form)))
+         (for val in values)
+         (setf (symbol-value var) val)
+         (finally (return values))))
 
 
- 
+(defun translate-trigger (form flag)
+  ;Processes a trigger form. Stores for later update.
+  (declare (ignore flag))
+  (let ((base-form (second form)))
+    `(push (list ',(car base-form) ,@(cdr base-form)) *current-action-triggers*)))
+
+
+(defun translate-commit (form flag)
+  ;Commits a form directly to the current state database.
+  (declare (ignore flag))
+  `(progn 
+     ,@(iter (for item in (cdr form))
+             (if (eql (car item) 'not)
+               (collect `(update (problem-state-db state)
+                                 (list 'not ,(translate-atom (second item)))))
+               (collect `(update (problem-state-db state)
+                                 ,(translate-atom item)))))))
+
+
 (defun translate-existential (form flag)
   ;The existential is interpreted differently for pre vs eff.  
   ;In pre, (exists (vars) form) is true when form is true for any instantiation of vars, otherwise false.
@@ -103,25 +102,13 @@
   (let ((parameters (second form))
         (body (third form)))
     (destructuring-bind (vars types) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-variables))
+      (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
-      (let* ((?vars (remove-if-not #'?varp vars))
-             ($vars (remove-if-not #'$varp vars))
-             (*current-precondition-fluents* $vars)
-             (*current-effect-fluents* $vars))
-        (if $vars
-          `(some (lambda ,?vars
-                   (let ,$vars
-                     (declare (special ,@$vars))  ;needed for (set $var ...)
-                     ,(translate body flag)))
-                 ,@(or (mapcar (lambda (x) `(quote ,x))
-                               (ut::regroup (type-instantiations types)))
-                       '(nil)))
-          `(some (lambda ,?vars
+        `(some (lambda ,vars
                    ,(translate body flag))
-                 ,@(or (mapcar (lambda (x) `(quote ,x))
-                               (ut::regroup (type-instantiations types)))
-                       '(nil))))))))
+               ,@(or (mapcar (lambda (x) `(quote ,x))
+                             (ut::regroup (type-instantiations types)))
+                     (make-list (length vars) :initial-element nil))))))
          
 
 (defun translate-universal (form flag)
@@ -131,25 +118,13 @@
   (let ((parameters (second form))
         (body (third form)))
     (destructuring-bind (vars types) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-variables))
+      (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
-      (let* ((?vars (remove-if-not #'?varp vars))
-             ($vars (remove-if-not #'$varp vars))
-             (*current-precondition-fluents* $vars)
-             (*current-effect-fluents* $vars))
-        (if $vars
-          `(every (lambda ,?vars
-                    (let ,$vars
-                      (declare (special ,@$vars))  ;needed for (set $var ...)
-                      ,(translate body flag)))
-                  ,@(or (mapcar (lambda (x) `(quote ,x))
-                               (ut::regroup (type-instantiations types)))
-                       '(nil)))
-          `(every (lambda ,?vars
+        `(every (lambda ,vars
                     ,(translate body flag))
-                  ,@(or (mapcar (lambda (x) `(quote ,x))
-                               (ut::regroup (type-instantiations types)))
-                       '(nil))))))))
+                ,@(or (mapcar (lambda (x) `(quote ,x))
+                             (ut::regroup (type-instantiations types)))
+                     (make-list (length vars) :initial-element nil))))))
 
 
 (defun translate-doall (form flag)
@@ -158,37 +133,32 @@
   (let ((parameters (second form))
         (body (third form)))
     (destructuring-bind (vars types) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-variables))
+      (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
-      (let* ((?vars (remove-if-not #'?varp vars))
-             ($vars (remove-if-not #'$varp vars))
-             (*current-precondition-fluents* $vars)
-             (*current-effect-fluents* $vars))
-        (if $vars
-          `(mapcar (lambda ,?vars
-                     (let ,$vars
-                       (declare (special ,@$vars))  ;needed for (set $var ...)
-                       ,(translate body flag)))
-                   ,@(or (mapcar (lambda (x) `(quote ,x))
-                                 (ut::regroup (type-instantiations types)))
-                         '(nil)))
-          `(mapcar (lambda ,?vars
+        `(mapcar (lambda ,vars
                      ,(translate body flag))
-                   ,@(or (mapcar (lambda (x) `(quote ,x))
-                                 (ut::regroup (type-instantiations types)))
-                         '(nil))))))))
+                 ,@(or (mapcar (lambda (x) `(quote ,x))
+                               (ut::regroup (type-instantiations types)))
+                       (make-list (length vars) :initial-element nil))))))
 
 
 (defun translate-connective (form flag)
-  ;Translates and, or, not.
+  ;Translates and, or statements.
   (check-type (car form) (member not and or))
-  `(,(car form) ,@(loop for item in (cdr form)
-                      collect (translate item flag))))
+  (ecase flag
+    ((pre ante)  `(,(car form) ,@(loop for item in (cdr form)
+                                     collect (translate item flag))))
+    (eff (error "~%Error: AND/OR not allowed in effect statement: ~A~2%"
+                form))))
 
 
 (defun translate-conditional (form flag)
   ;Returns t if condition satisfied or nil if condition not satisfied.
   (declare (ignore flag))
+  (when (or (and (third form) (eql (car (third form)) 'and))
+            (and (fourth form) (eql (car (fourth form)) 'and)))
+    (error "~%ERROR: AND not allowed in <then> or <else> clause of IF statement: ~A~2%"
+           form))
   (if (fourth form)  ;else clause
     `(if ,(translate (second form) 'ante)
        ,(translate (third form) 'eff)
@@ -197,33 +167,19 @@
        ,(translate (third form) 'eff))))
 
 
-(defun translate-derived (form flag)
-  ;Translates a derived relation.
-  (declare (hash-table *derived*))
-  (let* ((alist (pairlis (first (gethash (car form) *derived*))
-                         (cdr form)))
-         (new-form (sublis alist (second (gethash (car form) *derived*)))))
-    (translate new-form flag)))
-
-
 (defun translate-assertion (form flag)
   ;Translates an assert relation.
   (ecase flag
-    ((pre ante) (format t "~%Error: ASSERT statement not allowed as a precondion~%~A~%"
-                          form))
+    ((pre ante) (error "~%Error: ASSERT statement not allowed as a precondion~%~A~%"
+                       form))
     (eff `(progn ,@(loop for statement in (cdr form)
                          collect (translate statement flag))))))
 
 
-(defun translate-let (form flag)
-  ;Translates a let clause. Used to bind & initialize $ variables.
-  (let* (($vars (second form))
-         (*current-precondition-fluents* $vars)
-         (*current-effect-fluents* $vars))
-    `(let ,(second form)
-       (declare (special ,@(second form)))
-       ,@(loop for statement in (cddr form)
-               collect (translate statement flag)))))
+(defun translate-do (form flag)
+  ;Translates a do set of clauses.
+  `(progn ,@(loop for statement in (cdr form)
+                  collect (translate statement flag))))
 
 
 (defun translate-setq (form flag)  ;always need to return t
@@ -245,16 +201,17 @@
         ((member (car form) '(forall forevery every)) (translate-universal form flag))
         ((eql (car form) 'doall) (translate-doall form flag))
         ((eql (car form) 'if) (translate-conditional form flag))
+        ((eql (car form) 'do) (translate-do form flag))
         ((eql (car form) 'bind) (translate-binding form flag))
-        ((eql (car form) 'let) (translate-let form flag))
+        ((member (car form) '(finally next trigger)) (translate-trigger form flag))
+        ((eql (car form) 'commit) (translate-commit form flag))
         ((eql (car form) 'setq) (translate-setq form flag))
         ((eql (car form) 'print) (translate-print form flag))
-        ((and (eq (car form) 'not) (gethash (caadr form) *relations*))  ;before connectives
-           (translate-negative-relation form flag))
+        ((and (eq (car form) 'not)     ;(gethash (caadr form) *relations*))  ;before connectives
+           (translate-negative-relation form flag)))
         ((member (car form) *connectives*) (translate-connective form flag))
-        ((gethash (car form) *derived*) (translate-derived form flag))  ;derived before relations
         ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*))
-           (translate-relation form flag))
+           (translate-std-relation form flag))
         ((member (car form) *function-names*) (translate-function form flag))
         ((fboundp (car form)) form)   ;any lisp function
         (t (translate-function form flag))))

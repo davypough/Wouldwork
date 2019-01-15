@@ -1,7 +1,8 @@
 ;;;; Filename: problem-sentry.lisp
 
-;;; Problem specification for getting by an automated sentry by jamming it.
-;;; See sentry-problem in user manual appendix.
+
+;;; Problem specification for getting by an automated 
+;;; sentry by jamming it.
 
 
 (in-package :ww)  ;required
@@ -9,7 +10,9 @@
 
 (setq *tree-or-graph* 'graph)
 
+
 (setq *depth-cutoff* 16)
+
 
 
 
@@ -22,7 +25,8 @@
   switch    (switch1)
   red       ()  ;red & green are predicates
   green     ()
-  area      (area1 area2 area3 area4 area5 area6 area7 area8)
+  area      (area1 area2 area3 area4 area5 area6 area7
+             area8)
   cargo     (either jammer box)
   threat    (either gun sentry)
   target    (either threat))
@@ -35,30 +39,34 @@
   (green switch)
   (jamming jammer target))
 
+
 (define-static-relations
   (adjacent area area)
-  (los area target)  ;line-of-sight exists
-  (visible area area)  ;area is wholly visible from another area
+  (los area target)    ;line-of-sight exists
+  (visible area area)  ;area is visible from another area
   (controls switch gun)
   (watches gun area))
 
 
-(define-derived-relations
-  (free* me)                 (not (exists (?c cargo) 
-                                    (holding me ?c)))
+(define-query free! (?myself) 
+  (not (exists (?c cargo) 
+               (holding ?myself ?c))))
+
   
-  (passable* ?area1 ?area2)  (adjacent ?area1 ?area2)
+(define-query passable! (?area1 ?area2)
+  (adjacent ?area1 ?area2))
 
-  (safe* ?area)              (not (exists (?g gun)
-                                    (and (watches ?g ?area)
-                                         (active* ?g))))
 
-  (active* ?threat)          (not (or (exists (?j jammer)
-                                        (jamming ?j ?threat))
-                                      (forall (?s switch)
-                                        (and (controls ?s ?threat)
-                                             (green ?s)))))
-  )
+(define-query active! (?threat)
+  (not (or (exists (?j jammer)
+             (jamming ?j ?threat))
+           (forall (?s switch)
+             (and (controls ?s ?threat)
+                  (green ?s))))))
+(define-query safe! (?area)
+  (not (exists (?g gun)
+         (and (watches ?g ?area)
+              (active! ?g)))))
 
 
 (define-happening sentry1
@@ -68,18 +76,19 @@
    (3 (not (loc sentry1 area6)) (loc sentry1 area5))
    (4 (not (loc sentry1 area5)) (loc sentry1 area6)))
   :repeat t
-  :interrupt
-    (exists (?j jammer)
-            (jamming ?j sentry1)))
+  :interrupt (exists (?j jammer)
+               (jamming ?j sentry1)))
 
 
 (define-constraint
-  ;Constraints only needed for happening events that can kill or delay an action.
-  ;Global constraints included here. Return t if constraint satisfied, nil if violated.
+  ;Constraints only needed for happening events that can 
+  ;kill or delay an action. Global constraints included 
+  ;here. Return t if constraint satisfied, nil if 
+  ;violated.
   (not (exists (?s sentry ?a area)
          (and (loc me ?a)
               (loc ?s ?a)
-              (active* ?s)))))
+              (active! ?s)))))
 
 
 (define-action jam
@@ -90,24 +99,29 @@
        (or (los ?area1 ?target)
            (and (loc ?target ?area2)
                 (visible ?area1 ?area2))))
-  (?target target ?area2 area ?jammer jammer ?area1 area)
+  (?target target ?jammer jammer ?area1 area)
   (assert (not (holding me ?jammer))
           (loc ?jammer ?area1)
           (jamming ?jammer ?target)))
 
 
+
+
+
+
+
 (define-action throw
     1
   (?switch switch ?area area)
-  (and (free* me)
+  (and (free! me)
        (loc me ?area)
        (loc ?switch ?area))
-  (?switch switch ?area area)
+  (?switch switch)
   (assert (if (red ?switch)
-            (and (not (red ?switch))
-                 (green ?switch))
-            (and (not (green ?switch))
-                 (red ?switch)))))
+            (assert (not (red ?switch))
+                    (green ?switch))
+            (assert (not (green ?switch))
+                    (red ?switch)))))
 
 
 (define-action pickup
@@ -115,7 +129,7 @@
   (?cargo cargo ?area area)
   (and (loc me ?area)
        (loc ?cargo ?area)
-       (free* me))
+       (free! me))
   (?cargo cargo ?area area)
   (assert (not (loc ?cargo ?area))
           (holding me ?cargo)
@@ -135,22 +149,30 @@
           (loc ?cargo ?area)))
        
 
+
+
+
+
+
+
+
+
 (define-action move
     1
   ((?area1 ?area2) area)
   (and (loc me ?area1)
-       (passable* ?area1 ?area2)
-       (safe* ?area2))
+       (passable! ?area1 ?area2)
+       (safe! ?area2))
   ((?area1 ?area2) area)
   (assert (not (loc me ?area1))
           (loc me ?area2)))
 
 
 (define-action wait
-    0  ;always 0, wait unknown time for next exogenous event
+    0  ;always 0, wait for next exogenous event
   (?area area)
   (loc me ?area)
-  (?area area)
+  ()
   (assert (waiting)))
 
 
@@ -180,6 +202,8 @@
   (adjacent area2 area3)
   (adjacent area2 area4)
   (adjacent area4 area5)
+  
+
   (adjacent area5 area6)
   (adjacent area6 area7)
   (adjacent area7 area8))

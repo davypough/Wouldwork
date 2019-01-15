@@ -1,25 +1,25 @@
-;;;; Filename: problem-smallspace.lisp
-
+;;;; Filename: problem-smallspace2.lisp
 
 ;;; Problem specification (in Talos Principle)
-;;; for the small space problem in Road to Gehenna sigil 
-;;; dome. First leg to area8.
+;;; for the small space problem in Road to Gehenna sigil dome.
+;;; Second Leg.
 
 
 (in-package :ww)  ;required
 
-(setq *depth-cutoff* 19)
+ 
+(setq *depth-cutoff* 15)
 
 
-(setq *first-solution-sufficient* nil)
+(setq *first-solution-sufficient* t)
 
 
 (define-types
   myself      (me)
-  gate        (gate1 gate2)
+  gate        (gate1 gate2 gate3 gate4)
   barrier     ()
   jammer      ()
-  connector   (connector1 connector2)
+  connector   (connector1 connector2 connector3)
   box         ()
   fan         ()
   gears       ()
@@ -27,9 +27,8 @@
   rostrum     ()
   hue         (blue red)
   transmitter (transmitter1 transmitter2)
-  receiver    (receiver1 receiver2)
-  area        (area1 area2 area3 area4 area5 area6 area7
-               area8)
+  receiver    (receiver1 receiver2 receiver3 receiver4)
+  area        (area1 area2 area3 area4 area5 area6 area7 area8 area9 area10)
   cargo       (either connector)
   target      (either gate gears)
   divider     (either gate barrier)
@@ -52,19 +51,17 @@
 
 
 (define-static-relations
-  ;agent can always move unimpeded between adjacent areas
-  (adjacent area area)  
+  (adjacent area area)  ;agent can always move unimpeded between areas
   (locale fixture area)
   (separates divider area area)
   (climbable> ladder area area)
   (height support $real)
   (controls receiver $gate)
-  ;clear los from an area to a gate/fixture
-  (los0 area (either gate fixture))  
+  (controls2 receiver receiver $gate)  ;gate controlled by two receivers together
+  (los0 area (either gate fixture))  ;clear los from an area to a gate/fixture
   (los1 area divider (either gate fixture))
   (los2 area divider divider (either gate fixture))
-  ;could see a mobile object in an area from a given area
-  (visible0 area area)  
+  (visible0 area area)  ;could see a potential mobile object in an area from a given area
   (visible1 area divider area)
   (visible2 area divider divider area))
 
@@ -73,33 +70,27 @@
   (holding myself $cargo) -> (not (free myself)))
 
 
-;;;; QUERY FUNCTIONS ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;; QUERY FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(define-query elevation! (?support)
+  (do (bind (height ?support $h))
+      (bind (on ?support $s))
+      (if (not (support $s))
+        (return-from elevation! $h)
+        (return-from elevation! (+ $h (elevation! state $s))))))
 
 
 (define-query same-color! (?terminus1 ?terminus2)
-  (and (bind (color ?terminus1 $hue1))
-       (bind (color ?terminus2 $hue2))
-       (eql $hue1 $hue2)))
+  (do (bind (color ?terminus1 $hue1))
+      (bind (color ?terminus2 $hue2))
+      (eql $hue1 $hue2)))
 
 
 (define-query source! (?terminus)
   (or (transmitter ?terminus)
       (and (connector ?terminus)
            (active ?terminus))))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 (define-query los-thru-2-dividers! (?area ?station)
@@ -149,6 +140,7 @@
                   (gate ?d2)
                   (not (active ?d2)))))))
 
+
 (define-query visible-thru-1-divider! (?area1 ?area2)
   (exists (?d divider)
     (and (visible1 ?area1 ?d ?area2)
@@ -185,17 +177,16 @@
   (do (push ?conn-or-rcvr $visits)
       (or (exists (?t transmitter)
             (and (connecting ?t ?conn-or-rcvr)
-                 (bind (color ?t $hue1))
-                 (eql $hue1 $hue)))
+                 (color ?t $hue)))
           (exists (?c connector)
             (and (connecting ?c ?conn-or-rcvr)  
                  (active ?c)
-                 (bind (color ?c $hue1))
-                 (eql $hue1 $hue)
+                 (color ?c $hue)
                  (not (member ?c $visits))
                  (sourced! ?c $hue $visits))))))
 
-;;;; UPDATE FUNCTIONS ;;;;
+
+;;;;;;;;;;;;;;;;;;;;;;;; UPDATE FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;
 
 
 (define-update activate-connector! (?connector ?hue)
@@ -241,7 +232,6 @@
             (assert (active ?target)))))
 
 
-
 (define-update chain-activate! (?connector)
   (if (and (active ?connector)
            (bind (color ?connector $hue)))
@@ -283,12 +273,6 @@
         (activate-connector! ?connector $hue)))))
 
 
-
-
-
-
-
-
 (define-update deactivate-any-orphans! ()
   (do (doall (?c connector)
         (if (and (active ?c)
@@ -302,10 +286,10 @@
           (deactivate-receiver! ?r)))))
 
 
-;;;; ACTIONS ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(define-action connect-to-1-terminus
+(define-action connect-to-1-terminus  ;using held connector
     1
   (?terminus terminus)
   (and (bind (holding me $cargo))
@@ -322,21 +306,7 @@
                 (color $cargo $hue)))))
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-(define-action connect-to-2-terminus
+(define-action connect-to-2-terminus  ;using held connector
     1
   ((?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
@@ -344,8 +314,7 @@
        (bind (loc me $area))
        (connectable! $area ?terminus1)
        (connectable! $area ?terminus2))
-  ($cargo fluent (?terminus1 ?terminus2) terminus
-   $area fluent)
+  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
   (do (assert (not (holding me $cargo))
               (loc $cargo $area)
               (connecting $cargo ?terminus1)
@@ -354,7 +323,7 @@
       (finally (chain-activate! $cargo))))
 
 
-(define-action connect-to-3-terminus
+(define-action connect-to-3-terminus  ;using held connector
     1
   ((?terminus1 ?terminus2 ?terminus3) terminus)
   (and (bind (holding me $cargo))
@@ -363,9 +332,7 @@
        (connectable! $area ?terminus1)
        (connectable! $area ?terminus2)
        (connectable! $area ?terminus3))
-  ($cargo fluent
-   (?terminus1 ?terminus2 ?terminus3) terminus
-   $area fluent)
+  ($cargo fluent (?terminus1 ?terminus2 ?terminus3) terminus $area fluent)
   (do (assert (not (holding me $cargo))
               (loc $cargo $area)
               (connecting $cargo ?terminus1)
@@ -373,14 +340,6 @@
               (connecting $cargo ?terminus3))
       (next (activate-connector-if! $cargo))
       (finally (chain-activate! $cargo))))
-
-
-
-
-
-
-
-
 
 
 (define-action jam
@@ -424,11 +383,22 @@
       (finally (deactivate-any-orphans!))))
 
 
-
-
-
-
-
+#|
+(define-action put
+    1
+  (?support support)
+  (and (holding me $cargo)
+       (loc me $area)
+       (loc ?support $area)
+       (not (exists (?c cargo)  ;cleartop ?support
+              (on ?c ?support)))
+       (setq $elev (elevation! ?support))
+       (<= $elev 1))
+  ($cargo fluent ?support support ($elev $area) fluent)
+  (assert (on $cargo ?support)
+          (loc $cargo $area)
+          (not (holding me $cargo))))
+|#
 
 (define-action drop-cargo
     1
@@ -451,17 +421,17 @@
           (loc me ?area2)))
 
 
-;;;; INITIALIZATION ;;;;
+;;;;;;;;;;;;;;;;;;;;;;; INITIALIZATION ;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (define-init
   ;dynamic
-  (loc me area5)
-  (loc connector1 area5)
-  (loc connector2 area7)
-  (free me)
-  (active gate1)
-  (active gate2)
+  (ACTIVE CONNECTOR1) (ACTIVE CONNECTOR2) (ACTIVE GATE1) (ACTIVE GATE3) (ACTIVE GATE4) (ACTIVE RECEIVER2) (COLOR CONNECTOR1 RED)
+ (COLOR CONNECTOR2 RED) (COLOR RECEIVER1 BLUE) (COLOR RECEIVER2 RED) (COLOR RECEIVER3 BLUE) (COLOR RECEIVER4 RED) (COLOR TRANSMITTER1 BLUE)
+ (COLOR TRANSMITTER2 RED) (CONNECTING CONNECTOR1 CONNECTOR2) (CONNECTING CONNECTOR1 RECEIVER1) (CONNECTING CONNECTOR1 RECEIVER2)
+ (CONNECTING CONNECTOR2 CONNECTOR1) (CONNECTING CONNECTOR2 TRANSMITTER2) (CONNECTING RECEIVER1 CONNECTOR1)
+ (CONNECTING RECEIVER2 CONNECTOR1) (CONNECTING TRANSMITTER2 CONNECTOR2) (FREE ME) (LOC CONNECTOR1 AREA5) (LOC CONNECTOR2 AREA6)
+ (LOC CONNECTOR3 AREA8) (LOC ME AREA8)  
   ;static
   (adjacent area1 area2)
   (adjacent area2 area3)
@@ -472,34 +442,50 @@
   (locale transmitter2 area7)
   (locale receiver1 area4)
   (locale receiver2 area8)
+  (locale receiver3 area9)
+  (locale receiver4 area10)
   (color transmitter1 blue)
   (color transmitter2 red)
   (color receiver1 blue)
   (color receiver2 red)
+  (color receiver3 blue)
+  (color receiver4 red)
   (controls receiver1 gate1)
   (controls receiver2 gate2)
+  (controls receiver3 gate3)
+  (controls receiver4 gate4)
   (separates gate1 area4 area7)
   (separates gate2 area7 area8)
+  (separates gate3 area8 area9)
+  (separates gate4 area9 area10)
 
-  ;los is from an area to a fixed station
+;los is from an area to a fixed station
   (los0 area2 transmitter1)
   (los0 area3 transmitter1)
   (los0 area3 receiver1)
+  (los0 area3 receiver3)
+  (los0 area4 receiver3)
   (los0 area5 transmitter1)
   (los0 area5 receiver1)
   (los0 area5 receiver2)
+  (los0 area5 receiver3)
+  (los0 area5 receiver4)
   (los0 area6 transmitter1)
   (los0 area6 transmitter2)
   (los0 area7 transmitter2)
   (los0 area8 transmitter1)
+  (los0 area8 receiver4)
+  (los0 area9 transmitter1)
+  (los0 area10 receiver2)
   (los1 area7 gate1 transmitter1)
   (los1 area7 gate2 receiver2)
   (los1 area8 gate2 transmitter2)
+  (los1 area8 gate3 receiver3)
+  (los1 area9 gate4 receiver4)
   (los2 area3 gate1 gate2 receiver2)
   (los2 area4 gate1 gate2 receiver2)
 
-  ;visibility is from an area to an area 
-  ;potentially containing a movable target or terminus
+;visibility is from an area to an area potentially containing a movable target or terminus
   (visible0 area1 area3)
   (visible0 area1 area4)
   (visible0 area1 area5)
@@ -510,31 +496,46 @@
   (visible0 area3 area6)
   (visible0 area3 area7)
   (visible0 area3 area8)
+  (visible0 area3 area9)
+  (visible0 area3 area10)
   (visible0 area4 area6)
   (visible0 area4 area8)
+  (visible0 area4 area9)
+  (visible0 area4 area10)
   (visible0 area5 area6)
   (visible0 area5 area8)
+  (visible0 area5 area9)
+  (visible0 area5 area10)
+  (visible0 area6 area10)
+  (visible0 area8 area9)
+  (visible0 area8 area10)
   (visible1 area1 gate1 area7) 
   (visible1 area3 gate1 area7) 
   (visible1 area2 gate1 area7) 
   (visible1 area4 gate1 area7) 
   (visible1 area4 gate1 area6) 
   (visible1 area5 gate1 area7) 
+  (visible1 area5 gate3 area8)
+  (visible1 area5 gate4 area10)
   (visible1 area6 gate2 area8)
   (visible1 area7 gate2 area8)
-  
-
+  (visible1 area7 gate1 area10)
+  (visible1 area8 gate3 area9)
+  (visible1 area8 gate3 area10)
+  (visible1 area9 gate4 area10)
   (visible2 area2 gate1 gate2 area8)
   (visible2 area3 gate1 gate2 area8)
   (visible2 area4 gate1 gate2 area8)
+  (visible2 area7 gate2 gate3 area9)
+  (visible2 area8 gate3 gate4 area10)
 )
 
-;;;; INITIALIZATION ACTIONS ;;;;
+;;;;;;;;;;;;;;;;;;; INITIALIZATION ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;
+
 
 ;init-actions save listing systematic facts
 
- (define-init-action init-los0  
-   ;los exists to any station within its local area
+(define-init-action init-los0  ;los exists to any station within its local area
     0
   (?station station (?area1 ?area2) area)
   (or (locale ?station ?area1)             ;for fixtures
@@ -543,8 +544,7 @@
   (assert (los0 ?area1 ?station)))
 
 
- (define-init-action init-visible0-locally  
-   ;any object is visible from its own local area
+(define-init-action init-visible0-locally  ;any object is visible from its own local area
     0
   (?area area)
   (always-true)
@@ -552,8 +552,7 @@
   (assert (visible0 ?area ?area)))
 
 
- (define-init-action init-visible0-via-adjacency  
-   ;any object is visible from an adjacent area
+(define-init-action init-visible0-via-adjacency  ;any object is visible from an adjacent area
     0
   ((?area1 ?area2) area)
   (adjacent ?area1 ?area2)
@@ -561,8 +560,7 @@
   (assert (visible0 ?area1 ?area2)))
 
 
- (define-init-action init-visible1-thru-divider  
-   ;any object is visible thru a divider
+(define-init-action init-visible1-thru-divider  ;any object is visible thru a divider
     0
   (?divider divider (?area1 ?area2) area)
   (separates ?divider ?area1 ?area2)
@@ -570,9 +568,21 @@
   (assert (visible1 ?area1 ?divider ?area2)))
 
 
-
-;;;; GOAL ;;;;
+;;;;;;;;;;;;;;;;;;; GOAL ;;;;;;;;;;;;;;;;;;;;
 
 
 (define-goal  ;always put this last
-  (loc me area8))
+  ;(and 
+       (loc me area9)
+       ;(loc connector2 area6)
+       ;(active connector2)
+       ;(loc connector1 area5)
+       ;(active connector1)
+       ;(connecting connector2 connector1)
+       ;(connecting connector2 transmitter2)
+       ;(connecting connector1 receiver1)
+       ;(connecting connector1 receiver2)
+       ;(not (connecting connector1 transmitter1))
+  ;)
+)
+

@@ -47,6 +47,13 @@
       finally (return (list (reverse properties) (reverse values)))))
 
 
+(defun make-plist (props values)
+  "Returns a plist of properties and values."
+  (loop for prop in props
+        for value in values
+        append (list prop value)))
+
+
 (defun list-difference (lst sublst)
   (remove-if (lambda (item)
                (member item sublst))
@@ -78,10 +85,6 @@
              (cond ((funcall test item (funcall key tree)) (return-from find-cons-in-tree tree))
                    ((listp tree) (mapc #'find-cons-in-tree-aux tree) nil))))
     (find-cons-in-tree-aux tree)))
-
-
-;(defun fit (item tree)
-;  (search (format nil "~S" item) (format nil "~S" tree)))
 
 
 (defun delete-nth (n list)

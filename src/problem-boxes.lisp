@@ -1,13 +1,17 @@
 ;;;; Filename: problem-boxes.lisp
 
-;;; Problem specification for using boxes to move to an area through a sequence of gates
-;;; controlled by pressure plates. See diagram in user manual.
+
+;;; Problem specification for using boxes to move to an ;;; area through a sequence of gates controlled by 
+;;; pressure plates.
 
 
 (in-package :ww)  ;required
 
 
 (setq *depth-cutoff* 10)
+
+
+
 
 
 (define-types
@@ -30,19 +34,30 @@
   (separates gate area area))
 
 
-
-(define-derived-relations
-  (free* me)                    (not (exists (?b box) 
-                                       (holding me ?b)))
+(define-query free! (?me)
+  (not (exists (?b box) 
+         (holding ?me ?b))))
   
-  (cleartop* ?plate)            (not (exists (?b box)
-                                       (on ?b ?plate)))
 
-  (open* ?gate ?area1 ?area2)   (and (separates ?gate ?area1 ?area2)
-                                     (exists (?p plate)
-                                       (and (controls ?p ?gate)
-                                            (exists (?b box)
-                                              (on ?b ?p))))))
+(define-query cleartop! (?plate)
+  (not (exists (?b box)
+         (on ?b ?plate))))
+
+
+(define-query open! (?gate ?area1 ?area2)
+  (and (separates ?gate ?area1 ?area2)
+       (exists (?p plate)
+         (and (controls ?p ?gate)
+              (exists (?b box)
+                (on ?b ?p))))))
+
+
+
+
+
+
+
+
 
 
 (define-action move
@@ -50,7 +65,7 @@
   ((?area1 ?area2) area)
   (and (loc me ?area1)
        (exists (?g gate)
-         (open* ?g ?area1 ?area2)))
+         (open! ?g ?area1 ?area2)))
   ((?area1 ?area2) area)
   (assert (not (loc me ?area1))
           (loc me ?area2)))
@@ -61,7 +76,7 @@
   (?box box ?area area)
   (and (loc me ?area)
        (loc ?box ?area)
-       (free* me))
+       (free! me))
   (?box box ?area area)
   (assert (not (loc ?box ?area))
           (holding me ?box)
@@ -86,12 +101,11 @@
   (and (loc me ?area)
        (holding me ?box)
        (loc ?plate ?area)
-       (cleartop* ?plate))
+       (cleartop! ?plate))
   (?box box ?plate plate ?area area)
   (assert (loc ?box ?area)
           (not (holding me ?box))
           (on ?box ?plate)))
-
 
 (define-init
   ;dynamic

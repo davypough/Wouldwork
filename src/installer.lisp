@@ -96,22 +96,6 @@
   t)
 
 
-(defmacro define-derived-relations (&rest conditions&bodies)
-  `(install-derived-relations ',conditions&bodies))
-
-
-(defun install-derived-relations (conditions&bodies)
-  (format t "Installing derived relations...~%")
-  (loop for (condition body) on conditions&bodies by #'cddr
-     do (check-type condition list)
-        (check-type (car condition) symbol)
-        (setf (gethash (car condition) *derived*)
-          (list (loop for item in (cdr condition)
-                      do (check-type item (or (satisfies varp) symbol))
-                     collect item)
-                 body))))
-
-
 (defmacro define-complementary-relations (&rest positives->negatives)
   `(install-complementary-relations ',positives->negatives))
 
@@ -152,34 +136,43 @@
   (push object *happenings*))
            
 
-(defmacro define-precondition-function (name args body)
-  `(install-precondition-function ',name ',args ',body))
+(defmacro define-query (name args body)
+  `(install-query ',name ',args ',body))
 
 
-(defun install-precondition-function (name args body)
-  (format t "Installing ~A precondition function...~%" name)
+(defun install-query (name args body)
+  (format t "Installing ~A query function...~%" name)
   (check-type args (satisfies list-of-variables))
   (push `,name *function-names*)
   (setf (get `,name 'formula) body)
-  (setf (get `,name 'fn) `(lambda (state ,@args)
-                            ,(translate body 'pre)))
+  (let ((new-$vars (set-difference (select-if-$varp body) args)))
+    (setf (get `,name 'fn) `(lambda (state ,@args)
+                              (let ,new-$vars
+                                (declare (special ,@new-$vars))
+                                ,(translate body 'pre)))))
   (fix-if-ignore-state (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
 
-(defmacro define-effect-function (name args body)
-  `(install-effect-function ',name ',args ',body))
+(defmacro define-update (name args body)
+  `(install-update ',name ',args ',body))
 
 
-(defun install-effect-function (name args body)
-  (format t "Installing ~A effect function...~%" name)
+(defun install-update (name args body)
+  (format t "Installing ~A update function...~%" name)
   (check-type args (satisfies list-of-variables))
   (push `,name *function-names*)
   (setf (get `,name 'formula) body)
-  (setf (get `,name 'fn) `(lambda (state ,@args)
-                                 (let (changes)
+  (ut::if-it (set-difference (select-if-$varp body) args)
+    (setf (get `,name 'fn) `(lambda (state ,@args)
+                                 (let (changes ,@ut::it)
+                                   (declare (special ,@ut::it))
                                    ,(translate body 'eff)
                                    changes)))
+    (setf (get `,name 'fn) `(lambda (state ,@args)
+                                 (let (changes)
+                                   ,(translate body 'eff)
+                                   changes))))
   (fix-if-ignore-state (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
@@ -206,53 +199,43 @@
   (check-type name symbol)
   (check-type duration real)
   (destructuring-bind (pre-vars pre-types) (dissect-parameters pre-params)
-    (check-type pre-vars (satisfies list-of-variables))
+    (check-type pre-vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
-    (let ((pre-?vars (remove-if-not #'?varp pre-vars))
-          (pre-$vars (remove-if-not #'$varp pre-vars)))
+    (let ((pre-$vars (select-if-$varp precondition)))
       (destructuring-bind (eff-vars eff-types) (dissect-parameters eff-params)
         (check-type eff-vars (satisfies list-of-variables))
         (check-type eff-types (satisfies list-of-parameter-types))
-        (let ((eff-$vars (remove-if-not #'$varp eff-vars))
-              (pre-return-vars (ut::list-difference eff-vars
-                                                    (ut::list-difference eff-vars pre-vars))))
-          (let* ((*current-precondition-fluents* pre-$vars) ;init first-fluent-appearance
-                 (*current-effect-fluents* (set-difference eff-$vars pre-$vars))
-                 (action (make-action
+        (let* ((new-eff-$vars (ut::list-difference (select-if-$varp effect) pre-$vars))
+               (eff-args (ut::list-difference eff-vars new-eff-$vars))
+               (action (make-action
                          :name name
                          :duration duration
                          :precondition-variables pre-vars
                          :precondition-types pre-types
-                         :precondition-instantiations (type-instantiations pre-types)
-                                                                 
+                         :precondition-instantiations (type-instantiations pre-types)                                                   
                          :precondition-lits nil
-                         :precondition-lambda `(lambda (state ,@pre-?vars)
+                         :precondition-lambda `(lambda (state ,@pre-vars)
                                                  (let ,pre-$vars
-                                                   (declare (special ,@pre-$vars))  ;needed for (set $var ...)
+                                                   ;specials needed for (set $var ...)
+                                                   (declare (special ,@pre-$vars))  
                                                    (when ,(translate precondition 'pre)
                                                      ;return values or satisfied pre
-                                                     (or (mapcar #'list (list ,@pre-return-vars))
+                                                     (or (mapcar #'list (list ,@eff-args))
                                                          '(nil)))))
                          :effect-variables eff-vars
                          :effect-types eff-types
                          :effect-instantiations (type-instantiations  ;new eff types only
                                                   (ut::list-difference eff-types pre-types))
-                         :effect-lambda `(lambda (state ,@eff-vars)
-                                           (let (changes ,@(ut::list-difference eff-$vars pre-$vars))
+                         :effect-lambda `(lambda (state ,@eff-args)
+                                           (let (changes ,@new-eff-$vars)
+                                             (declare (special ,@new-eff-$vars))
                                              ,(translate effect 'eff)
                                              changes))
                           :effect-adds nil)))
             (fix-if-ignore-state (action-precondition-lambda action))
             (fix-if-ignore-state (action-effect-lambda action))
-            (loop with effect = (action-effect-lambda action)
-                  for var in eff-vars
-                  when (not (ut::walk-tree-until (lambda (x)
-                                                   (eql x var))
-                                                 (cddr effect)))
-                collect var into vars
-                  finally (push `(declare (ignore ,@vars)) (cddr effect)))
             (push action *actions*)
-            t))))))
+            t)))))
 
 
 (defmacro define-init-action (name duration pre-params precondition eff-params effect)
@@ -262,52 +245,43 @@
 (defun install-init-action (name duration pre-params precondition eff-params effect)
   (format t "Installing ~A init action...~%" name)
   (destructuring-bind (pre-vars pre-types) (dissect-parameters pre-params)
-    (check-type pre-vars (satisfies list-of-variables))
+    (check-type pre-vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
-    (let ((pre-?vars (remove-if-not #'?varp pre-vars))
-          (pre-$vars (remove-if-not #'$varp pre-vars)))
+    (let ((pre-$vars (select-if-$varp precondition)))
       (destructuring-bind (eff-vars eff-types) (dissect-parameters eff-params)
         (check-type eff-vars (satisfies list-of-variables))
         (check-type eff-types (satisfies list-of-parameter-types))
-        (let ((eff-$vars (remove-if-not #'$varp eff-vars))
-              (pre-return-vars (ut::list-difference eff-vars
-                                                    (ut::list-difference eff-vars pre-vars))))
-          (let* ((*current-precondition-fluents* pre-$vars) ;init first-fluent-appearance
-                 (*current-effect-fluents* (set-difference eff-$vars pre-$vars))
-                 (action (make-action
+        (let* ((new-eff-$vars (ut::list-difference (select-if-$varp effect) pre-$vars))
+               (eff-args (ut::list-difference eff-vars new-eff-$vars))
+               (action (make-action
                          :name name
                          :duration duration
                          :precondition-variables pre-vars
                          :precondition-types pre-types
                          :precondition-instantiations (type-instantiations pre-types)
                          :precondition-lits nil
-                         :precondition-lambda `(lambda (state ,@pre-?vars)
+                         :precondition-lambda `(lambda (state ,@pre-vars)
                                                  (let ,pre-$vars
-                                                   (declare (special ,@pre-$vars))  ;needed for (set $var ...)
+                                                   ;specials needed for (set $var ...)
+                                                   (declare (special ,@pre-$vars))
                                                    (when ,(translate precondition 'pre)
                                                      ;return values or satisfied pre
-                                                     (or (mapcar #'list (list ,@pre-return-vars))
-                                                         t))))
+                                                     (or (mapcar #'list (list ,@eff-args))
+                                                         '(nil)))))
                          :effect-variables eff-vars
                          :effect-types eff-types
                          :effect-instantiations (type-instantiations
                                                   (ut::list-difference eff-types pre-types))
-                         :effect-lambda `(lambda (state ,@eff-vars)
-                                           (let (changes ,@(set-difference eff-$vars pre-$vars))
+                         :effect-lambda `(lambda (state ,@eff-args)
+                                           (let (changes ,@new-eff-$vars)
+                                             (declare (special ,@new-eff-$vars))
                                              ,(translate effect 'eff)
                                              changes))
                          :effect-adds nil)))
             (fix-if-ignore-state (action-precondition-lambda action))
             (fix-if-ignore-state (action-effect-lambda action))
-            (loop with effect = (action-effect-lambda action)
-                  for var in eff-vars
-                  when (not (ut::walk-tree-until (lambda (x)
-                                                   (eql x var))
-                                                 (cddr effect)))
-                collect var into vars
-                  finally (push `(declare (ignore ,@vars)) (cddr effect)))
             (push action *init-actions*)
-            action))))))
+            action)))))
 
 
 (defmacro define-init (&rest propositions)

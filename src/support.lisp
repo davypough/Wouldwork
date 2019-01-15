@@ -157,11 +157,12 @@
         finally (return-from replace-at prop)))
 
 
-(defun order-propositions (props)
+(defun order-propositions (propositions)
   ;NOTs first so addhash db not removed by later remhash
-  (sort props #'(lambda (x y) 
-                  (declare (ignore y))
-                  (and (listp x) (eq (car x) 'not)))))
+  (let ((props (remove-duplicates propositions :test #'equal)))
+    (sort props #'(lambda (x y) 
+                    (declare (ignore y))
+                    (and (listp x) (eq (car x) 'not))))))
 
 
 (defun revise (db literals)
@@ -314,21 +315,6 @@
             finally (return comp-pattern))))
 
 
-(defun first-fluent-appearance (form flag)
-  ;Process an action form's fluents during translation based on whether it is the first appearance
-  ;of a new fluent (to be assigned a value) or a subsequent appearance (gets that value).
-  (let ((form-fluents (remove-if-not #'$varp form)))
-    (when (intersection form-fluents (ecase flag
-                                       (pre *current-precondition-fluents*)
-                                       ((eff ante) *current-effect-fluents*)))
-      (ecase flag 
-        (pre (setq *current-precondition-fluents* 
-                   (set-difference *current-precondition-fluents* form-fluents)))
-        ((eff ante) (setq *current-effect-fluents* 
-                          (set-difference *current-effect-fluents* form-fluents))))
-      t)))
-
-
 (defun consolidate-types (type-list)
   ;Processes a list of types & symbols, including 'either' multi-types.
   (mapcar (lambda (type)
@@ -348,7 +334,7 @@
                                 (combo-type (intern (ut::interleave+ sorted-types))))
                            (setf (gethash combo-type *types*) (apply #'either sorted-types))
                            combo-type))))
-                  (t (format t "~%Error: Unrecognized type spec: ~A in ~A~%" type type-list))))
+                  (t (error "~%Error: Unrecognized type spec: ~A in ~A~%" type type-list))))
     type-list))
             
             
@@ -411,6 +397,11 @@
             (push partial-key partial-keys)))))
 
 
+(defun select-if-$varp (tree)
+  "Selects one each of items in the tree satisfying $varp."
+  (delete-duplicates (remove-if-not #'$varp (alexandria:flatten tree))))
+
+
 (defun fix-if-ignore-state (lambda-expr)
   (when (not (ut::walk-tree-until (lambda (x)
                                     (eql x 'state))
@@ -418,3 +409,6 @@
     (push '(declare (ignore state)) (cddr lambda-expr))))
 
 
+(defun trigger (predicate args)
+  ;Saves triggering until after action effects applied to current state.
+  (acons predicate args *current-action-triggers*))
