@@ -50,8 +50,7 @@
        (bind (contents ?jugB $amtB))
        (bind (capacity ?jugB $capB))
        (< $amtB $capB))
-  (?jugA jug $amtA fluent ?jugB jug $amtB fluent
-   $capB fluent)
+  (?jugA jug $amtA fluent ?jugB jug ($amtB $capB) fluent)
   (assert (if (<= $amtA (- $capB $amtB))
             (assert (contents ?jugA 0)
                     (contents ?jugB (+ $amtB $amtA)))

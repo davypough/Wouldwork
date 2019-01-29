@@ -104,8 +104,6 @@
 
 (defparameter *connectives* '(and or not))
 
-;(defparameter *derived* (make-hash-table :test #'eq))
-
 (defparameter *function-names* nil)  ;list of all user-defined functions
 
 (defparameter *symmetrics* (make-hash-table :test #'eq))  ;symmetric relations
@@ -176,7 +174,8 @@
   (and (listp lst)
        (every (lambda (arg)
                 (or (varp arg)
-                    (symbolp arg)))
+                    (symbolp arg)
+                    (realp arg)))
               lst)))
 
 (defun type-description (descrip)

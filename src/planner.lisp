@@ -234,10 +234,21 @@
      :name name
      :instantiations (if (eql name 'wait)
                        (cons duration (second db-update))
-                       (second db-update))
+                       (eff-param-instantiations (action-precondition-variables action)
+                                                 (action-effect-variables action)
+                                                 (second db-update)))
      :happenings (copy-tree (problem-state-happenings state))  ;to be updated by happenings
      :time (+ (problem-state-time state) duration)
      :idb (revise (alexandria:copy-hash-table (problem-state-idb state)) (first db-update)))))
+
+
+(defun eff-param-instantiations (precondition-variables effect-variables pre-instantiations)
+  ;Returns list of effect variable instantiations.
+  (iter (for evar in effect-variables)
+        (collect (iter (for pvar in precondition-variables)
+                       (for pinst in pre-instantiations)
+                       (when (eql pvar evar)
+                         (leave pinst))))))
 
 
 (defun expand (state)

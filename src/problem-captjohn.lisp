@@ -34,8 +34,6 @@
 (define-query already-placed! (?object)
   (bind (loc ?object $r $c)))
 
-      
-
 
 (define-query in-same-row! (?object1 ?object2)
   (and (bind (loc ?object1 $r1 $c1))
@@ -73,15 +71,6 @@
                 (= (1+ $c1) $c2))
            (and (= (1- $r1) $r2)
                 (= (1- $c1) $c2)))))
-
-  
-
-
-
-
-
-
-
 
 
 (define-action put

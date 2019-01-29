@@ -397,16 +397,19 @@
             (push partial-key partial-keys)))))
 
 
-(defun select-if-$varp (tree)
-  "Selects one each of items in the tree satisfying $varp."
-  (delete-duplicates (remove-if-not #'$varp (alexandria:flatten tree))))
+(defun select-if (fn tree)
+  "Selects one each of items in the tree satisfying fn."
+  (delete-duplicates (remove-if-not fn (alexandria:flatten tree))))
 
 
-(defun fix-if-ignore-state (lambda-expr)
-  (when (not (ut::walk-tree-until (lambda (x)
-                                    (eql x 'state))
-                                  (cddr lambda-expr))) ;db in the lambda body?
-    (push '(declare (ignore state)) (cddr lambda-expr))))
+(defun fix-if-ignore (symbols lambda-expr)
+  "Ignores variable symbols that are not in the lambda-body."
+  (let ((ignores (ut::list-difference symbols 
+                                      (select-if (lambda (x)
+                                                   (member x symbols))
+                                                 (cddr lambda-expr)))))
+    (when ignores
+      (push `(declare (ignore ,@ignores)) (cddr lambda-expr)))))
 
 
 (defun trigger (predicate args)

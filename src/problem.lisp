@@ -1,7 +1,7 @@
-;;;; Filename: problem-sentry.lisp
+;;;; Filename: problem-triangle-peg.lisp
 
-;;; Problem specification for getting by an automated sentry by jamming it.
-;;; See sentry-problem in user manual appendix.
+
+;;; Problem specification for triangle peg problem.
 
 
 (in-package :ww)  ;required
@@ -9,181 +9,89 @@
 
 (setq *tree-or-graph* 'graph)
 
-(setq *depth-cutoff* 16)
 
+(setq *first-solution-sufficient* nil)
+
+
+(defparameter *N* 6)  ;the number of pegs on a side
 
 
 (define-types
-  myself    (me)
-  box       (box1)
-  jammer    (jammer1)
-  gun       (gun1)
-  sentry    (sentry1)  
-  switch    (switch1)
-  red       ()  ;red & green are predicates
-  green     ()
-  area      (area1 area2 area3 area4 area5 area6 area7 area8)
-  cargo     (either jammer box)
-  threat    (either gun sentry)
-  target    (either threat))
+  peg (compute (loop for i from 1 
+                     below (/ (* *N* (1+ *N*)) 2)
+                 collect (intern (format nil "PEG~D" i))))
+  coord (compute (loop for i from 1 to *N* 
+                   collect i)))
 
 
 (define-dynamic-relations
-  (holding myself cargo)
-  (loc (either myself cargo threat target switch) area)
-  (red switch)
-  (green switch)
-  (jamming jammer target))
-
-(define-static-relations
-  (adjacent area area)
-  (los area target)  ;line-of-sight exists
-  (visible area area)  ;area is wholly visible from another area
-  (controls switch gun)
-  (watches gun area))
+  (loc peg $coord $coord $coord))
 
 
-(define-derived-relations
-  (free* me)                 (not (exists (?c cargo) 
-                                    (holding me ?c)))
-  
-  (passable* ?area1 ?area2)  (adjacent ?area1 ?area2)
+(define-query empty! (?x ?y ?z)  ;coordinates of a hole
+  (not (exists (?p peg)
+               (loc ?p ?x ?y ?z))))  ;x=row from left,
+                                     ;y=row from right,
+                                     ;z=row from bottom
 
-  (safe* ?area)              (not (exists (?g gun)
-                                    (and (watches ?g ?area)
-                                         (active* ?g))))
-
-  (active* ?threat)          (not (or (exists (?j jammer)
-                                        (jamming ?j ?threat))
-                                      (forall (?s switch)
-                                        (and (controls ?s ?threat)
-                                             (green ?s)))))
-  )
-
-
-(define-happening sentry1
-  :events
-  ((1 (not (loc sentry1 area6)) (loc sentry1 area7))
-   (2 (not (loc sentry1 area7)) (loc sentry1 area6))
-   (3 (not (loc sentry1 area6)) (loc sentry1 area5))
-   (4 (not (loc sentry1 area5)) (loc sentry1 area6)))
-  :repeat t
-  :interrupt
-    (exists (?j jammer)
-            (jamming ?j sentry1)))
-
-
-(define-constraint
-  ;Constraints only needed for happening events that can kill or delay an action.
-  ;Global constraints included here. Return t if constraint satisfied, nil if violated.
-  (not (exists (?s sentry ?a area)
-         (and (loc me ?a)
-              (loc ?s ?a)
-              (active* ?s)))))
-
-
-(define-action jam
+(define-action jump
     1
-  (?target target ?area2 area ?jammer jammer ?area1 area)
-  (and (holding me ?jammer)
-       (loc me ?area1)
-       (or (los ?area1 ?target)
-           (and (loc ?target ?area2)
-                (visible ?area1 ?area2))))
-  (?target target ?area2 area ?jammer jammer ?area1 area)
-  (assert (not (holding me ?jammer))
-          (loc ?jammer ?area1)
-          (jamming ?jammer ?target)))
+  ((?peg1 ?peg2) peg)
+  (and (bind (loc ?peg1 $x1 $y1 $z1))
+       (bind (loc ?peg2 $x2 $y2 $z2))
+       (or (and (= $x1 $x2)  ;aligned in x direction
+                (< $x2 (1- *N*))
+                (<= $y2 (- *N* $x2))
+                (> $y2 1)
+                (setq $delta (- $y2 $y1))
+                (= (abs $delta) 1)
+                (setq $target-x $x2)
+                (setq $target-y (+ $y2 $delta))
+                (setq $target-z (- $z2 $delta))
+                (empty! $target-x $target-y $target-z))
+           (and (= $y1 $y2)  ;aligned in y direction
+                (< $y2 (1- *N*))
+                (<= $z2 (- *N* $y2))
+                (> $z2 1)
+                (setq $delta (- $z2 $z1))
+                (= (abs $delta) 1)
+                (setq $target-x (- $x2 $delta))
+                (setq $target-y $y2)
+                (setq $target-z (+ $z2 $delta))
+                (empty! $target-x $target-y $target-z))
+           (and (= $z1 $z2)  ;aligned in z direction
+                (< $z2 (1- *N*))
+                (<= $x2 (- *N* $z2))
+                (> $x2 1)
+                (setq $delta (- $x2 $x1))
+                (= (abs $delta) 1)
+                (setq $target-x (+ $x2 $delta))
+                (setq $target-y (- $y2 $delta))
+                (setq $target-z $z2)
+                (empty! $target-x $target-y $target-z))))
+  (?peg1 peg ($x1 $y1 $z1) fluent ?peg2 peg
+   ($x2 $y2 $z2) fluent)
+  (assert (not (loc ?peg1 $x1 $y1 $z1))
+          (not (loc ?peg2 $x2 $y2 $z2))
+          (loc ?peg1 $target-x $target-y $target-z)))
 
 
-(define-action throw
-    1
-  (?switch switch ?area area)
-  (and (free* me)
-       (loc me ?area)
-       (loc ?switch ?area))
-  (?switch switch ?area area)
-  (assert (if (red ?switch)
-            (and (not (red ?switch))
-                 (green ?switch))
-            (and (not (green ?switch))
-                 (red ?switch)))))
+(progn (format t "~&Initializing database...~%")
+  (loop with pegs = (gethash 'peg *types*)
+    for ?x from 1 to *N*
+    do (loop with max = (1+ (- *N* ?x))
+           for ?y from 1 to max
+           for ?z from max downto 1
+           unless (and (= ?x 1) (= ?y 1) (= ?z *N*))
+           ;*db* is the name of the initial database
+           ;update is the function that asserts a proposition
+           ;into the database
+           do (update *db* `(loc ,(pop pegs) ,?x ,?y ,?z)))))
 
 
-(define-action pickup
-    1
-  (?cargo cargo ?area area)
-  (and (loc me ?area)
-       (loc ?cargo ?area)
-       (free* me))
-  (?cargo cargo ?area area)
-  (assert (not (loc ?cargo ?area))
-          (holding me ?cargo)
-          (exists (?t target)
-            (if (and (jammer ?cargo)
-                     (jamming ?cargo ?t))
-              (not (jamming ?cargo ?t))))))
-
-
-(define-action drop
-    1
-  (?cargo cargo ?area area)
-  (and (loc me ?area)
-       (holding me ?cargo))
-  (?cargo cargo ?area area)
-  (assert (not (holding me ?cargo))
-          (loc ?cargo ?area)))
-       
-
-(define-action move
-    1
-  ((?area1 ?area2) area)
-  (and (loc me ?area1)
-       (passable* ?area1 ?area2)
-       (safe* ?area2))
-  ((?area1 ?area2) area)
-  (assert (not (loc me ?area1))
-          (loc me ?area2)))
-
-
-(define-action wait
-    0  ;always 0, wait unknown time for next exogenous event
-  (?area area)
-  (loc me ?area)
-  (?area area)
-  (assert (waiting)))
-
-
-(define-init
-  ;dynamic
-  (loc me area1)
-  (loc jammer1 area1)
-  (loc switch1 area3)
-  (loc sentry1 area6)
-  (loc box1 area4)
-  (red switch1)
-  ;static
-  (always-true)
-  (watches gun1 area2)
-  (controls switch1 gun1)
-  (los area1 gun1)
-  (los area2 gun1)
-  (los area3 gun1)
-  (los area4 gun1)
-  (visible area5 area6)
-  (visible area5 area7)
-  (visible area5 area8)
-  (visible area6 area7)
-  (visible area6 area8)
-  (visible area7 area8)
-  (adjacent area1 area2)
-  (adjacent area2 area3)
-  (adjacent area2 area4)
-  (adjacent area4 area5)
-  (adjacent area5 area6)
-  (adjacent area6 area7)
-  (adjacent area7 area8))
-
-
-(define-goal
-  (loc me area8))
+(define-goal  ;only one peg left
+  (exists (?p1 peg)
+    (and (bind (loc ?p1 $x1 $y1 $z1))
+         (not (exists (?p2 peg)
+                (and (different ?p2 ?p1)
+                     (bind (loc ?p2 $x2 $y2 $z2))))))))

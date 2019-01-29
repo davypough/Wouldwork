@@ -18,6 +18,8 @@
             (check-type constants list)
             (when (and (consp constants) (eql (car constants) 'either))
               (setf constants (apply #'either (cdr constants))))
+            (when (eql (car constants) 'compute)
+              (setf constants (eval (second constants))))
             (setf (gethash type *types*) constants)
             (when (consp constants)
               (dolist (constant constants)
@@ -123,10 +125,14 @@
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
   (makunbound object)
   (setf (the simple-vector (get object :events)) (coerce (getf plist :events) 'simple-vector))
-  (when (getf plist :interrupt)
-    (setf (get object :interrupt) `(lambda (state)
-                                     ,(translate (getf plist :interrupt) 'pre))))
-  (fix-if-ignore-state (get object :interrupt))
+  (ut::if-it (getf plist :interrupt)
+    (let (($vars (select-if #'$varp ut::it)))
+      (setf (get object :interrupt) `(lambda (state)
+                                       (let ,$vars
+                                         ,(when $vars
+                                            `(declare (special @,$vars)))
+                                         ,(translate (getf plist :interrupt) 'pre))))))
+  (fix-if-ignore '(state) (get object :interrupt))
   (when (getf plist :repeat)
     (setf (get object :repeat) (getf plist :repeat)))
   ;(when (get object :rebound) 
@@ -145,12 +151,13 @@
   (check-type args (satisfies list-of-variables))
   (push `,name *function-names*)
   (setf (get `,name 'formula) body)
-  (let ((new-$vars (set-difference (select-if-$varp body) args)))
+  (let ((new-$vars (set-difference (select-if #'$varp body) args)))
     (setf (get `,name 'fn) `(lambda (state ,@args)
                               (let ,new-$vars
-                                (declare (special ,@new-$vars))
+                                ,(when new-$vars
+                                   `(declare (special ,@new-$vars)))
                                 ,(translate body 'pre)))))
-  (fix-if-ignore-state (get `,name 'fn))
+  (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
 
@@ -163,17 +170,18 @@
   (check-type args (satisfies list-of-variables))
   (push `,name *function-names*)
   (setf (get `,name 'formula) body)
-  (ut::if-it (set-difference (select-if-$varp body) args)
+  (ut::if-it (set-difference (select-if #'$varp body) args)
     (setf (get `,name 'fn) `(lambda (state ,@args)
                                  (let (changes ,@ut::it)
-                                   (declare (special ,@ut::it))
+                                   ,(when ut::it
+                                      `(declare (special ,@ut::it)))
                                    ,(translate body 'eff)
                                    changes)))
     (setf (get `,name 'fn) `(lambda (state ,@args)
                                  (let (changes)
                                    ,(translate body 'eff)
                                    changes))))
-  (fix-if-ignore-state (get `,name 'fn))
+  (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
   
@@ -184,8 +192,13 @@
 (defun install-constraint (form)
   (format t "Installing constraint...~%")
   (setf (get '*constraint* 'formula) form)
-  (setf (get '*constraint* 'fn) `(lambda (state) ,(translate form 'pre)))
-  (fix-if-ignore-state (get '*constraint* 'fn))
+  (let (($vars (select-if #'$varp form)))
+    (setf (get '*constraint* 'fn) `(lambda (state)
+                                     (let ,$vars
+                                       ,(when $vars
+                                          `(declare (special ,@$vars)))
+                                       ,(translate form 'pre)))))
+  (fix-if-ignore '(state) (get '*constraint* 'fn))
   (setf *constraint* (copy-tree (get '*constraint* 'fn))))
         
 
@@ -198,26 +211,26 @@
   (format t "Installing ~A action...~%" name)
   (check-type name symbol)
   (check-type duration real)
-  (destructuring-bind (pre-vars pre-types) (dissect-parameters pre-params)
-    (check-type pre-vars (satisfies list-of-?variables))
+  (destructuring-bind (pre-?vars pre-types) (dissect-parameters pre-params)
+    (check-type pre-?vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
-    (let ((pre-$vars (select-if-$varp precondition)))
+    (let ((pre-$vars (select-if #'$varp precondition)))
       (destructuring-bind (eff-vars eff-types) (dissect-parameters eff-params)
         (check-type eff-vars (satisfies list-of-variables))
         (check-type eff-types (satisfies list-of-parameter-types))
-        (let* ((new-eff-$vars (ut::list-difference (select-if-$varp effect) pre-$vars))
-               (eff-args (ut::list-difference eff-vars new-eff-$vars))
+        (let* ((new-eff-$vars (ut::list-difference (select-if #'$varp effect) pre-$vars))
+               (eff-args (append pre-?vars pre-$vars))
+               (missing-eff-vars (ut::list-difference eff-args (select-if #'varp effect)))
                (action (make-action
                          :name name
                          :duration duration
-                         :precondition-variables pre-vars
+                         :precondition-variables eff-args
                          :precondition-types pre-types
                          :precondition-instantiations (type-instantiations pre-types)                                                   
                          :precondition-lits nil
-                         :precondition-lambda `(lambda (state ,@pre-vars)
+                         :precondition-lambda `(lambda (state ,@pre-?vars)
                                                  (let ,pre-$vars
-                                                   ;specials needed for (set $var ...)
-                                                   (declare (special ,@pre-$vars))  
+                                                   (declare (special ,@pre-$vars))
                                                    (when ,(translate precondition 'pre)
                                                      ;return values or satisfied pre
                                                      (or (mapcar #'list (list ,@eff-args))
@@ -232,10 +245,10 @@
                                              ,(translate effect 'eff)
                                              changes))
                           :effect-adds nil)))
-            (fix-if-ignore-state (action-precondition-lambda action))
-            (fix-if-ignore-state (action-effect-lambda action))
+            (fix-if-ignore '(state) (action-precondition-lambda action))
+            (fix-if-ignore (cons 'state missing-eff-vars) (action-effect-lambda action))
             (push action *actions*)
-            t)))))
+            action)))))
 
 
 (defmacro define-init-action (name duration pre-params precondition eff-params effect)
@@ -244,25 +257,25 @@
 
 (defun install-init-action (name duration pre-params precondition eff-params effect)
   (format t "Installing ~A init action...~%" name)
-  (destructuring-bind (pre-vars pre-types) (dissect-parameters pre-params)
-    (check-type pre-vars (satisfies list-of-?variables))
+  (destructuring-bind (pre-?vars pre-types) (dissect-parameters pre-params)
+    (check-type pre-?vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
-    (let ((pre-$vars (select-if-$varp precondition)))
+    (let ((pre-$vars (select-if #'$varp precondition)))
       (destructuring-bind (eff-vars eff-types) (dissect-parameters eff-params)
         (check-type eff-vars (satisfies list-of-variables))
         (check-type eff-types (satisfies list-of-parameter-types))
-        (let* ((new-eff-$vars (ut::list-difference (select-if-$varp effect) pre-$vars))
-               (eff-args (ut::list-difference eff-vars new-eff-$vars))
+        (let* ((new-eff-$vars (ut::list-difference (select-if #'$varp effect) pre-$vars))
+               (eff-args (append pre-?vars pre-$vars))
+               (missing-eff-vars (ut::list-difference eff-args (select-if #'varp effect)))
                (action (make-action
                          :name name
                          :duration duration
-                         :precondition-variables pre-vars
+                         :precondition-variables eff-args
                          :precondition-types pre-types
                          :precondition-instantiations (type-instantiations pre-types)
                          :precondition-lits nil
-                         :precondition-lambda `(lambda (state ,@pre-vars)
+                         :precondition-lambda `(lambda (state ,@pre-?vars)
                                                  (let ,pre-$vars
-                                                   ;specials needed for (set $var ...)
                                                    (declare (special ,@pre-$vars))
                                                    (when ,(translate precondition 'pre)
                                                      ;return values or satisfied pre
@@ -278,8 +291,8 @@
                                              ,(translate effect 'eff)
                                              changes))
                          :effect-adds nil)))
-            (fix-if-ignore-state (action-precondition-lambda action))
-            (fix-if-ignore-state (action-effect-lambda action))
+            (fix-if-ignore '(state) (action-precondition-lambda action))
+            (fix-if-ignore (cons 'state missing-eff-vars) (action-effect-lambda action))
             (push action *init-actions*)
             action)))))
 
@@ -307,7 +320,12 @@
 (defun install-goal (form)
   (format t "Installing goal...~%")
   (setf (get '*goal* 'formula) form)  ;save user's goal for summary printout
-  (setf (get '*goal* 'fn) `(lambda (state) ,(translate form 'pre)))  ;save uncoded goal translation
-  (fix-if-ignore-state (get '*goal* 'fn))
+  (let (($vars (select-if #'$varp form)))
+    (setf (get '*goal* 'fn) `(lambda (state)  ;save uncoded goal translation
+                               (let ,$vars
+                                 ,(when $vars
+                                    `(declare (special ,@$vars)))
+                                 ,(translate form 'pre)))))
+  (fix-if-ignore '(state) (get '*goal* 'fn))
   (setq *goal* (copy-tree (get '*goal* 'fn)))  ;to be compiled
   (setup))
