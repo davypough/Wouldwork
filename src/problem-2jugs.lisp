@@ -54,8 +54,7 @@
   (assert (if (<= $amtA (- $capB $amtB))
             (assert (contents ?jugA 0)
                     (contents ?jugB (+ $amtB $amtA)))
-            (assert (contents ?jugA 
-                              (- (+ $amtA $amtB) $capB))
+            (assert (contents ?jugA (- (+ $amtA $amtB) $capB))
                     (contents ?jugB $capB)))))
 
 

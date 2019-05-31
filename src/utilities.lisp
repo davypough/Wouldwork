@@ -13,16 +13,42 @@
      (if it ,then ,else)))
 
 
-(defmacro prt1 (var)
-  "Print the name of a single variable or accessor and its value."
-  `(progn (format t "~&  ~S => ~S" ',var ,var)
-          ,var))
-
-
 (defmacro prt (&rest vars)
-  "Print the names & values of a list of variables or accessors."
-  `(progn ,@(loop for var in vars collect `(prt1 ,var))
-          t))
+  "Print the names & values of given variables or accessors.
+   Can wrap around an expression, returning its value."
+  `(progn ,@(loop for var in vars
+               collect `(format t "~&  ~S => ~S~%" ',var ,var))
+          ,@(last `,vars)))
+
+
+(defmacro mvb (vars values-form &rest body)
+  "Abbreviation for multiple-value-bind."
+  `(multiple-value-bind ,vars ,values-form ,@body))
+
+
+(define-modify-macro sortf (function &rest sort-key)  ;can include function in &rest
+  sort
+  "Modifies a referenced sequence by sorting it.")
+
+
+(defun remove-at-indexes (idxs lst)
+  "Removes items at given indexes from a list."
+  (loop for i from 0
+        for elt in lst
+        when (not (member i idxs :test #'=))
+        collect elt))
+
+
+(defun subst-items-at-ascending-indexes (items idxs lst)
+  "Substitutes for elements at given indexes in a list.
+   Indexes & items must correspond and be in ascending order."
+  (loop for i from 0
+      for elt in lst
+      if (and idxs (= i (first idxs)))
+      collect (first items)
+      and do (pop idxs)
+             (pop items)
+        else collect elt))
 
 
 (defun destructuring-setq (variables values)
@@ -54,10 +80,24 @@
         append (list prop value)))
 
 
+(defun create-symbol (item &key (intern nil) (package *package*))
+  "Creates a symbol from an object or list of objects."
+  (let* ((objects (if (atom item) (list item) item))
+         (item-string (format nil "~{~A~^~}" objects)))
+    (if intern
+      (intern item-string (or package *package*))
+      (make-symbol item-string))))
+
+
 (defun list-difference (lst sublst)
   (remove-if (lambda (item)
                (member item sublst))
              lst))
+
+
+(defun pushend (item lst)
+  "Pushes an item onto the end of a list and returns the new list."
+  (nconc lst (list item)))
 
 
 (defun ninsert-list (new-element position lst)
@@ -85,11 +125,6 @@
              (cond ((funcall test item (funcall key tree)) (return-from find-cons-in-tree tree))
                    ((listp tree) (mapc #'find-cons-in-tree-aux tree) nil))))
     (find-cons-in-tree-aux tree)))
-
-
-(defun delete-nth (n list)
-  ;Deletes the nth item in a list.
-  (delete-if (constantly t) list :start n :count 1))
 
 
 (defun delete-subsets (set-of-sets)
@@ -151,33 +186,47 @@
     (setf alist (sort alist #'string< :key (ecase sort-by (key #'car) (value #'cdr))))
     (loop for (key . value) in alist
         do (format t "~&~A ->~10T ~A~%" key value)))
-  t)
+  table)
 
 
 (defmethod show ((fn function) &rest rest)
   (declare (ignore rest))
-  (format t "~A~%" (function-lambda-expression fn))
-  t)
+  (format t "~&~A~%" (function-lambda-expression fn))
+  fn)
 
 
 (defmethod show ((lst list) &rest rest)
   (declare (ignore rest))
-  (format t "(")
+  (format t "~&(")
   (dolist (item lst)
     (show item))
   (format t ")")
-  t)
+  lst)
 
 
 (defmethod show ((object t) &rest rest)
   "Prints any basic lisp object."
   (declare (ignore rest))
-  (format t "~A~%" object)
-  t)
+  (format t "~&~S~%" object)
+  object)
 
 
 (defun print-ht (table) 
   "Prints a hash table line by line."
   (declare (hash-table table))
   (maphash #'(lambda (key val) (format t "~&~A ->~10T ~A" key val)) table)
-  (terpri))
+  (terpri)
+  table)
+
+
+(defun hash-table-same-keys (ht1 ht2)
+  ;Returns t if two hash tables have the same keys.
+  (declare (hash-table ht1 ht2))
+  (when (= (hash-table-count ht1) (hash-table-count ht2))
+    (maphash (lambda (ht1-key ht1-value)
+               (declare (ignore ht1-value))
+               (unless (gethash ht1-key ht2)
+                 (return-from hash-table-same-keys nil)))
+             ht1)
+    t))
+

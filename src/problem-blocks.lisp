@@ -33,7 +33,8 @@
     1
   (?block block ?support support)
   (and (cleartop! ?block)
-       (cleartop! ?support))
+       (cleartop! ?support)
+       (different ?block ?support))
   (?block block ?support support)
   (do (assert (on ?block ?support))
       (if (bind (on ?block $s))

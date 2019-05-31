@@ -9,9 +9,9 @@
  
 (setq *depth-cutoff* 9)
 
-;(setq *tree-or-graph* 'tree)
+(setq *tree-or-graph* 'tree)
 
-;(setq *first-solution-sufficient* t)
+(setq *first-solution-sufficient* nil)
 
 
 (define-types
@@ -39,16 +39,16 @@
   support     (either box rostrum))
 
 
-(define-dynamic-relations
+(define-dynamic-relations    ;(reachable myself area)
   (holding myself $cargo)
-  (free myself)
+  ;(free myself)
   (loc (either myself cargo) $area)
   (on (either myself cargo) $support)
   (attached fan gears)
   (jamming jammer $target)
   (connecting terminus terminus)
   (active (either connector gate receiver gears))
-  (inactive (either connector gate receiver gears))
+  ;(inactive (either connector gate receiver gears))
   (color terminus $hue))
 
 
@@ -58,19 +58,20 @@
   (separates divider area area)
   (climbable> ladder area area)
   (height support $real)
-  (controls receiver (either gate gears))
+  (controls receiver target) ; (either gate gears))
   (controls2 receiver receiver gate)  ;gate controlled by two receivers together
   (los0 area (either gate fixture))  ;clear los from an area to a gate/fixture
-  (los1 area divider (either gate fixture))
-  (los2 area divider divider (either gate fixture))
+  (los1 area divider station)         ;(either gate fixture))
+  (los2 area divider divider station)  ; (either gate fixture))
   (visible0 area area)  ;could see a potential mobile object in an area from a given area
   (visible1 area divider area)
   (visible2 area divider divider area))
 
 
-(define-complementary-relations  
-  (holding myself $cargo) -> (not (free myself))
-  (active (either gears connector gate)) -> (not (inactive (either gate gears connector))))
+;(define-complementary-relations  
+;  (holding myself $cargo) -> (not (free myself))
+;  (free myself) -> (not (bind (holding myself $cargo))))
+;  (active (either gears connector gate)) -> (not (inactive (either gate gears connector))))
 ;  (inactive (either connector gears gate)) -> (not (active (either connector gate gears))))
 
 
@@ -171,10 +172,10 @@
   (or (adjacent ?area1 ?area2)
       (exists (?b (either barrier ladder))
         (and (separates ?b ?area1 ?area2)
-             (free me)))  ;must drop cargo first
-             (exists (?g gate)
-               (and (separates ?g ?area1 ?area2)
-                    (not (active ?g))))))
+             (not (bind (holding me $cargo)))))  ;must drop cargo first
+      (exists (?g gate)
+        (and (separates ?g ?area1 ?area2)
+             (not (active ?g))))))
 
 
 (define-query sourced! (?conn-or-rcvr $visits)
@@ -192,12 +193,14 @@
 
 
 (define-update activate-connector! (?connector ?hue)
+  ;Commit due to recursive chain-activate!
   (if (not (active ?connector))
     (commit (active ?connector)
             (color ?connector ?hue))))
 
 
 (define-update deactivate-connector! (?connector)
+  ;Commit due to recursive chain-activate!
   (if (and (active ?connector)
            (bind (color ?connector $hue)))
     (commit (not (active ?connector))
@@ -289,21 +292,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(define-action connect-to-2-terminus  ;using held connector
-    1
-  ((?terminus1 ?terminus2) terminus)
-  (and (bind (holding me $cargo))
-       (connector $cargo)
-       (bind (loc me $area))
-       (connectable! $area ?terminus1)
-       (connectable! $area ?terminus2))
-  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
-  (do (assert (not (holding me $cargo))
-              (loc $cargo $area)
-              (connecting $cargo ?terminus1)
-              (connecting $cargo ?terminus2))
-      (next (activate-connector-if! $cargo))
-      (finally (chain-activate! $cargo))))
+;(define-action reachable
+;    1
+;  ()
+;  (bind (loc me $area))
+;  ($area fluent)
+;  (doall (?a area)
+;    (if (adjacent ?a $area)
+;      (assert (reachable me $area)))))
 
 
 (define-action connect-to-1-terminus  ;using held connector
@@ -323,6 +319,23 @@
                 (color $cargo $hue)))))
 
 
+(define-action connect-to-2-terminus  ;using held connector
+    1
+  ((?terminus1 ?terminus2) terminus)
+  (and (bind (holding me $cargo))
+       (connector $cargo)
+       (bind (loc me $area))
+       (connectable! $area ?terminus1)
+       (connectable! $area ?terminus2))
+  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
+  (do (assert (not (holding me $cargo))
+              (loc $cargo $area)
+              (connecting $cargo ?terminus1)
+              (connecting $cargo ?terminus2))
+      (next (activate-connector-if! $cargo))
+      (finally (chain-activate! $cargo))))
+
+
 (define-action jam
     1
   (?target target)
@@ -340,7 +353,7 @@
 (define-action pickup-jammer
     1
   (?jammer jammer)
-  (and (free me)
+  (and (not (bind (holding me $cargo)))
        (bind (loc me $area))
        (loc ?jammer $area))
   (?jammer jammer ($area $target) fluent)
@@ -353,7 +366,7 @@
 (define-action pickup-connector
     1
   (?connector connector)
-  (and (free me)
+  (and (not (bind (holding me $cargo)))
        (bind (loc me $area))
        (loc ?connector $area))
   (?connector connector $area fluent)
@@ -399,8 +412,7 @@
        (not (eql $area1 ?area2))
        (passable! $area1 ?area2))
   ($area1 fluent ?area2 area)
-  (assert (not (loc me $area1))
-          (loc me ?area2)))
+  (assert (loc me ?area2)))
 
 
 #|  ;doubles time to find 1st solution
@@ -423,7 +435,7 @@
 (define-init
   ;dynamic
   (loc me area1)
-  (free me)
+  ;(free me)
   (loc jammer1 area1)
   (loc connector2 area2) (loc connector3 area8) (loc connector4 area10)
   (loc connector5 area11) (loc connector6 area11)
@@ -486,7 +498,7 @@
   (?station station (?area1 ?area2) area)
   (or (locale ?station ?area1)             ;for fixtures
       (separates ?station ?area1 ?area2))  ;for gates
-  (?station station ?area1 area)
+  ()
   (assert (los0 ?area1 ?station)))
 
 
@@ -494,7 +506,7 @@
     0
   (?area area)
   (always-true)
-  (?area area)
+  ()
   (assert (visible0 ?area ?area)))
 
 
@@ -502,7 +514,7 @@
     0
   ((?area1 ?area2) area)
   (adjacent ?area1 ?area2)
-  ((?area1 ?area2) area)
+  ()
   (assert (visible0 ?area1 ?area2)))
 
 
@@ -510,27 +522,27 @@
     0
   (?divider divider (?area1 ?area2) area)
   (separates ?divider ?area1 ?area2)
-  (?divider divider (?area1 ?area2) area)
+  ()
   (assert (visible1 ?area1 ?divider ?area2)))
 
 
-(define-init-action inactive-connectors+receivers
-    0
-  ()
-  (always-true)
-  ()
-  (assert (doall (?connector connector)
-            (inactive ?connector))
-          (doall (?receiver receiver)
-            (inactive ?receiver))))
+;(define-init-action inactive-connectors+receivers
+;    0
+;  ()
+;  (always-true)
+;  ()
+;  (assert (doall (?connector connector)
+;            (inactive ?connector))
+;          (doall (?receiver receiver)
+;            (inactive ?receiver))))
 
 
 (define-goal  ;always put this last
-    (and (free me)
+    (and (not (bind (holding me $cargo)))
          (loc me area10)
          (loc jammer1 area1)
          (jamming jammer1 gate4)
-         (inactive gate4)
+         (not (active gate4))
          (loc connector3 area8)
          (connecting connector3 transmitter2)
          (color connector3 red)
@@ -541,4 +553,3 @@
          (color connector4 red)
          (active connector4))
 )
-

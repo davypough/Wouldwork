@@ -23,7 +23,7 @@
 
 (defun print-problem-state (state stream depth)
   (declare (problem-state state) (ignore depth))
-  (format stream "<~A ~A ~A ~A~%~A>~%"
+  (format stream "<~A ~A ~A ~A~%~A>"
       (problem-state-name state)
       (problem-state-instantiations state)
       (problem-state-happenings state)
@@ -52,11 +52,16 @@
   (iprecondition #'identity :type function)
   (effect-variables nil :type list)
   (effect-types nil :type list)
-  (effect-instantiations nil :type list)
   (effect-adds nil :type list)  ;nonnegative literals only for backward search
   (effect-lambda nil :type list)
   (ieffect-lambda nil :type list)
   (ieffect #'identity :type function))
+
+
+(defstruct update  ;db updates resulting from a successful action instantiation
+  (changes nil :type list)
+  (instantiations nil :type list)
+  (followups nil :type list))  ;next & finally followup function calls
 
 
 (defparameter *debug* 0)
@@ -66,6 +71,7 @@
   ;3 - display basic node info
   ;4 - display full node info
   ;5 - display full node info + break after each expansion cycle
+
 
 (setq *print-right-margin* 140)
   ;Allows non-wrap printing of *search-tree* for deep trees.
@@ -93,7 +99,7 @@
   ;The dfs summary representation of the search
 
 (defparameter *solutions* nil)
-  ;The resulting list of solutions found.
+ ;The resulting list of solutions found.
 
 
 (defparameter *types* (make-hash-table :test #'eq))
@@ -116,15 +122,15 @@
 
 (defparameter *fluent-relation-indices* (make-hash-table :test #'eq))  ;list of fluent argument indices for a relation
 
-(defparameter *current-action-triggers* nil)  ;alist of triggering predicates and arg list
-
 (defparameter *happenings* nil)  ;the list of objects having exogenous events
 
 (defparameter *db* (make-hash-table :test #'equal))  ;initial database of dynamic relations
 
-(defparameter *static-db* (make-hash-table :test #'equal))  ;the database of static relations
+(defparameter *idb* (make-hash-table))  ;initial integer database of dynamic propositions
 
-(defparameter *static-idb* (make-hash-table))  ;the integer database of static relations
+(defparameter *static-db* (make-hash-table :test #'equal))  ;initial database of static propositions
+
+(defparameter *static-idb* (make-hash-table))  ;initial integer database of static propositions
 
 (defparameter *goal* nil)
   ;Holds the goal test function--value is a lambda expression, symbol-function is the function
@@ -137,31 +143,34 @@
 
 (defparameter *last-object-index* 0)  ;last index of object constants seen so far in propositions
 
+(defparameter *parallel* nil)  ;whether to invoke parallel processing
+
+(defparameter *num-threads* 11)  ;for parallel processing (excluding main consumer)
+
 
 (defun setup ()
   (format t "Setting up...~%")
   (setf *function-names* (nreverse *function-names*))
   (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
-  (dolist (action *actions*)
-    (install-precondition-lits action)
-    (install-effect-adds action))
   (setf *init-actions* (nreverse *init-actions*))
+;  (dolist (action *actions*)  ;future backchaining
+;    (install-precondition-lits action)
+;    (install-effect-adds action))
   (with-slots (name instantiations happenings time) *start-state*
     (let ((first-event-time (loop for object in *happenings* 
                               minimize (car (aref (get object :events) 0)))))
-            (setf happenings (loop for object in *happenings* ;property list of happening objects
-                           collect (list object 
-                                        (list 0 first-event-time +1))))  ;next (index time direction)
-            (setf time 0)
-            (setf instantiations nil)
-            (setf name nil)))
+      (setf happenings (loop for object in *happenings* ;property list of happening objects
+                             collect (list object 
+                                          (list 0 first-event-time +1))))  ;next (index time direction)
+      (setf time 0)
+      (setf instantiations nil)
+      (setf name nil)))
+  (do-init-action-updates *start-state*)  ;updates *db* & *static-db* but not *start-state* idb yet
   (when (> (length *happenings*) 1)
     (setq *happenings* (sort *happenings* #'< :key (lambda (object)
                                                      (first (aref (get object :events) 0))))))
-  (do-init-action-updates *start-state*)  ;updates *db* & *static-db* but not *start-state*
-  (do-integer-conversion)  ;allows integer hashtable db lookups
-  (convert-lambdas-to-fns))
-
+  (do-integer-conversion)  ;allows integer hashtable db lookups, adds *start-state* idb
+  (convert-ilambdas-to-fns)) ;and compile
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Type Specifiers ;;;;;;;;;;;;;;;;;;
 
@@ -210,7 +219,7 @@
                               (member rel-item (cdr rel-type)))  ;either type
                          (subsetp (gethash rel-item *types*) (gethash rel-type *types*)))
                          ;(alexandria:set-equal rel-item rel-type))
-               (return nil))
+               (leave nil))
              (finally (return t)))))
 
 (defun negative-relation (neg-rel)

@@ -535,38 +535,38 @@
 
  (define-init-action init-los0  
    ;los exists to any station within its local area
-    0
+    1;0
   (?station station (?area1 ?area2) area)
   (or (locale ?station ?area1)             ;for fixtures
       (separates ?station ?area1 ?area2))  ;for gates
-  (?station station ?area1 area)
+  ()
   (assert (los0 ?area1 ?station)))
 
 
  (define-init-action init-visible0-locally  
    ;any object is visible from its own local area
-    0
+    2;0
   (?area area)
   (always-true)
-  (?area area)
+  ()
   (assert (visible0 ?area ?area)))
 
 
  (define-init-action init-visible0-via-adjacency  
    ;any object is visible from an adjacent area
-    0
+    3;0
   ((?area1 ?area2) area)
   (adjacent ?area1 ?area2)
-  ((?area1 ?area2) area)
+  ()
   (assert (visible0 ?area1 ?area2)))
 
 
  (define-init-action init-visible1-thru-divider  
    ;any object is visible thru a divider
-    0
+    4;0
   (?divider divider (?area1 ?area2) area)
   (separates ?divider ?area1 ?area2)
-  (?divider divider (?area1 ?area2) area)
+  ()
   (assert (visible1 ?area1 ?divider ?area2)))
 
 

@@ -6,9 +6,6 @@
 (in-package :ww)  ;required
 
 
-;(setq *depth-cutoff* 7)
-
-
 (define-types
   base    (base1 base2 base3)  ;the 3 peg bases on which disks will be placed
   disk    (disk1 disk2 disk3)

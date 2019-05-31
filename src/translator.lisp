@@ -76,11 +76,11 @@
          (finally (return values))))
 
 
-(defun translate-trigger (form flag)
-  ;Processes a trigger form. Stores for later update.
+(defun translate-followup (form flag)
+  ;Processes a trigger followup form for next & finally.
   (declare (ignore flag))
   (let ((base-form (second form)))
-    `(push (list ',(car base-form) ,@(cdr base-form)) *current-action-triggers*)))
+    `(push (list ',(car base-form) ,@(cdr base-form)) followups)))
 
 
 (defun translate-commit (form flag)
@@ -203,7 +203,7 @@
         ((eql (car form) 'if) (translate-conditional form flag))
         ((eql (car form) 'do) (translate-do form flag))
         ((eql (car form) 'bind) (translate-binding form flag))
-        ((member (car form) '(finally next trigger)) (translate-trigger form flag))
+        ((member (car form) '(finally next)) (translate-followup form flag))
         ((eql (car form) 'commit) (translate-commit form flag))
         ((eql (car form) 'setq) (translate-setq form flag))
         ((eql (car form) 'print) (translate-print form flag))

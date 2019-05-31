@@ -27,7 +27,7 @@
                                  indices)))))
 
 
-(defun convert-lambdas-to-fns ()
+(defun convert-ilambdas-to-fns ()
   (format t "~&Converting lambda expressions to functions...~%")
   (iter (for fname in *function-names*)
         (format t "~&~A...~%" fname)
@@ -56,7 +56,7 @@
   ;Effectively adds a literal proposition to the database.
   (declare (hash-table db))
   (let ((predicate (car proposition))
-        (int-db (eql (hash-table-test db) 'eql)))
+        (int-db (eq (hash-table-test db) 'eql)))
     ;do if proposition has fluents
     (when (gethash predicate *fluent-relation-indices*)
       (if int-db
@@ -80,10 +80,7 @@
 (defun del-prop (proposition db)
   ;Effectively removes a literal proposition from the database.
   (let ((predicate (car proposition))
-        (int-db (eql (hash-table-test db) 'eql)))
-    (if int-db
-      (remhash (convert-to-integer proposition) db)
-      (remhash proposition db))
+        (int-db (eq (hash-table-test db) 'eql)))
     ;do if proposition has fluents
     (when (gethash predicate *fluent-relation-indices*)
       (if int-db
@@ -93,7 +90,11 @@
     (when (gethash predicate *complements*)
       (if int-db
         (setf (gethash (convert-to-integer (get-complement-prop proposition)) db) t)
-        (setf (gethash (get-complement-prop proposition) db) t)))))
+        (setf (gethash (get-complement-prop proposition) db) t)))
+    ;do for all propositions
+    (if int-db
+      (remhash (convert-to-integer proposition) db)
+      (remhash proposition db))))
   
 
 (defun add-proposition (proposition db)
@@ -143,26 +144,17 @@
   (let (propositions)
     (alexandria:map-permutations
       (lambda (perm)
-        (push (replace-at vars proposition perm) propositions))
-      idxs)
+        (push (ut::subst-items-at-ascending-indexes perm (mapcar #'1+ idxs) proposition) propositions))
+      vars)
     propositions))
 
 
-(defun replace-at (vars proposition indices)
-  ;Returns replacement of proposition items at indices with vars
-  (loop with prop = (copy-list proposition)
-        for var in vars
-        for idx in indices
-        do (setf (nth (1+ idx) prop) var)
-        finally (return-from replace-at prop)))
-
-
-(defun order-propositions (propositions)
+(defun order-propositions (db-update)
   ;NOTs first so addhash db not removed by later remhash
-  (let ((props (remove-duplicates propositions :test #'equal)))
-    (sort props #'(lambda (x y) 
-                    (declare (ignore y))
-                    (and (listp x) (eq (car x) 'not))))))
+  (ut::sortf (update-changes db-update) #'(lambda (x y) 
+                                            (declare (ignore y))
+                                            (and (listp x) (eq (car x) 'not))))
+  db-update)
 
 
 (defun revise (db literals)
@@ -281,25 +273,18 @@
 
 
 (defun get-old-prop (new-proposition db)
-  (iter (with prop = (copy-list new-proposition))
-        (with int-db = (eql (hash-table-test db) 'eql))
-        (for index in (get-prop-fluent-indices new-proposition))
-        (for fluent in (if int-db
-                         (gethash (convert-to-integer (get-fluentless-prop new-proposition)) db)
-                         (gethash (get-fluentless-prop new-proposition) db)))
-        (setf (nth (1+ index) prop) fluent)
-        (finally (return prop))))
-
+  (let* ((indexes (get-prop-fluent-indices new-proposition))
+         (int-db (eq (hash-table-test db) 'eql))
+         (fluents (if int-db
+                    (gethash (convert-to-integer (get-fluentless-prop new-proposition)) db)
+                    (gethash (get-fluentless-prop new-proposition) db))))
+    (ut::subst-items-at-ascending-indexes fluents (mapcar #'1+ indexes) new-proposition)))
+   
 
 (defun get-fluentless-prop (proposition)
   ;Derives the fluentless proposition counterpart from a full proposition.
-  (let ((predicate (car proposition)))
-    (ut::if-it (gethash predicate *fluent-relation-indices*)
-               (loop with fluentless-prop = (copy-list proposition)
-                   for index in (reverse ut::it)
-                   do (setf fluentless-prop
-                        (ut::delete-nth (1+ index) fluentless-prop))
-                   finally (return fluentless-prop)))))
+  (let ((indexes (gethash (car proposition) *fluent-relation-indices*)))
+    (ut::remove-at-indexes (mapcar #'1+ indexes) proposition)))
 
 
 (defun get-complement-prop (proposition)
@@ -397,21 +382,26 @@
             (push partial-key partial-keys)))))
 
 
-(defun select-if (fn tree)
-  "Selects one each of items in the tree satisfying fn."
-  (delete-duplicates (remove-if-not fn (alexandria:flatten tree))))
+(defun get-all-vars (fn tree)
+  "Selects one each of variables in the tree satisfying fn."
+  (remove-if-not fn (alexandria:flatten tree)))
+
+
+(defun get-bound-?vars (tree)
+  "Searches tree for an atom or cons satisfying the predicate, and returns
+   list of all such items. To include tree itself, pass in (list tree)."
+  (iter (for item in tree)
+        (when (consp item)
+          (if (member (car item) '(exists exist forsome forall forevery doall))
+            (nconcing (delete-if-not #'?varp (alexandria:flatten (second item))))
+            (nconcing (get-bound-?vars item))))))
 
 
 (defun fix-if-ignore (symbols lambda-expr)
   "Ignores variable symbols that are not in the lambda-body."
   (let ((ignores (ut::list-difference symbols 
-                                      (select-if (lambda (x)
+                                      (get-all-vars (lambda (x)
                                                    (member x symbols))
                                                  (cddr lambda-expr)))))
     (when ignores
       (push `(declare (ignore ,@ignores)) (cddr lambda-expr)))))
-
-
-(defun trigger (predicate args)
-  ;Saves triggering until after action effects applied to current state.
-  (acons predicate args *current-action-triggers*))
