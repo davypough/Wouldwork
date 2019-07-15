@@ -6,8 +6,11 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem '4jugs)
 
-(setq *depth-cutoff* 6)  ;set to expected # steps to goal
+(ww-set 'depth-cutoff 6)  ;set to expected # steps to goal
+
+(setq *soluttion-type* 'min-length)
 
 
 (define-types

@@ -6,16 +6,20 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem '4queens)
 
-(setq *depth-cutoff* 4)
+(ww-set 'depth-cutoff 4)
 
+(ww-set 'solution-type 'every)
 
-(setq *tree-or-graph* 'tree)
+(ww-set 'tree-or-graph 'tree)
 
 
 (define-types
   queen   (queen1 queen2 queen3 queen4)
   column  (1 2 3 4))
+
+
 (define-dynamic-relations
   (loc queen $integer column)
   (placed queen)
@@ -38,7 +42,6 @@
   (?queen queen $row fluent ?column column)
   (assert (loc ?queen $row ?column)
           (placed ?queen)
-          (not (next-row $row))
           (next-row (1+ $row))))
    
 

@@ -5,6 +5,10 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'hanoi)
+
+(ww-set 'solution-type 'min-length)
+
 
 (define-types
   base    (base1 base2 base3)  ;the 3 peg bases on which disks will be placed
@@ -20,7 +24,7 @@
   (size support $fixnum))
 
 
-(define-query cleartop! (?support)
+(define-query cleartop? (?support)
   (not (exists (?d disk)
          (on ?d ?support))))
 
@@ -28,10 +32,10 @@
 (define-action move
     1
   (?disk disk (?support1 ?support2) support)
-  (and (cleartop! ?disk)
+  (and (cleartop? ?disk)
        (bind (size ?disk $disk-size))
        (on ?disk ?support1)
-       (cleartop! ?support2)
+       (cleartop? ?support2)
        (bind (size ?support2 $support-size))
        (< $disk-size $support-size))
   (?disk disk (?support1 ?support2) support)

@@ -6,28 +6,65 @@
 (in-package :ww)
 
 
-(defun translate-atom (form)
+(defun translate-list (form)
+  ;Most basic form translation.
+  `(list ,@(loop for item in form
+                 if (or (varp item)
+                        (and (listp item) (fboundp (car item))))
+                 collect item
+                 else collect `(quote ,item))))
+
+
+(defun translate-simple-atom (form)
+  ;Pre/ante only.
   ;Eg, (velocity ?car wheel1 50 $direction) -> (list 'velocity ?car 'wheel1 50 $direction)
   (check-type form (satisfies atomic-formula))
-  `(list ,@(loop for item in form
-               if (or (numberp item)   ;numerical fluent
-                      (and (symbolp item)  ;variable
-                           (varp item))
-                      (listp item))  ;lisp expression
-               collect item
-               else collect `(quote ,item))))  ;relation or object
+  `(gethash ,(translate-list form)
+            ,(if (gethash (car form) (ww-get 'relations))
+               '(problem-state-db state)
+               '*static-db*)))
+
+
+(defun translate-fluent-atom (form)
+  ;Pre/ante only.
+  (let* ((fluent-indices (get-prop-fluent-indices form))  ;(mapcar #'1+ (gethash (car form) (ww-get 'fluent-relation-indices))))
+         (fluentless-atom (ut::remove-at-indexes fluent-indices form))
+         (fluents (ut::collect-at-indexes fluent-indices form)))  ;eg, area1, ?area1, or $area1
+    `(equal (gethash ,(translate-list fluentless-atom) ,(if (gethash (car form) (ww-get 'relations))
+                                                          '(problem-state-db state)
+                                                          '*static-db*))
+            (list ,@(mapcar (lambda (x)
+                              (if (varp x) x `',x))
+                            fluents)))))
+
+
+(defun translate-proposition (form)
+  ;Distinguishes fluent from non-fluent propositions.
+  (if (get-prop-fluent-indices form)  ;(gethash (car form) (ww-get 'fluent-relation-indices))
+    (translate-fluent-atom form)
+    (translate-simple-atom form)))
 
 
 (defun translate-std-relation (form flag)
-  ;form consists only of the relation, ?vars, and/or objects.
-  ;Eg, (loc me ?area) -> (gethash (list 'loc 'me ?area) (problem-state-db state))  ;pre
+  ;Distinguishes between pre/ante and eff relations. General form consisting of
+  ;the relation, ?vars, $vars, numbers, symbols, lisp objects, and functions.
+  ;Eg, (loc me ?area) -> (gethash (list 'loc 'me ?area) (problem-state-db state))  ;pre/ante
   ;                   -> (push (list 'loc 'me ?area) changes)  ;eff
   (ecase flag
-    ((pre ante) `(gethash ,(translate-atom form) 
-                          ,(if (gethash (car form) *relations*)
-                             '(problem-state-db state)
-                             '*static-db*)))
-    (eff `(push ,(translate-atom form) changes))))
+    ((pre ante) (translate-proposition form))
+    (eff `(push ,(translate-list form) changes))))
+
+
+(defun translate-negative-relation (form flag)
+  ;Translates a negated relation form.
+;  (if (gethash (car (second form)) (ww-get 'relations))
+    (ecase flag
+      ((pre ante) `(not ,(translate-std-relation (second form) flag)))
+      (eff `(push (list 'not ,(translate-list (second form))) changes))))
+;    (ecase flag
+;      ((pre ante) `(not ,(translate (second form) flag)))
+;      (eff (error "~%Error: Only literals allowed in effect statement negative assertions: ~A~2%"
+;                  form)))))
 
 
 (defun translate-function (form flag)
@@ -50,30 +87,16 @@
                 (setf changes (append changes new-changes))))))))
 
 
-(defun translate-negative-relation (form flag)
-  ;Translates a negated form.
-  (declare (hash-table *relations*))
-  (if (gethash (car (second form)) *relations*)
-    (ecase flag
-      ((pre ante) `(not ,(translate-std-relation (second form) flag)))
-      (eff `(push (list 'not ,(translate-atom (second form))) changes)))
-    (ecase flag
-      ((pre ante) `(not ,(translate (second form) flag)))
-      (eff (error "~%Error: Only literals allowed in effect statement negative assertions: ~A~2%"
-                  form)))))
-
-
 (defun translate-binding (form flag)
-  ;Translates a binding for a positive form, returns nil if there are no value bindings.
+  ;Translates a binding for a relation form, returns nil if there are no value bindings.
   (declare (ignore flag))
-  `(iter (with values = (gethash ,(translate-atom (remove-if #'$varp (second form)))
-                                 ,(if (gethash (caadr form) *relations*)
-                                    '(problem-state-db state)
-                                    '*static-db*)))
-         (for var in ',(remove-if-not #'$varp (second form)))
-         (for val in values)
-         (setf (symbol-value var) val)
-         (finally (return values))))
+  (let* ((fluent-indices (get-prop-fluent-indices (second form)))  ;(gethash (car (second form)) (ww-get 'fluent-relation-indices)))
+         (fluentless-atom (ut::remove-at-indexes fluent-indices (second form))))
+    `(iter (with vals = ,(translate-simple-atom fluentless-atom))
+           (for var in ',(remove-if-not #'$varp (second form)))
+           (for val in vals)
+           (setf (symbol-value var) val)
+           (finally (return vals)))))
 
 
 (defun translate-followup (form flag)
@@ -88,28 +111,31 @@
   (declare (ignore flag))
   `(progn 
      ,@(iter (for item in (cdr form))
-             (if (eql (car item) 'not)
-               (collect `(update (problem-state-db state)
-                                 (list 'not ,(translate-atom (second item)))))
-               (collect `(update (problem-state-db state)
-                                 ,(translate-atom item)))))))
+             (if (eq (car item) 'not)
+               (collect `(commit1 (problem-state-db state)
+                                  (list 'not ,(translate-list (second item)))))
+               (collect `(commit1 (problem-state-db state)
+                                  ,(translate-list item)))))))
 
 
 (defun translate-existential (form flag)
   ;The existential is interpreted differently for pre vs eff.  
-  ;In pre, (exists (vars) form) is true when form is true for any instantiation of vars, otherwise false.
+  ;In pre, (exists (vars) form) is true when form is true
+  ;for any instantiation of vars, otherwise false.
   ;In eff, it asserts form for the first instantiation of the vars, and then exits.
   (let ((parameters (second form))
         (body (third form)))
     (destructuring-bind (vars types) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
+      (let ((quoted-instances (ut::quote-elements
+                                (ut::regroup-by-index (type-instantiations types)))))
         `(some (lambda ,vars
-                   ,(translate body flag))
-               ,@(or (mapcar (lambda (x) `(quote ,x))
-                             (ut::regroup (type-instantiations types)))
-                     (make-list (length vars) :initial-element nil))))))
-         
+                 ,(translate body flag))
+               ,@(if (equal quoted-instances '('nil))
+                   (make-list (length types) :initial-element nil)
+                   quoted-instances))))))
+      
 
 (defun translate-universal (form flag)
   ;The universal is interpreted differently for pre vs eff.  
@@ -120,11 +146,13 @@
     (destructuring-bind (vars types) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
+      (let ((quoted-instances (ut::quote-elements
+                                (ut::regroup-by-index (type-instantiations types)))))
         `(every (lambda ,vars
-                    ,(translate body flag))
-                ,@(or (mapcar (lambda (x) `(quote ,x))
-                             (ut::regroup (type-instantiations types)))
-                     (make-list (length vars) :initial-element nil))))))
+                  ,(translate body flag))
+               ,@(if (equal quoted-instances '('nil))
+                   (make-list (length types) :initial-element nil)
+                   quoted-instances))))))
 
 
 (defun translate-doall (form flag)
@@ -135,11 +163,13 @@
     (destructuring-bind (vars types) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
+      (let ((quoted-instances (ut::quote-elements
+                                (ut::regroup-by-index (type-instantiations types)))))
         `(mapcar (lambda ,vars
-                     ,(translate body flag))
-                 ,@(or (mapcar (lambda (x) `(quote ,x))
-                               (ut::regroup (type-instantiations types)))
-                       (make-list (length vars) :initial-element nil))))))
+                   ,(translate body flag))
+               ,@(if (equal quoted-instances '('nil))
+                   (make-list (length types) :initial-element nil)
+                   quoted-instances))))))
 
 
 (defun translate-connective (form flag)
@@ -177,7 +207,7 @@
 
 
 (defun translate-do (form flag)
-  ;Translates a do set of clauses.
+  ;Translates a simple set of clauses.
   `(progn ,@(loop for statement in (cdr form)
                   collect (translate statement flag))))
 
@@ -195,23 +225,22 @@
 (defun translate (form flag)  ;test-then distinguishes between if stmt forms
   ;Beginning translator for all forms in actions.
   (cond ((atom form) form)  ;atom translates as itself
-        ((eql form nil) t)  ;if form=nil simply continue processing
-        ((eql (car form) 'assert) (translate-assertion form flag))
+        ((eq form nil) t)  ;if form=nil simply continue processing
+        ((eq (car form) 'assert) (translate-assertion form flag))
         ((member (car form) '(forsome exists exist)) (translate-existential form flag))  ;specialty first
         ((member (car form) '(forall forevery every)) (translate-universal form flag))
-        ((eql (car form) 'doall) (translate-doall form flag))
-        ((eql (car form) 'if) (translate-conditional form flag))
-        ((eql (car form) 'do) (translate-do form flag))
-        ((eql (car form) 'bind) (translate-binding form flag))
+        ((eq (car form) 'doall) (translate-doall form flag))
+        ((eq (car form) 'if) (translate-conditional form flag))
+        ((eq (car form) 'do) (translate-do form flag))
+        ((eq (car form) 'bind) (translate-binding form flag))
         ((member (car form) '(finally next)) (translate-followup form flag))
-        ((eql (car form) 'commit) (translate-commit form flag))
-        ((eql (car form) 'setq) (translate-setq form flag))
-        ((eql (car form) 'print) (translate-print form flag))
-        ((and (eq (car form) 'not)     ;(gethash (caadr form) *relations*))  ;before connectives
-           (translate-negative-relation form flag)))
-        ((member (car form) *connectives*) (translate-connective form flag))
-        ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*))
-           (translate-std-relation form flag))
-        ((member (car form) *function-names*) (translate-function form flag))
+        ((eq (car form) 'commit) (translate-commit form flag))
+        ((eq (car form) 'setq) (translate-setq form flag))
+        ((eq (car form) 'print) (translate-print form flag))
+        ;((eq (car form) 'set-objective-value) (translate-set-objective-value form flag))
+        ((and (eq (car form) 'not) (gethash (caadr form) (ww-get 'relations))) (translate-negative-relation form flag))
+        ((member (car form) (ww-get 'connectives)) (translate-connective form flag))
+        ((or (gethash (car form) (ww-get 'relations)) (gethash (car form) (ww-get 'static-relations))) (translate-std-relation form flag))
+        ((member (car form) (append *query-names* *update-names*)) (translate-function form flag))
         ((fboundp (car form)) form)   ;any lisp function
         (t (translate-function form flag))))

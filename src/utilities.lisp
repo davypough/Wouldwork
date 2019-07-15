@@ -39,6 +39,14 @@
         collect elt))
 
 
+(defun collect-at-indexes (idxs lst)
+  "Collect items at given indexes from a list."
+  (loop for i from 0
+        for elt in lst
+        when (member i idxs :test #'=)
+        collect elt))
+
+
 (defun subst-items-at-ascending-indexes (items idxs lst)
   "Substitutes for elements at given indexes in a list.
    Indexes & items must correspond and be in ascending order."
@@ -56,7 +64,7 @@
   (loop for var in variables
       for val in values do
         (setf (symbol-value var) val)
-        finally (return values)))
+      finally (return values)))
 
 
 (defun segregate-plist (plist)
@@ -80,13 +88,13 @@
         append (list prop value)))
 
 
-(defun create-symbol (item &key (intern nil) (package *package*))
-  "Creates a symbol from an object or list of objects."
-  (let* ((objects (if (atom item) (list item) item))
-         (item-string (format nil "~{~A~^~}" objects)))
-    (if intern
-      (intern item-string (or package *package*))
-      (make-symbol item-string))))
+(defun intern-symbol (&rest args)
+  "Interns a symbol created by concatenating args.
+   Based on symb in Let Over Lambda."
+  (flet ((mkstr (&rest args)
+           (with-output-to-string (s)
+             (dolist (a args) (princ a s)))))
+    (values (intern (apply #'mkstr args)))))
 
 
 (defun list-difference (lst sublst)
@@ -106,17 +114,6 @@
       (push new-element lst)
       (push new-element (cdr (nthcdr (1- position) lst))))
   lst)
-
-
-(defun walk-tree-until (fun tree)
-  "Walks a tree until the function returns true for an atom (ie, non-cons),
-   returning the atom at that point, or nil if never true."
-  (not (tree-equal tree tree
-                :test (lambda (element-1 element-2)
-                        (declare (ignore element-2))
-                        (if (funcall fun element-1)
-                          (return-from walk-tree-until element-1)
-                          t)))))
 
 
 (defun find-cons-in-tree (item tree &key (test #'eql) (key #'identity))
@@ -146,16 +143,18 @@
   (format nil "~{~A~^+~}" lst))
 
 
-(defun regroup (list-of-lists)
+(defun regroup-by-index (list-of-lists)
   "Regroups all first elements together, second elements together, etc into
    a new list-of-lists."
-  (let* ((n (length (car list-of-lists)))
-         (regrouping (make-array n :initial-element nil)))
-    (loop for list in list-of-lists
-        do (loop for element in list
-               for i upto n
-               do (push element (aref regrouping i))))
-    (coerce regrouping 'list)))
+  (if list-of-lists
+    (apply #'mapcar #'list list-of-lists)
+    '(nil)))
+
+
+(defun quote-elements (list)
+  "Quotes the individual elements of a list."
+  (or (mapcar (lambda (elt) `',elt) list)
+      '((quote nil))))
 
 
 (defun map-product-less-bags (lists)
@@ -214,9 +213,11 @@
 (defun print-ht (table) 
   "Prints a hash table line by line."
   (declare (hash-table table))
+  (format t "~&~A" table)
   (maphash #'(lambda (key val) (format t "~&~A ->~10T ~A" key val)) table)
   (terpri)
   table)
+
 
 
 (defun hash-table-same-keys (ht1 ht2)
@@ -230,3 +231,8 @@
              ht1)
     t))
 
+
+(defun hash-table-present (key ht)
+  ;Determines if a key is present in ht.
+  (mvb (* present) (gethash key ht)
+       present))

@@ -7,13 +7,13 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'sentry)
 
-(setq *tree-or-graph* 'graph)
+(ww-set 'tree-or-graph 'graph)
 
+(ww-set 'depth-cutoff 16)
 
-(setq *depth-cutoff* 16)
-
-
+(ww-set 'solution-type 'min-length)
 
 
 (define-types
@@ -48,25 +48,25 @@
   (watches gun area))
 
 
-(define-query free! (?myself) 
+(define-query free? (?myself) 
   (not (exists (?c cargo) 
                (holding ?myself ?c))))
 
   
-(define-query passable! (?area1 ?area2)
+(define-query passable? (?area1 ?area2)
   (adjacent ?area1 ?area2))
 
 
-(define-query active! (?threat)
+(define-query active? (?threat)
   (not (or (exists (?j jammer)
              (jamming ?j ?threat))
            (forall (?s switch)
              (and (controls ?s ?threat)
                   (green ?s))))))
-(define-query safe! (?area)
+(define-query safe? (?area)
   (not (exists (?g gun)
          (and (watches ?g ?area)
-              (active! ?g)))))
+              (active? ?g)))))
 
 
 (define-happening sentry1
@@ -88,7 +88,7 @@
   (not (exists (?s sentry ?a area)
          (and (loc me ?a)
               (loc ?s ?a)
-              (active! ?s)))))
+              (active? ?s)))))
 
 
 (define-action jam
@@ -113,7 +113,7 @@
 (define-action throw
     1
   (?switch switch ?area area)
-  (and (free! me)
+  (and (free? me)
        (loc me ?area)
        (loc ?switch ?area))
   (?switch switch)
@@ -129,7 +129,7 @@
   (?cargo cargo ?area area)
   (and (loc me ?area)
        (loc ?cargo ?area)
-       (free! me))
+       (free? me))
   (?cargo cargo ?area area)
   (assert (not (loc ?cargo ?area))
           (holding me ?cargo)
@@ -161,8 +161,8 @@
     1
   ((?area1 ?area2) area)
   (and (loc me ?area1)
-       (passable! ?area1 ?area2)
-       (safe! ?area2))
+       (passable? ?area1 ?area2)
+       (safe? ?area2))
   ((?area1 ?area2) area)
   (assert (not (loc me ?area1))
           (loc me ?area2)))

@@ -7,8 +7,11 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem '2jugs)
 
-(setq *depth-cutoff* 6)  ;set to expected # steps to goal
+(ww-set 'depth-cutoff 6)  ;set to expected # steps to goal
+
+(ww-set 'solution-type 'min-length)
 
 
 (define-types
@@ -24,7 +27,7 @@
 
 
 (define-action fill
-    1
+    2
   (?jug jug)
   (and (bind (contents ?jug $amt))
        (bind (capacity ?jug $cap))
@@ -43,7 +46,7 @@
 
 
 (define-action pour  ;A into B
-    1
+    3
   ((?jugA ?jugB) jug)
   (and (bind (contents ?jugA $amtA))
        (> $amtA 0)

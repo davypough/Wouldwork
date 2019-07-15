@@ -8,7 +8,7 @@
 
 (defun either (&rest types)
   (loop for type in types
-      append (gethash type *types*)))
+      append (gethash type (ww-get 'types))))
 
 
 (defun achieve-goal (db)
@@ -29,7 +29,7 @@
 
 (defun convert-ilambdas-to-fns ()
   (format t "~&Converting lambda expressions to functions...~%")
-  (iter (for fname in *function-names*)
+  (iter (for fname in (append *query-names* *update-names*))
         (format t "~&~A...~%" fname)
         (when (fboundp `,fname)
           (fmakunbound `,fname))
@@ -55,52 +55,48 @@
 (defun add-prop (proposition db)
   ;Effectively adds a literal proposition to the database.
   (declare (hash-table db))
-  (let ((predicate (car proposition))
-        (int-db (eq (hash-table-test db) 'eql)))
-    ;do if proposition has fluents
-    (when (gethash predicate *fluent-relation-indices*)
+  (let ((int-db (eq (hash-table-test db) 'eql)))
+    (if (get-prop-fluent-indices proposition)
+      ;do if proposition has fluents
       (if int-db
-        (progn (remhash (convert-to-integer (get-old-prop proposition db)) db)
-               (setf (gethash (convert-to-integer (get-fluentless-prop proposition)) db)
-                     (get-prop-fluents proposition)))
-        (progn (remhash (get-old-prop proposition db) db)
-               (setf (gethash (get-fluentless-prop proposition) db)
-                     (get-prop-fluents proposition)))))
+        (setf (gethash (convert-to-integer (get-fluentless-prop proposition)) db)
+              (get-prop-fluents proposition))
+        (setf (gethash (get-fluentless-prop proposition) db)
+              (get-prop-fluents proposition)))
+      ;do for non-fluent propositions
+      (if int-db
+        (setf (gethash (convert-to-integer proposition) db) t)  
+        (setf (gethash proposition db) t)))
     ;do if proposition has a complement
-    (when (gethash predicate *complements*)
+    (when (gethash (car proposition) (ww-get 'complements))
       (if int-db
         (remhash (convert-to-integer (get-complement-prop proposition)) db)
-        (remhash (get-complement-prop proposition) db)))
-    ;do for all new propositions
-    (if int-db
-      (setf (gethash (convert-to-integer proposition) db) t)  
-      (setf (gethash proposition db) t))))
+        (remhash (get-complement-prop proposition) db)))))
   
 
 (defun del-prop (proposition db)
   ;Effectively removes a literal proposition from the database.
-  (let ((predicate (car proposition))
-        (int-db (eq (hash-table-test db) 'eql)))
-    ;do if proposition has fluents
-    (when (gethash predicate *fluent-relation-indices*)
+  (let ((int-db (eq (hash-table-test db) 'eql)))
+    (if (get-prop-fluent-indices proposition)
+      ;do if proposition has fluents
       (if int-db
         (remhash (convert-to-integer (get-fluentless-prop proposition)) db)
         (remhash (get-fluentless-prop proposition) db)))
+      ;do for non-fluent propositions
+      (if int-db
+        (remhash (convert-to-integer proposition) db)
+        (remhash proposition db))
     ;do if proposition has a complement
-    (when (gethash predicate *complements*)
+    (when (gethash (car proposition) (ww-get 'complements))
       (if int-db
         (setf (gethash (convert-to-integer (get-complement-prop proposition)) db) t)
-        (setf (gethash (get-complement-prop proposition) db) t)))
-    ;do for all propositions
-    (if int-db
-      (remhash (convert-to-integer proposition) db)
-      (remhash proposition db))))
+        (setf (gethash (get-complement-prop proposition) db) t)))))
   
 
 (defun add-proposition (proposition db)
   ;Adds a proposition and all its symmetries to the database.
-  (declare (hash-table db *symmetrics*))
-  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
+  (declare (hash-table db))
+  (let ((symmetric-indexes (gethash (car proposition) (ww-get 'symmetrics))))
     (if (null symmetric-indexes)
       (add-prop proposition db)
       (let ((symmetric-variables
@@ -116,8 +112,8 @@
 
               
 (defun delete-proposition (proposition db)
-  (declare (hash-table db *symmetrics*))
-  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
+  (declare (hash-table db))
+  (let ((symmetric-indexes (gethash (car proposition) (ww-get 'symmetrics))))
     (if (null symmetric-indexes)
       (del-prop proposition db)
       (let ((symmetric-variables
@@ -173,6 +169,12 @@
     (add-proposition literal db)))
 
 
+(defun commit1 (db literal)
+  (when (>= (ww-get 'debug) 4)
+    (format t "~&    COMMIT => ~A" literal))
+  (update db literal))
+
+
 (defun complement-literals (literals)
   (order-propositions
    (map 'list #'(lambda (lit)
@@ -214,7 +216,9 @@
 
 
 (defun fluentp (item)
-  (or (numberp item) ($varp item)))
+  (or (numberp item)
+      ($varp item)
+      (and (listp item) (fboundp (car item)))))
 
 
 (defun $varp (item)
@@ -248,7 +252,7 @@
 
 (defun different (sym1 sym2)
   (if (and (symbolp sym1) (symbolp sym2))
-      (not (eql sym1 sym2))
+    (not (eql sym1 sym2))
     (error "Arguments must be symbols: ~A ~A" sym1 sym2)))
 
 
@@ -258,39 +262,32 @@
     value-symbol))
 
 
+(defun get-prop-fluent-indices (proposition)
+  (gethash (car proposition) (ww-get 'fluent-relation-indices)))
+
+
 (defun get-prop-fluents (proposition)
   ;Returns the fluent values in an arbitrary proposition.
-  (let ((args (cdr proposition))
-        (indices (gethash (car proposition) *fluent-relation-indices*)))
-    (when (and args indices)
+  (let ((indices (get-prop-fluent-indices proposition)))
+    (when indices
       (mapcar (lambda (index)
-                (nth index args))
+                (let ((item (nth index proposition)))
+                  (if (and (symbolp item) (boundp item))
+                    (symbol-value item)
+                    item)))
         indices))))
 
 
-(defun get-prop-fluent-indices (proposition)
-  (gethash (car proposition) *fluent-relation-indices*))
-
-
-(defun get-old-prop (new-proposition db)
-  (let* ((indexes (get-prop-fluent-indices new-proposition))
-         (int-db (eq (hash-table-test db) 'eql))
-         (fluents (if int-db
-                    (gethash (convert-to-integer (get-fluentless-prop new-proposition)) db)
-                    (gethash (get-fluentless-prop new-proposition) db))))
-    (ut::subst-items-at-ascending-indexes fluents (mapcar #'1+ indexes) new-proposition)))
-   
-
 (defun get-fluentless-prop (proposition)
   ;Derives the fluentless proposition counterpart from a full proposition.
-  (let ((indexes (gethash (car proposition) *fluent-relation-indices*)))
-    (ut::remove-at-indexes (mapcar #'1+ indexes) proposition)))
+  (let ((indices (get-prop-fluent-indices proposition)))
+    (ut::remove-at-indexes indices proposition)))
 
 
 (defun get-complement-prop (proposition)
   ;Derives the complement proposition counterpart from a given proposition.
   (let* ((predicate (car proposition))
-         (joint-patterns (gethash predicate *complements*))
+         (joint-patterns (gethash predicate (ww-get 'complements)))
          (prop-pattern (first joint-patterns))
          (comp-pattern (copy-tree (second (second joint-patterns)))))
     (loop for const in (cdr proposition)
@@ -300,42 +297,32 @@
             finally (return comp-pattern))))
 
 
-(defun consolidate-types (type-list)
-  ;Processes a list of types & symbols, including 'either' multi-types.
-  (mapcar (lambda (type)
-            (cond ((symbolp type) 
-                     type)
-                  ((and (listp type) (eql (car type) 'either))
-                     (let ((combo-instances (remove-duplicates 
-                                              (loop for typ in (cdr type)
-                                                    append (gethash typ *types*)))))
-                       (ut::if-it (loop for key being the hash-keys of *types*
-                                        using (hash-value value)
-                                      when (and (listp value)
-                                                (alexandria:set-equal value combo-instances))
-                                      return key)
-                         ut::it  ;combined type already exists
-                         (let* ((sorted-types (sort (cdr type) #'string< :key #'symbol-name))
-                                (combo-type (intern (ut::interleave+ sorted-types))))
-                           (setf (gethash combo-type *types*) (apply #'either sorted-types))
-                           combo-type))))
-                  (t (error "~%Error: Unrecognized type spec: ~A in ~A~%" type type-list))))
-    type-list))
-            
-            
+(defun consolidate-types (types)
+  (loop for type in types
+      if (and (listp type)
+              (eq (car type) 'either))
+        collect (let* ((combo-instances (remove-duplicates 
+                                          (loop for typ in (cdr type)
+                                                append (gethash typ (ww-get 'types)))))
+                       (sorted-types (sort (cdr type) #'string< :key #'symbol-name))
+                       (combo-type (intern (ut::interleave+ sorted-types))))
+                  (setf (gethash combo-type (ww-get 'types)) combo-instances)
+                  combo-type)
+      else collect type))
+
+
 (defun type-instantiations (symbol-types)
-  ;Returns lists of possible variable(?$) instantiations for a list of (only) type symbols.
-  (when (and symbol-types (remove 'fluent symbol-types))
+  ;Returns lists of possible variable instantiations for a list of (only) type symbols.
+  (when symbol-types   ;(remove 'fluent symbol-types))
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (item)
-                                (ut::if-it (gethash item *types*)
-                                  ut::it
-                                  (list item)))
-                        nonfluent-types)))
+                                (gethash item (ww-get 'types)))
+                              nonfluent-types)))
       (when (member nil instances)
-        (return-from type-instantiations '(nil)))
-      (let ((product-instances (apply #'alexandria:map-product 'list instances)))
-        (get-set-instances nonfluent-types product-instances)))))
+        (return-from type-instantiations nil))
+      (let* ((product-instances (apply #'alexandria:map-product 'list instances))
+             (set-instances (get-set-instances nonfluent-types product-instances)))
+        (or set-instances (make-list (length nonfluent-types) :initial-element nil))))))
 
 
 (defun get-set-instances (symbol-types product-instances)
@@ -374,7 +361,6 @@
   (loop with partial-keys
       for key being the hash-keys of db
       do (let ((partial-key (list (first key) (second key))))
-           ;(ut::prt partial-key partial-keys)
            (if (and (eql (first key) predicate)
                     (eql (second key) object)
                     (member partial-key partial-keys :test #'equal))
@@ -384,7 +370,7 @@
 
 (defun get-all-vars (fn tree)
   "Selects one each of variables in the tree satisfying fn."
-  (remove-if-not fn (alexandria:flatten tree)))
+  (remove-duplicates (remove-if-not fn (alexandria:flatten tree))))
 
 
 (defun get-bound-?vars (tree)
@@ -399,9 +385,9 @@
 
 (defun fix-if-ignore (symbols lambda-expr)
   "Ignores variable symbols that are not in the lambda-body."
-  (let ((ignores (ut::list-difference symbols 
-                                      (get-all-vars (lambda (x)
-                                                   (member x symbols))
-                                                 (cddr lambda-expr)))))
+  (let ((ignores (ut::list-difference
+                    symbols (get-all-vars (lambda (x)
+                                            (member x symbols))
+                                          (cddr lambda-expr)))))
     (when ignores
       (push `(declare (ignore ,@ignores)) (cddr lambda-expr)))))

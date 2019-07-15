@@ -11,7 +11,6 @@
 
 
 (defun install-types (types&constants)
-  (declare (hash-table *types* *static-db*))
   (format t "~%Installing object types...~%")
   (loop for (type constants) on types&constants by #'cddr
          do (check-type type symbol)
@@ -20,7 +19,7 @@
               (setf constants (apply #'either (cdr constants))))
             (when (eql (car constants) 'compute)
               (setf constants (eval (second constants))))
-            (setf (gethash type *types*) constants)
+            (setf (gethash type (ww-get 'types)) constants)
             (when (consp constants)
               (dolist (constant constants)
                 (check-type constant (or symbol real))
@@ -28,7 +27,7 @@
                 (setf (gethash (list type constant) *static-db*) t)))
         when (consp constants)
           append constants into everything
-      finally (setf (gethash 'something *types*)  ;every constant is a something
+      finally (setf (gethash 'something (ww-get 'types))  ;every constant is a something
                 (remove-duplicates everything :test #'eql))))
 
 
@@ -37,30 +36,30 @@
 
 
 (defun install-dynamic-relations (relations)
-  (declare (hash-table *types* *relations*))
   (format t "Installing dynamic relations...~%")
   (loop for relation in relations
      do (check-type relation cons)
         (check-type (car relation) symbol)
-        (setf (gethash (car relation) *relations*)
+        (setf (gethash (car relation) (ww-get 'relations))
           (ut::if-it (cdr relation)
             (sort-either-types ut::it)
             nil))
         (ut::if-it (loop for arg in (cdr relation)
-                        for i from 0
+                        for i from 1
                           do (check-type arg (satisfies type-description))
                         when ($varp arg)
                           collect i)
-          (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
+          (setf (gethash (car relation) (ww-get 'fluent-relation-indices)) ut::it))
       finally (maphash #'(lambda (key value)  ;install implied unary relations
                            (declare (ignore value))
-                           (setf (gethash key *static-relations*) '(something)))
-                       *types*))
-  (loop for key being the hash-keys of *relations*  ;install symmetric relations
+                           (setf (gethash key (ww-get 'static-relations)) '(something)))
+                       (ww-get 'types)))
+  (loop for key being the hash-keys of (ww-get 'relations)  ;install symmetric relations
         using (hash-value value)
-      when (and (not (alexandria:setp value))  ;multiple types
+      when (and (not (eq value t))
+                (not (alexandria:setp value))  ;multiple types
                 (not (final-charp #\> key)))   ;not explicitly directed
-        do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
+        do (setf (gethash key (ww-get 'symmetrics)) (symmetric-type-indexes value)))
   t)
 
 
@@ -69,32 +68,32 @@
 
 
 (defun install-static-relations (relations)
-  (declare (hash-table *types* *static-relations*))
   (format t "Installing static relations...~%")
   (loop for relation in relations
      do (check-type relation cons)
         (check-type (car relation) symbol)
-        (setf (gethash (car relation) *static-relations*)
+        (setf (gethash (car relation) (ww-get 'static-relations))
           (ut::if-it (cdr relation) 
             (sort-either-types ut::it)
             nil))
          (ut::if-it (loop for arg in (cdr relation)
-                          for i from 0
+                          for i from 1
                           do (check-type arg (satisfies type-description))
                           when ($varp arg)
                           collect i)
-           (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
+           (setf (gethash (car relation) (ww-get 'fluent-relation-indices)) ut::it))
       finally (maphash #'(lambda (key value)  ;install implied unary relations
                            (declare (ignore value))
-                           (setf (gethash key *static-relations*) '(everything)))
-                       *types*))
-  (loop for key being the hash-keys of *static-relations*  ;install symmetric relations
+                           (setf (gethash key (ww-get 'static-relations)) '(everything)))
+                       (ww-get 'types)))
+  (loop for key being the hash-keys of (ww-get 'static-relations)  ;install symmetric relations
         using (hash-value value)
-      when (and (not (alexandria:setp value))  ;multiple types
+      when (and (not (eq value t))
+                (not (alexandria:setp value))  ;multiple types
                 (not (final-charp #\> key)))   ;not explicitly directed
-      do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
-  (setf (gethash 'always-true *static-relations*) t)
-  (setf (gethash 'waiting *static-relations*) t)
+      do (setf (gethash key (ww-get 'symmetrics)) (symmetric-type-indexes value)))
+  (setf (gethash 'always-true (ww-get 'static-relations)) t)
+  (setf (gethash 'waiting (ww-get 'static-relations)) t)
   t)
 
 
@@ -110,7 +109,7 @@
               (ordered-neg (list 'not (sort-either-types (second negative)))))
           (check-type ordered-pos (satisfies relation))
           (check-type ordered-neg (satisfies negative-relation)) 
-          (setf (gethash (car positive) *complements*)
+          (setf (gethash (car positive) (ww-get 'complements))
             (list ordered-pos ordered-neg)))))
 
         
@@ -147,9 +146,9 @@
 
 
 (defun install-query (name args body)
-  (format t "Installing ~A query function...~%" name)
+  (format t "Installing ~A query...~%" name)
   (check-type args (satisfies list-of-variables))
-  (push `,name *function-names*)
+  (push `,name *query-names*)
   (setf (get `,name 'formula) body)
   (let ((new-$vars (delete-duplicates (set-difference (get-all-vars #'$varp body) args))))
     (setf (get `,name 'fn) `(lambda (state ,@args)
@@ -166,9 +165,9 @@
 
 
 (defun install-update (name args body)
-  (format t "Installing ~A update function...~%" name)
+  (format t "Installing ~A update...~%" name)
   (check-type args (satisfies list-of-variables))
-  (push `,name *function-names*)
+  (push `,name *update-names*)
   (setf (get `,name 'formula) body)
   (ut::if-it (delete-duplicates (set-difference (get-all-vars #'$varp body) args))
     (setf (get `,name 'fn) `(lambda (state ,@args)
@@ -262,7 +261,10 @@
                                          (let (changes followups ,@eff-extra-$vars)
                                            (declare (special ,@eff-extra-$vars))
                                            ,(translate effect 'eff)
-                                           (make-update :changes changes 
+                                           (make-update :changes changes
+                                                        :value ,(if (member '$objective-value eff-args)
+                                                                  '$objective-value
+                                                                  0.0)
                                                         :instantiations (list ,@eff-param-vars)
                                                         :followups (nreverse followups))))
                       :effect-adds nil)))
@@ -277,12 +279,12 @@
 
 
 (defun install-init (propositions)
-  (declare (hash-table *db* *static-db*))
+  (declare (hash-table *static-db*))
   (format t "Creating initial propositional database...~%")
   (dolist (proposition propositions)
-    (check-type proposition (satisfies proposition))
-    (if (gethash (car proposition) *relations*)
-      (add-proposition proposition *db*)  ;dynamic database
+    ;(check-type proposition (satisfies proposition))
+    (if (gethash (car proposition) (ww-get 'relations))
+      (add-proposition proposition (ww-get 'db))  ;dynamic database
       (add-proposition proposition *static-db*)))
   (add-proposition '(always-true) *static-db*)
   t)

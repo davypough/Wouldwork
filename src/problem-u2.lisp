@@ -5,12 +5,11 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'u2)
 
-(setq *depth-cutoff* 7)
+(ww-set 'depth-cutoff 7)
 
-
-(setq *first-solution-sufficient* nil)
-
+(ww-set 'solution-type 'min-length)
 
 (define-types
   person        (bono edge adam larry)
@@ -42,7 +41,6 @@
           (on ?person ?side2)
           (not (on lite ?side1))
           (on lite ?side2)
-          (not (current-time $current-time))
           (current-time (+ $current-time $walk-time))))
 
 
@@ -64,7 +62,6 @@
           (on ?person2 ?side2)
           (not (on lite ?side1))
           (on lite ?side2)
-          (not (current-time $current-time))
           (current-time (+ $current-time $walk-time))))
 
 

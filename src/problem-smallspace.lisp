@@ -8,10 +8,11 @@
 
 (in-package :ww)  ;required
 
-(setq *depth-cutoff* 19)
+(ww-set 'problem 'smallspace)
 
+(ww-set 'depth-cutoff 19)
 
-(setq *first-solution-sufficient* nil)
+(ww-set 'solution-type 'first)
 
 
 (define-types
@@ -76,13 +77,13 @@
 ;;;; QUERY FUNCTIONS ;;;;
 
 
-(define-query same-color! (?terminus1 ?terminus2)
+(define-query same-color? (?terminus1 ?terminus2)
   (and (bind (color ?terminus1 $hue1))
        (bind (color ?terminus2 $hue2))
        (eql $hue1 $hue2)))
 
 
-(define-query source! (?terminus)
+(define-query source? (?terminus)
   (or (transmitter ?terminus)
       (and (connector ?terminus)
            (active ?terminus))))
@@ -102,7 +103,7 @@
 
 
 
-(define-query los-thru-2-dividers! (?area ?station)
+(define-query los-thru-2-dividers? (?area ?station)
   (exists ((?d1 ?d2) divider)
     (and (los2 ?area ?d1 ?d2 ?station)
          (or (and (barrier ?d1)
@@ -119,7 +120,7 @@
                   (not (active ?d2)))))))
 
 
-(define-query los-thru-1-divider! (?area ?station)
+(define-query los-thru-1-divider? (?area ?station)
   (exists (?d divider)
     (and (los1 ?area ?d ?station)
          (or (barrier ?d)
@@ -127,13 +128,13 @@
                   (not (active ?d)))))))
 
 
-(define-query los! (?area ?station)
+(define-query los? (?area ?station)
   (or (los0 ?area ?station)
-      (los-thru-1-divider! ?area ?station)
-      (los-thru-2-dividers! ?area ?station)))
+      (los-thru-1-divider? ?area ?station)
+      (los-thru-2-dividers? ?area ?station)))
 
 
-(define-query visible-thru-2-dividers! (?area1 ?area2)
+(define-query visible-thru-2-dividers? (?area1 ?area2)
   (exists ((?d1 ?d2) divider)
     (and (visible2 ?area1 ?d1 ?d2 ?area2)
          (or (and (barrier ?d1)
@@ -149,7 +150,7 @@
                   (gate ?d2)
                   (not (active ?d2)))))))
 
-(define-query visible-thru-1-divider! (?area1 ?area2)
+(define-query visible-thru-1-divider? (?area1 ?area2)
   (exists (?d divider)
     (and (visible1 ?area1 ?d ?area2)
          (or (barrier ?d)
@@ -157,31 +158,31 @@
                   (not (active ?d)))))))
 
 
-(define-query visible! (?area1 ?area2)
+(define-query visible? (?area1 ?area2)
   (or (visible0 ?area1 ?area2)
-      (visible-thru-1-divider! ?area1 ?area2)
-      (visible-thru-2-dividers! ?area1 ?area2)))
+      (visible-thru-1-divider? ?area1 ?area2)
+      (visible-thru-2-dividers? ?area1 ?area2)))
 
 
-(define-query connectable! (?area ?terminus)
-  (or (los! ?area ?terminus)  ;from connector in area to terminus
+(define-query connectable? (?area ?terminus)
+  (or (los? ?area ?terminus)  ;from connector in area to terminus
       (and (connector ?terminus)
            (exists (?a area)
              (and (loc ?terminus ?a)
-                  (visible! ?area ?a))))))
+                  (visible? ?area ?a))))))
 
 
-(define-query passable! (?area1 ?area2)
+(define-query passable? (?area1 ?area2)
   (or (adjacent ?area1 ?area2)
       (exists (?b (either barrier ladder))
         (and (separates ?b ?area1 ?area2)
              (free me)))  ;must drop cargo first
-             (exists (?g gate)
-               (and (separates ?g ?area1 ?area2)
-                    (not (active ?g))))))
+      (exists (?g gate)
+        (and (separates ?g ?area1 ?area2)
+             (not (active ?g))))))
 
 
-(define-query sourced! (?conn-or-rcvr $hue $visits)
+(define-query sourced? (?conn-or-rcvr $hue $visits)
   (do (push ?conn-or-rcvr $visits)
       (or (exists (?t transmitter)
             (and (connecting ?t ?conn-or-rcvr)
@@ -193,7 +194,7 @@
                  (bind (color ?c $hue1))
                  (eql $hue1 $hue)
                  (not (member ?c $visits))
-                 (sourced! ?c $hue $visits))))))
+                 (sourced? ?c $hue $visits))))))
 
 ;;;; UPDATE FUNCTIONS ;;;;
 
@@ -201,7 +202,7 @@
 (define-update activate-connector! (?connector ?hue)
   (if (not (active ?connector))
     (commit (active ?connector)
-          (color ?connector ?hue))))
+            (color ?connector ?hue))))
 
 
 (define-update deactivate-connector! (?connector)
@@ -213,18 +214,18 @@
 
 (define-update activate-receiver! (?receiver)
   (if (not (active ?receiver))
-    (do (commit (active ?receiver))
+    (do (assert (active ?receiver))
         (doall (?g gate)  
-          (if (controls ?receiver ?g)
-            (commit (not (active ?g))))))))
+          (if (and (controls ?receiver ?g) (active ?g))
+            (assert (not (active ?g))))))))
 
 
 (define-update deactivate-receiver! (?receiver)
   (if (active ?receiver)
-    (do (commit (not (active ?receiver)))
+    (do (assert (not (active ?receiver)))
         (doall (?g gate)
           (if (controls ?receiver ?g)
-            (commit (active ?g)))))))
+            (assert (active ?g)))))))
 
 
 (define-update disconnect-connector! (?connector)
@@ -253,7 +254,7 @@
                 (chain-activate! ?cr)))
           (if (receiver ?cr)
             (if (and (not (active ?cr))
-                     (same-color! ?cr ?connector))
+                     (same-color? ?cr ?connector))
               (activate-receiver! ?cr))))))))
 
 
@@ -293,12 +294,12 @@
   (do (doall (?c connector)
         (if (and (active ?c)
                  (bind (color ?c $hue))
-                 (not (sourced! ?c $hue nil)))
+                 (not (sourced? ?c $hue nil)))
           (deactivate-connector! ?c)))
       (doall (?r receiver)
         (if (and (active ?r)
                  (bind (color ?r $hue))
-                 (not (sourced! ?r $hue nil)))
+                 (not (sourced? ?r $hue nil)))
           (deactivate-receiver! ?r)))))
 
 
@@ -306,17 +307,17 @@
 
 
 (define-action connect-to-1-terminus
-    1
+    2
   (?terminus terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
-       (connectable! $area ?terminus))
+       (connectable? $area ?terminus))
   ($cargo fluent ?terminus terminus ($area $hue) fluent)
   (do (assert (not (holding me $cargo))
               (loc $cargo $area)
               (connecting $cargo ?terminus))
-      (if (and (source! ?terminus)
+      (if (and (source? ?terminus)
                (bind (color ?terminus $hue)))
         (assert (active $cargo)
                 (color $cargo $hue)))))
@@ -337,13 +338,13 @@
 
 
 (define-action connect-to-2-terminus
-    1
+    3
   ((?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
-       (connectable! $area ?terminus1)
-       (connectable! $area ?terminus2))
+       (connectable? $area ?terminus1)
+       (connectable? $area ?terminus2))
   ($cargo fluent (?terminus1 ?terminus2) terminus
    $area fluent)
   (do (assert (not (holding me $cargo))
@@ -355,14 +356,14 @@
 
 
 (define-action connect-to-3-terminus
-    1
+    4
   ((?terminus1 ?terminus2 ?terminus3) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
-       (connectable! $area ?terminus1)
-       (connectable! $area ?terminus2)
-       (connectable! $area ?terminus3))
+       (connectable? $area ?terminus1)
+       (connectable? $area ?terminus2)
+       (connectable? $area ?terminus3))
   ($cargo fluent
    (?terminus1 ?terminus2 ?terminus3) terminus
    $area fluent)
@@ -384,12 +385,12 @@
 
 
 (define-action jam
-    1
+    2
   (?target target)
   (and (bind (holding me $cargo))
        (jammer $cargo)
        (bind (loc me $area))
-       (los! $area ?target))
+       (los? $area ?target))
   (?target target $cargo fluent $area fluent)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
@@ -445,9 +446,9 @@
   (?area2 area)
   (and (bind (loc me $area1))
        (different $area1 ?area2)
-       (passable! $area1 ?area2))
+       (passable? $area1 ?area2))
   ($area1 fluent ?area2 area)
-  (assert (not (loc me $area1))
+  (assert ;(not (loc me $area1))
           (loc me ?area2)))
 
 
@@ -535,7 +536,7 @@
 
  (define-init-action init-los0  
    ;los exists to any station within its local area
-    1;0
+    0
   (?station station (?area1 ?area2) area)
   (or (locale ?station ?area1)             ;for fixtures
       (separates ?station ?area1 ?area2))  ;for gates
@@ -545,7 +546,7 @@
 
  (define-init-action init-visible0-locally  
    ;any object is visible from its own local area
-    2;0
+    0
   (?area area)
   (always-true)
   ()
@@ -554,7 +555,7 @@
 
  (define-init-action init-visible0-via-adjacency  
    ;any object is visible from an adjacent area
-    3;0
+    0
   ((?area1 ?area2) area)
   (adjacent ?area1 ?area2)
   ()
@@ -563,7 +564,7 @@
 
  (define-init-action init-visible1-thru-divider  
    ;any object is visible thru a divider
-    4;0
+    0
   (?divider divider (?area1 ?area2) area)
   (separates ?divider ?area1 ?area2)
   ()

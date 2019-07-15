@@ -6,11 +6,11 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'triangle)
 
-(setq *tree-or-graph* 'graph)
+(ww-set 'solution-type 'first)
 
-
-(setq *first-solution-sufficient* t)
+(ww-set 'depth-cutoff 13)
 
 
 (defparameter *N* 5)  ;the number of pegs on a side
@@ -28,11 +28,11 @@
   (loc peg $coord $coord $coord))
 
 
-(define-query empty! (?x ?y ?z)  ;coordinates of a hole
+(define-query empty? (?x ?y ?z)  ;coordinates of a hole
   (not (exists (?p peg)
-               (loc ?p ?x ?y ?z))))  ;x=row from left,
-                                     ;y=row from right,
-                                     ;z=row from bottom
+         (loc ?p ?x ?y ?z))))  ;x=row from left,
+                               ;y=row from right,
+                               ;z=row from bottom
 
 (define-action jump
     1
@@ -48,7 +48,7 @@
                 (setq $target-x $x2)
                 (setq $target-y (+ $y2 $delta))
                 (setq $target-z (- $z2 $delta))
-                (empty! $target-x $target-y $target-z))
+                (empty? $target-x $target-y $target-z))
            (and (= $y1 $y2)  ;aligned in y direction
                 (< $y2 (1- *N*))
                 (<= $z2 (- *N* $y2))
@@ -58,7 +58,7 @@
                 (setq $target-x (- $x2 $delta))
                 (setq $target-y $y2)
                 (setq $target-z (+ $z2 $delta))
-                (empty! $target-x $target-y $target-z))
+                (empty? $target-x $target-y $target-z))
            (and (= $z1 $z2)  ;aligned in z direction
                 (< $z2 (1- *N*))
                 (<= $x2 (- *N* $z2))
@@ -68,25 +68,25 @@
                 (setq $target-x (+ $x2 $delta))
                 (setq $target-y (- $y2 $delta))
                 (setq $target-z $z2)
-                (empty! $target-x $target-y $target-z))))
+                (empty? $target-x $target-y $target-z))))
   (?peg1 peg ($x1 $y1 $z1) fluent ?peg2 peg
    ($x2 $y2 $z2) fluent)
-  (assert (not (loc ?peg1 $x1 $y1 $z1))
+  (assert ;(not (loc ?peg1 $x1 $y1 $z1))
           (not (loc ?peg2 $x2 $y2 $z2))
           (loc ?peg1 $target-x $target-y $target-z)))
 
 
 (progn (format t "~&Initializing database...~%")
-  (loop with pegs = (gethash 'peg *types*)
+  (loop with pegs = (gethash 'peg (ww-get 'types))
     for ?x from 1 to *N*
     do (loop with max = (1+ (- *N* ?x))
            for ?y from 1 to max
            for ?z from max downto 1
            unless (and (= ?x 1) (= ?y 1) (= ?z *N*))
-           ;*db* is the name of the initial database
+           ;(ww-get 'db) is the name of the initial database
            ;update is the function that asserts a proposition
            ;into the database
-           do (update *db* `(loc ,(pop pegs) ,?x ,?y ,?z)))))
+           do (update (ww-get 'db) `(loc ,(pop pegs) ,?x ,?y ,?z)))))
 
 
 (define-goal  ;only one peg left

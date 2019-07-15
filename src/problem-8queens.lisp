@@ -5,12 +5,13 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem '8queens)
 
-(setq *depth-cutoff* 8)
+(ww-set 'depth-cutoff 8)
 
-(setq *tree-or-graph* 'tree)
+(ww-set 'solution-type 'first)
 
-(setq *first-solution-sufficient* t)
+(ww-set 'tree-or-graph 'tree)
 
 
 (define-types
@@ -39,7 +40,6 @@
   (?queen queen $row fluent ?column column)
   (assert (loc ?queen $row ?column)
           (placed ?queen)
-          (not (next-row $row))
           (next-row (1+ $row))))
    
 

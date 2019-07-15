@@ -7,6 +7,10 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'blocks)
+
+(ww-set 'solution-type 'min-length)
+
 
 (define-types
     block (A B C)
@@ -31,14 +35,14 @@
 
 (define-action put
     1
-  (?block block ?support support)
+  (?block block (?block-support ?support) support)
   (and (cleartop! ?block)
+       (on ?block ?block-support)
        (cleartop! ?support)
        (different ?block ?support))
   (?block block ?support support)
-  (do (assert (on ?block ?support))
-      (if (bind (on ?block $s))
-        (assert (not (on ?block $s))))))
+  (assert (on ?block ?support)
+          (not (on ?block ?block-support))))
 
 
 (define-init

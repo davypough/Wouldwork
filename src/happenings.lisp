@@ -6,18 +6,18 @@
 (in-package :ww)
 
 
-(defun update-happenings (state act-state)
+(defun amend-happenings (state act-state)
   ;Creates hap-state with happenings up through the action completion time for all happenings.
   ;Returns net-state = act-state + hap-state, and checks for constraint violation.
   (declare (problem-state state act-state))
 ;  (when (null *happenings*)
-;    (return-from update-happenings act-state))
+;    (return-from amend-happenings act-state))
   (let ((hap-state (copy-problem-state state))  ;to be updated
         (net-state (copy-problem-state act-state)) ;add happenings to hap-state & net-state
         (next-happenings (copy-tree (problem-state-happenings state))) ;process each next happening
         (action-completion-time (problem-state-time act-state))
         next-happening following-happenings)  ;collect next happenings for net-state
-    (when (>= *debug* 4) (ut::prt action-completion-time))
+    (when (>= (ww-get 'debug) 4) (ut::prt action-completion-time))
     (iter (while (setq next-happening (pop next-happenings)))
           (for (object (index time direction)) = next-happening)
           (when (> time action-completion-time)
@@ -25,20 +25,20 @@
             (next-iteration))
           (for (ref-time . updates) = (aref (get object :events) index))
           (for following-happening = (get-following-happening state object index time direction ref-time))
-          (when (>= *debug* 4) (ut::prt following-happening))
+          (when (>= (ww-get 'debug) 4) (ut::prt following-happening))
           (when (null following-happening) (next-iteration))
           (when (/= (first (second following-happening)) index)  ;happening is not interrupted
-            (when (>= *debug* 4) (ut::prt updates))
+            (when (>= (ww-get 'debug) 4) (ut::prt updates))
             (revise (problem-state-idb hap-state) updates)
             (revise (problem-state-idb net-state) updates))
           (push following-happening next-happenings)) ;keep looking until past action-completion-time
    (setf (problem-state-happenings hap-state) following-happenings)
    (setf (problem-state-happenings net-state) following-happenings)
-   (when (>= *debug* 4) (ut::prt net-state))
+   (when (>= (ww-get 'debug) 4) (ut::prt net-state))
     (if (and *constraint*
              (constraint-violated-in-act-hap-net act-state hap-state net-state))
-     (return-from update-happenings nil)
-     (return-from update-happenings net-state))))
+     (return-from amend-happenings nil)
+     (return-from amend-happenings net-state))))
 
 
 (defun get-following-happening (state object index time direction ref-time)

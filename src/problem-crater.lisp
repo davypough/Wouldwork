@@ -6,12 +6,11 @@
 
 (in-package :ww)  ;required
 
- 
-(setq *depth-cutoff* 9)
+(ww-set 'problem 'crater)
 
-(setq *tree-or-graph* 'tree)
+(ww-set 'depth-cutoff 9)
 
-(setq *first-solution-sufficient* nil)
+(ww-set 'solution-type 'min-time)
 
 
 (define-types
@@ -78,27 +77,35 @@
 ;;;;;;;;;;;;;;;;;;;;;;;; QUERY FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(define-query elevation! (?support)
+(define-query elevation? (?support)
   (do (bind (height ?support $h))
       (bind (on ?support $s))
       (if (not (support $s))
-        (return-from elevation! $h)
-        (return-from elevation! (+ $h (elevation! state $s))))))
+        (return-from elevation? $h)
+        (return-from elevation? (+ $h (elevation? state $s))))))
 
 
-(define-query same-color! (?terminus1 ?terminus2)
+(define-query same-color? (?terminus1 ?terminus2)
   (and (bind (color ?terminus1 $hue1))
        (bind (color ?terminus2 $hue2))
        (eql $hue1 $hue2)))
 
 
-(define-query source! (?terminus)
+(define-query source? (?terminus)
   (or (transmitter ?terminus)
       (and (connector ?terminus)
            (active ?terminus))))
 
 
-(define-query los-thru-2-dividers! (?area ?station)
+(define-query los-thru-1-divider? (?area ?station)
+  (exists (?d divider)
+    (and (los1 ?area ?d ?station)
+         (or (barrier ?d)
+             (and (gate ?d)
+                  (not (active ?d)))))))
+
+
+(define-query los-thru-2-dividers? (?area ?station)
   (exists ((?d1 ?d2) divider)
     (and (los2 ?area ?d1 ?d2 ?station)
          (or (and (barrier ?d1)
@@ -115,21 +122,21 @@
                   (not (active ?d2)))))))
 
 
-(define-query los-thru-1-divider! (?area ?station)
+(define-query los? (?area ?station)
+  (or (los0 ?area ?station)
+      (los-thru-1-divider? ?area ?station)
+      (los-thru-2-dividers? ?area ?station)))
+
+
+(define-query visible-thru-1-divider? (?area1 ?area2)
   (exists (?d divider)
-    (and (los1 ?area ?d ?station)
+    (and (visible1 ?area1 ?d ?area2)
          (or (barrier ?d)
              (and (gate ?d)
                   (not (active ?d)))))))
 
 
-(define-query los! (?area ?station)
-  (or (los0 ?area ?station)
-      (los-thru-1-divider! ?area ?station)
-      (los-thru-2-dividers! ?area ?station)))
-
-
-(define-query visible-thru-2-dividers! (?area1 ?area2)
+(define-query visible-thru-2-dividers? (?area1 ?area2)
   (exists ((?d1 ?d2) divider)
     (and (visible2 ?area1 ?d1 ?d2 ?area2)
          (or (and (barrier ?d1)
@@ -146,29 +153,21 @@
                   (not (active ?d2)))))))
 
 
-(define-query visible-thru-1-divider! (?area1 ?area2)
-  (exists (?d divider)
-    (and (visible1 ?area1 ?d ?area2)
-         (or (barrier ?d)
-             (and (gate ?d)
-                  (not (active ?d)))))))
-
-
-(define-query visible! (?area1 ?area2)
+(define-query visible? (?area1 ?area2)
   (or (visible0 ?area1 ?area2)
-      (visible-thru-1-divider! ?area1 ?area2)
-      (visible-thru-2-dividers! ?area1 ?area2)))
+      (visible-thru-1-divider? ?area1 ?area2)
+      (visible-thru-2-dividers? ?area1 ?area2)))
 
 
-(define-query connectable! (?area ?terminus)
-  (or (los! ?area ?terminus)  ;from connector in area to terminus
-      (and (connector ?terminus)
+(define-query connectable? (?area ?terminus)
+  (or (los? ?area ?terminus)  ;from connector in area to terminus
+      (and (connector ?terminus) 
            (exists (?a area)
              (and (loc ?terminus ?a)
-                  (visible! ?area ?a))))))
+                  (visible? ?area ?a))))))
 
 
-(define-query passable! (?area1 ?area2)
+(define-query passable? (?area1 ?area2)
   (or (adjacent ?area1 ?area2)
       (exists (?b (either barrier ladder))
         (and (separates ?b ?area1 ?area2)
@@ -178,7 +177,7 @@
              (not (active ?g))))))
 
 
-(define-query sourced! (?conn-or-rcvr $visits)
+(define-query sourced? (?conn-or-rcvr $visits)
   (do (push ?conn-or-rcvr $visits)   ;(ut::prt $visits) (break)
       (or (exists (?t transmitter)
             (connecting ?t ?conn-or-rcvr))
@@ -186,7 +185,7 @@
             (and (connecting ?c ?conn-or-rcvr)  
                  (active ?c)
                  (not (member ?c $visits))
-                 (sourced! ?c $visits))))))
+                 (sourced? ?c $visits))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;; UPDATE FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;
@@ -209,18 +208,18 @@
 
 (define-update activate-receiver! (?receiver)
   (if (not (active ?receiver))
-    (do (commit (active ?receiver))
+    (do (assert (active ?receiver))
         (doall (?g gate)  
           (if (controls ?receiver ?g)
-            (commit (not (active ?g))))))))
+            (assert (not (active ?g))))))))
 
 
 (define-update deactivate-receiver! (?receiver)
   (if (active ?receiver)
-    (do (commit (not (active ?receiver)))
+    (do (assert (not (active ?receiver)))
         (doall (?g gate)
           (if (controls ?receiver ?g)
-            (commit (active ?g)))))))
+            (assert (active ?g)))))))
 
 
 (define-update disconnect-connector! (?connector)
@@ -248,7 +247,7 @@
                 (chain-activate! ?cr)))
           (if (receiver ?cr)
             (if (and (not (active ?cr))
-                     (same-color! ?cr ?connector))
+                     (same-color? ?cr ?connector))
               (activate-receiver! ?cr))))))))
 
 
@@ -281,25 +280,15 @@
 (define-update deactivate-any-orphans! ()
   (do (doall (?c connector)
         (if (and (active ?c)
-                 (not (sourced! ?c nil)))
+                 (not (sourced? ?c nil)))
           (deactivate-connector! ?c)))
       (doall (?r receiver)
         (if (and (active ?r)
-                 (not (sourced! ?r nil)))
+                 (not (sourced? ?r nil)))
           (deactivate-receiver! ?r)))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;(define-action reachable
-;    1
-;  ()
-;  (bind (loc me $area))
-;  ($area fluent)
-;  (doall (?a area)
-;    (if (adjacent ?a $area)
-;      (assert (reachable me $area)))))
 
 
 (define-action connect-to-1-terminus  ;using held connector
@@ -308,25 +297,25 @@
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
-       (connectable! $area ?terminus))
+       (connectable? $area ?terminus))
   ($cargo fluent ?terminus terminus ($area $hue) fluent)
   (do (assert (not (holding me $cargo))
               (loc $cargo $area)
               (connecting $cargo ?terminus))
-      (if (and (source! ?terminus)
+      (if (and (source? ?terminus)
                (bind (color ?terminus $hue)))
         (assert (active $cargo)
                 (color $cargo $hue)))))
 
 
 (define-action connect-to-2-terminus  ;using held connector
-    1
+    .5
   ((?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
-       (connectable! $area ?terminus1)
-       (connectable! $area ?terminus2))
+       (connectable? $area ?terminus1)
+       (connectable? $area ?terminus2))
   ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
   (do (assert (not (holding me $cargo))
               (loc $cargo $area)
@@ -342,7 +331,7 @@
   (and (bind (holding me $cargo))
        (jammer $cargo)
        (bind (loc me $area))
-       (los! $area ?target))
+       (los? $area ?target))
   (?target target $cargo fluent $area fluent)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
@@ -377,24 +366,6 @@
       (finally (deactivate-any-orphans!))))
 
 
-#|
-(define-action put
-    1
-  (?support support ($cargo $elev $area) fluent)
-  (and (holding me $cargo)
-       (loc me $area)
-       (loc ?support $area)
-       (not (exists (?c cargo)  ;cleartop ?support
-              (on ?c ?support)))
-       (setq $elev (elevation! ?support))  ;recursive function, not derived predicate
-       (<= $elev 1))
-  ($cargo fluent ?support support ($elev $area) fluent)
-  (assert (on $cargo ?support)
-          (loc $cargo $area)
-          (not (holding me $cargo))))
-|#
-
-
 (define-action drop-cargo
     1
   ()
@@ -410,7 +381,7 @@
   (?area2 area)
   (and (bind (loc me $area1))
        (not (eql $area1 ?area2))
-       (passable! $area1 ?area2))
+       (passable? $area1 ?area2))
   ($area1 fluent ?area2 area)
   (assert (loc me ?area2)))
 
@@ -422,8 +393,8 @@
   (and (bind (loc me $area1))
        (different $area1 ?area2)
        (different $area1 ?area3)
-       (passable! $area1 ?area2)
-       (passable! ?area2 ?area3))
+       (passable? $area1 ?area2)
+       (passable? ?area2 ?area3))
   ($area1 fluent (?area2 ?area3) area)
   (assert (not (loc me $area1))
           (loc me ?area3)))
@@ -526,17 +497,6 @@
   (assert (visible1 ?area1 ?divider ?area2)))
 
 
-;(define-init-action inactive-connectors+receivers
-;    0
-;  ()
-;  (always-true)
-;  ()
-;  (assert (doall (?connector connector)
-;            (inactive ?connector))
-;          (doall (?receiver receiver)
-;            (inactive ?receiver))))
-
-
 (define-goal  ;always put this last
     (and (not (bind (holding me $cargo)))
          (loc me area10)
@@ -551,5 +511,4 @@
          (connecting connector4 connector3)
          (connecting connector4 receiver10)
          (color connector4 red)
-         (active connector4))
-)
+         (active connector4)))

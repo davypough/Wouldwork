@@ -8,7 +8,7 @@
 (in-package :hs)
 
 
-(defstruct hstack
+(defstruct (hstack (:print-function print-hstack))
   "An hstack (hash stack) is a functional stack containing an adjustable
    one-dimensional array of elements, plus a hash table for quickly
    determining if an element is in the stack. Keyfn is applied to elements to
@@ -17,6 +17,12 @@
   (vector (make-array 0 :adjustable t :fill-pointer t) :type (array * (*)))
   (table (make-hash-table) :type hash-table)  ;change to take a custom hash table
   (keyfn #'identity :type function))  ;fn to get hash table keys
+
+
+(defun print-hstack (hstack stream depth)
+  (declare (hstack hstack) (ignore stream depth))
+  (ut::show (hstack-vector hstack)))
+  ;(format stream "{HSTACK :COUNT ~D}" (hash-table-count (hstack-table hstack))))
 
 
 (defun create-hstack (&key (element-type t) (ht-keyfn #'identity) (ht-test 'eql) (synchronized nil))
@@ -60,11 +66,16 @@
   (gethash key (hstack-table hstk)))
 
 
+(defun in-hstack (key hstk)
+  (loop for element across (hstack-vector hstk)
+          thereis (funcall (hash-table-test (hstack-table hstk))
+                           key (funcall (hstack-keyfn hstk) element))))
+
+
 (defun deletef-nth-hstack (n hstk)
   (let* ((vec (hstack-vector hstk))
          (tbl (hstack-table hstk))
          (key (funcall (hstack-keyfn hstk) (aref vec n))))
-;    (when (null (gethash key tbl)) (bnb::lprt "null at (gethash key tbl)"))
     (when (zerop (decf (gethash key tbl)))
       (remhash key tbl))
     (setf vec (delete-if (constantly t) vec :start n :count 1))))

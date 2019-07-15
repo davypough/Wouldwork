@@ -7,10 +7,11 @@
 
 (in-package :ww)  ;required
 
+(ww-set 'problem 'boxes)
 
-(setq *depth-cutoff* 10)
+(ww-set 'depth-cutoff 10)
 
-
+(ww-set 'solution-type 'min-length)
 
 
 
@@ -34,17 +35,17 @@
   (separates gate area area))
 
 
-(define-query free! (?me)
+(define-query free? (?me)
   (not (exists (?b box) 
          (holding ?me ?b))))
   
 
-(define-query cleartop! (?plate)
+(define-query cleartop? (?plate)
   (not (exists (?b box)
          (on ?b ?plate))))
 
 
-(define-query open! (?gate ?area1 ?area2)
+(define-query open? (?gate ?area1 ?area2)
   (and (separates ?gate ?area1 ?area2)
        (exists (?p plate)
          (and (controls ?p ?gate)
@@ -65,7 +66,7 @@
   ((?area1 ?area2) area)
   (and (loc me ?area1)
        (exists (?g gate)
-         (open! ?g ?area1 ?area2)))
+         (open? ?g ?area1 ?area2)))
   ((?area1 ?area2) area)
   (assert (not (loc me ?area1))
           (loc me ?area2)))
@@ -76,7 +77,7 @@
   (?box box ?area area)
   (and (loc me ?area)
        (loc ?box ?area)
-       (free! me))
+       (free? me))
   (?box box ?area area)
   (assert (not (loc ?box ?area))
           (holding me ?box)
@@ -101,7 +102,7 @@
   (and (loc me ?area)
        (holding me ?box)
        (loc ?plate ?area)
-       (cleartop! ?plate))
+       (cleartop? ?plate))
   (?box box ?plate plate ?area area)
   (assert (loc ?box ?area)
           (not (holding me ?box))
