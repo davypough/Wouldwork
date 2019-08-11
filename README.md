@@ -37,6 +37,8 @@ The Wouldwork Planner is yet one more in a long line of classical planners.  A b
 
 -Generation of shortest plan found, plus other possible plans
 
+-Optional parallel processing to speed up search
+
 -Output diagnostics describing details of the search
 
 For additional information, please see the Wouldwork user manual.
