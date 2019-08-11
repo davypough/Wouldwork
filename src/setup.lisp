@@ -46,7 +46,7 @@
 
 (defstruct action
   (name nil :type symbol)
-  (duration 0 :type real)
+  (duration 0.0 :type real)
   (precondition-variables nil :type list)
   (precondition-types nil :type list)
   (precondition-instantiations nil :type list)
@@ -69,90 +69,15 @@
   (followups nil :type list))  ;next & finally followup function calls
 
 
-(setq *print-right-margin* 140)
-;Allows non-wrap printing of *search-tree* for deep trees.
-
-;Global settings for wouldwork planner
-(let ((settings (make-hash-table :test #'eq)))
-    (setf (gethash 'debug settings) 0)
-  ;Estimated maximum number of unique states to be explored during search.
-  ;If this number is exceeded, hash table resizing may slow graph search.
-    (setf (gethash 'max-states settings) 10000)
-  ;Name of the current problem, assigned in problem.lisp by user.
-    (setf (gethash 'problem settings) 'unspecified)
-  ;Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.
-    (setf (gethash 'solution-type settings) 'first)
-  ;Print progress during search after each multiple n of states examined.
-    (setf (gethash 'progress-reporting-interval settings) 100000)
-  ;The max possible number of steps to consider toward any goal.
-  ;Negative or 0 means no cutoff, value set in problem.lisp.
-    (setf (gethash 'depth-cutoff settings) 10)
-  ;Whether there are repeated states (graph) or not (tree); try both
-    (setf (gethash 'tree-or-graph settings) 'graph)
-  ;whether to invoke parallel processing
-    (setf (gethash 'parallel settings) nil)
-  ;for parallel processing (excluding main consumer)
-    (setf (gethash 'num-threads settings) 3)
-  (defun ww-get (var)  ;accessors for ww settings
-    (gethash var settings))
-  (defun ww-set (var value)
-    (setf (gethash var settings) value)))
+(defparameter *start-state* (make-problem-state)
+  "Start search from this state.")
+(declaim (problem-state *start-state*))
 
 
-;To display debugging info, (ww-set 'debug <n>) where <n> is 0-5.
-  ;0 - no debugging
-  ;1 - display full search tree
-  ;3 - display basic node (ww-set 'solution-type
-  ;4 - display full node (ww-set 'solution-type
-  ;5 - display full node (ww-set 'solution-type + break after each expansion cycle
-
-(ww-set 'start-state (make-problem-state))
-
-(ww-set 'types (make-hash-table :test #'eq))
-
-(ww-set 'relations (make-hash-table :test #'eq))  ;dynamic relations
-
-(ww-set 'static-relations (make-hash-table :test #'eq))
-
-(ww-set 'connectives '(and or not))
-
-(ww-set 'symmetrics (make-hash-table :test #'eq))  ;symmetric relations
-
-(ww-set 'complements (make-hash-table :test #'eq))
-
-(ww-set 'fluent-relation-indices (make-hash-table :test #'eq))  ;list of fluent argument indices for a relation
-
-(ww-set 'db (make-hash-table :test #'equal))  ;initial database of dynamic relations
-
-(ww-set 'idb (make-hash-table))  ;initial integer database of dynamic propositions
-
-(ww-set 'constant-integers (make-hash-table))  ;integer codes for the problem's object constants
-
-(ww-set 'integer-constants (make-hash-table))  ;translating codes back to constants for printout
-
-(ww-set 'min-action-duration 0.0)  ;the least action duration among all actions
-
-;;; The following parameters will not go into settings
-
-(defparameter *query-names* nil)  ;list of all user-defined query functions
-
-(defparameter *update-names* nil)  ;list of all user-defined update functions
-
-(defparameter *actions* nil)  ;list of all potential actions
-
-(defparameter *init-actions* nil)  ;list of all initialization actions
-
-(defparameter *happenings* nil)  ;the list of objects having exogenous events
-
-(defparameter *static-db* (make-hash-table :test #'equal))  ;initial database of static propositions
-
-(defparameter *static-idb* (make-hash-table))  ;initial integer database of static propositions
-
-(defparameter *goal* nil)  ;Holds the goal test function--value is a lambda expression, symbol-function is the function
-
-(defparameter *constraint* nil)  ;any constraint test function
-
-(defparameter *last-object-index* 0)  ;last index of object constants seen so far in propositions
+(defmacro when-debug>= (n &rest expressions)
+  "Inserts debugging expressions when *debug* >= n."
+  (when (>= *debug* n)
+    `(progn ,@expressions)))
 
 
 (defun setup ()
@@ -160,12 +85,12 @@
   (setf *query-names* (nreverse *query-names*))
   (setf *update-names* (nreverse *update-names*))
   (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
-  (ww-set 'min-action-duration (reduce #'min *actions* :key #'action-duration))
+  (setf *min-action-duration* (reduce #'min *actions* :key #'action-duration))
   (setf *init-actions* (nreverse *init-actions*))
 ;  (dolist (action *actions*)  ;future backchaining
 ;    (install-precondition-lits action)
 ;    (install-effect-adds action))
-  (with-slots (name instantiations happenings time value) (ww-get 'start-state)
+  (with-slots (name instantiations happenings time value) *start-state*
     (let ((first-event-time (loop for object in *happenings* 
                               minimize (car (aref (get object :events) 0)))))
       (setf happenings (loop for object in *happenings* ;property list of happening objects
@@ -175,7 +100,7 @@
       (setf value 0.0)
       (setf instantiations nil)
       (setf name nil)))
-  (do-init-action-updates (ww-get 'start-state))  ;updates db & static-db, but not start-state idb yet
+  (do-init-action-updates *start-state*)  ;updates db & static-db, but not start-state idb yet
   (when (> (length *happenings*) 1)
     (setq *happenings* (sort *happenings* #'< :key (lambda (object)
                                                      (first (aref (get object :events) 0))))))
@@ -188,9 +113,7 @@
 (defun display-parameter-settings ()
   (format t "~%Current parameter settings:")
   (ut::prt (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type) (ww-get 'depth-cutoff)
-           (ww-get 'debug) (ww-get 'parallel))
-  (when (ww-get 'parallel)
-    (ut::prt (ww-get 'num-threads)))
+           *num-parallel-threads* *debug*)
   (terpri))
 
 
@@ -210,21 +133,21 @@
               lst)))
 
 (defun type-description (descrip)
-  (or (nth-value 1 (gethash descrip (ww-get 'types)))
-      (eql descrip 'fluent)
+  (or (nth-value 1 (gethash descrip *types*))
+      (eq descrip 'fluent)
       (and ($varp descrip)
-           (or (nth-value 1 (gethash (extract-type descrip) (ww-get 'types)))
+           (or (nth-value 1 (gethash (extract-type descrip) *types*))
                (symbolp (extract-type descrip))))
       (and (consp descrip)
            (eql (car descrip) 'either)
            (or (every (lambda (typ)
-                        (gethash (extract-type typ) (ww-get 'types)))
+                        (gethash (extract-type typ) *types*))
                       (cdr descrip))))))
 
 (defun list-of-parameter-types (lst)
   (every (lambda (typ)
            (or (null typ)
-               (ut::hash-table-present typ (ww-get 'types))
+               (ut::hash-table-present typ *types*)
                (eq typ 'fluent)
                (and (listp typ)
                     (list-of-parameter-types typ))))
@@ -233,11 +156,11 @@
 (defun relation (rel)
   (and (listp rel)
        (iter (for rel-item in (cdr rel))
-             (for rel-type in (gethash (car rel) (ww-get 'relations)))
+             (for rel-type in (gethash (car rel) *relations*))
              (unless (or (eq rel-item rel-type)
                          (and (listp rel-type)
                               (member rel-item (cdr rel-type)))  ;either type
-                         (subsetp (gethash rel-item (ww-get 'types)) (gethash rel-type (ww-get 'types))))
+                         (subsetp (gethash rel-item *types*) (gethash rel-type *types*)))
                          ;(alexandria:set-equal rel-item rel-type))
                (leave nil))
              (finally (return t)))))
@@ -256,26 +179,26 @@
 
 (defun proposition (prop)
   (and (listp prop)
-       (or (gethash (car prop) (ww-get 'relations))
-           (gethash (car prop) (ww-get 'static-relations)))
+       (or (gethash (car prop) *relations*)
+           (gethash (car prop) *static-relations*))
        (or (null (cdr prop))
            (every (lambda (const typ)
-                    (or (member const (gethash (extract-type typ) (ww-get 'types)))
+                    (or (member const (gethash (extract-type typ) *types*))
                         (and (listp typ)
                              (eql (car typ) 'either)
                              (member const
                                (reduce #'union 
                                        (mapcar (lambda (typ)
-                                                 (gethash (extract-type typ) (ww-get 'types)))
+                                                 (gethash (extract-type typ) *types*))
                                                (cdr typ)))))
                         (typep const (extract-type typ))))
-              (cdr prop) (or (gethash (car prop) (ww-get 'relations))
-                             (gethash (car prop) (ww-get 'static-relations)))))))
+              (cdr prop) (or (gethash (car prop) *relations*)
+                             (gethash (car prop) *static-relations*))))))
 
 (defun atomic-formula (form)
   (and (listp form)
-       (or (gethash (car form) (ww-get 'relations))
-           (gethash (car form) (ww-get 'static-relations)))
+       (or (gethash (car form) *relations*)
+           (gethash (car form) *static-relations*))
        (every (lambda (arg)
                 (or (varp arg)
                     (symbolp arg)

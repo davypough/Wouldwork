@@ -28,7 +28,7 @@
 
 
 
-(define-query cleartop! (?block)
+(define-query cleartop? (?block)
   (not (exists (?b block)
          (on ?b ?block))))
 
@@ -36,9 +36,9 @@
 (define-action put
     1
   (?block block (?block-support ?support) support)
-  (and (cleartop! ?block)
+  (and (cleartop? ?block)
        (on ?block ?block-support)
-       (cleartop! ?support)
+       (cleartop? ?support)
        (different ?block ?support))
   (?block block ?support support)
   (assert (on ?block ?support)

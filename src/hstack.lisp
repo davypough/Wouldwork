@@ -73,6 +73,7 @@
 
 
 (defun deletef-nth-hstack (n hstk)
+  (declare (fixnum n) (hstack hstk))
   (let* ((vec (hstack-vector hstk))
          (tbl (hstack-table hstk))
          (key (funcall (hstack-keyfn hstk) (aref vec n))))

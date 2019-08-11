@@ -10,7 +10,8 @@
   :components
    ((:file "utilities") ;loads only local planner utilities
     (:file "hstack")
-    (:file "setup")
+    (:file "settings")
+    (:file "setup" :depends-on ("settings"))
     (:file "support" :depends-on ("setup"))
     (:file "translator" :depends-on ("support"))
     (:file "happenings" :depends-on ("support"))

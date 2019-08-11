@@ -19,15 +19,15 @@
               (setf constants (apply #'either (cdr constants))))
             (when (eql (car constants) 'compute)
               (setf constants (eval (second constants))))
-            (setf (gethash type (ww-get 'types)) constants)
+            (setf (gethash type *types*) constants)
             (when (consp constants)
               (dolist (constant constants)
-                (check-type constant (or symbol real))
+                (check-type constant (or symbol real list))
                 (setf (gethash (list 'something constant) *static-db*) t)
                 (setf (gethash (list type constant) *static-db*) t)))
         when (consp constants)
           append constants into everything
-      finally (setf (gethash 'something (ww-get 'types))  ;every constant is a something
+      finally (setf (gethash 'something *types*)  ;every constant is a something
                 (remove-duplicates everything :test #'eql))))
 
 
@@ -40,7 +40,7 @@
   (loop for relation in relations
      do (check-type relation cons)
         (check-type (car relation) symbol)
-        (setf (gethash (car relation) (ww-get 'relations))
+        (setf (gethash (car relation) *relations*)
           (ut::if-it (cdr relation)
             (sort-either-types ut::it)
             nil))
@@ -49,17 +49,19 @@
                           do (check-type arg (satisfies type-description))
                         when ($varp arg)
                           collect i)
-          (setf (gethash (car relation) (ww-get 'fluent-relation-indices)) ut::it))
+          (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
       finally (maphash #'(lambda (key value)  ;install implied unary relations
                            (declare (ignore value))
-                           (setf (gethash key (ww-get 'static-relations)) '(something)))
-                       (ww-get 'types)))
-  (loop for key being the hash-keys of (ww-get 'relations)  ;install symmetric relations
+                           (setf (gethash key *static-relations*) '(something)))
+                       *types*)
+              (add-proposition '(always-true) *static-db*)
+              (setf (gethash 'always-true *static-relations*) '(always-true)))
+  (loop for key being the hash-keys of *relations*  ;install symmetric relations
         using (hash-value value)
       when (and (not (eq value t))
                 (not (alexandria:setp value))  ;multiple types
                 (not (final-charp #\> key)))   ;not explicitly directed
-        do (setf (gethash key (ww-get 'symmetrics)) (symmetric-type-indexes value)))
+        do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
   t)
 
 
@@ -72,7 +74,7 @@
   (loop for relation in relations
      do (check-type relation cons)
         (check-type (car relation) symbol)
-        (setf (gethash (car relation) (ww-get 'static-relations))
+        (setf (gethash (car relation) *static-relations*)
           (ut::if-it (cdr relation) 
             (sort-either-types ut::it)
             nil))
@@ -81,19 +83,19 @@
                           do (check-type arg (satisfies type-description))
                           when ($varp arg)
                           collect i)
-           (setf (gethash (car relation) (ww-get 'fluent-relation-indices)) ut::it))
+           (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
       finally (maphash #'(lambda (key value)  ;install implied unary relations
                            (declare (ignore value))
-                           (setf (gethash key (ww-get 'static-relations)) '(everything)))
-                       (ww-get 'types)))
-  (loop for key being the hash-keys of (ww-get 'static-relations)  ;install symmetric relations
+                           (setf (gethash key *static-relations*) '(everything)))
+                       *types*))
+  (loop for key being the hash-keys of *static-relations*  ;install symmetric relations
         using (hash-value value)
       when (and (not (eq value t))
                 (not (alexandria:setp value))  ;multiple types
                 (not (final-charp #\> key)))   ;not explicitly directed
-      do (setf (gethash key (ww-get 'symmetrics)) (symmetric-type-indexes value)))
-  (setf (gethash 'always-true (ww-get 'static-relations)) t)
-  (setf (gethash 'waiting (ww-get 'static-relations)) t)
+      do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
+  (setf (gethash 'always-true *static-relations*) t)
+  (setf (gethash 'waiting *static-relations*) t)
   t)
 
 
@@ -109,7 +111,7 @@
               (ordered-neg (list 'not (sort-either-types (second negative)))))
           (check-type ordered-pos (satisfies relation))
           (check-type ordered-neg (satisfies negative-relation)) 
-          (setf (gethash (car positive) (ww-get 'complements))
+          (setf (gethash (car positive) *complements*)
             (list ordered-pos ordered-neg)))))
 
         
@@ -283,10 +285,10 @@
   (format t "Creating initial propositional database...~%")
   (dolist (proposition propositions)
     ;(check-type proposition (satisfies proposition))
-    (if (gethash (car proposition) (ww-get 'relations))
-      (add-proposition proposition (ww-get 'db))  ;dynamic database
+    (if (gethash (car proposition) *relations*)
+      (add-proposition proposition *db*)  ;dynamic database
       (add-proposition proposition *static-db*)))
-  (add-proposition '(always-true) *static-db*)
+; (add-proposition '(always-true) *static-db*)
   t)
 
 

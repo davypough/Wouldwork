@@ -20,7 +20,7 @@
                                         (eql (first (second item)) 'gethash))
                                (setf neg t))  ;next time thru process negative literal
                              (when (and (eql (first item) 'gethash)
-                                        (not (gethash (second (second (second item))) (ww-get 'fluent-relation-indices))))
+                                        (not (gethash (second (second (second item))) *fluent-relation-indices*)))
                                (if neg
                                    (progn (push (cons 'not (list (get-pos-lit (cdr (second item)))))
                                                 precondition-lits)
@@ -55,7 +55,7 @@
                                                      (eql (car elt) 'quote))
                                               (second elt)
                                               elt))
-                                          literal)
+                                    literal)
                                   effect-adds))
                        nil)))))
 
@@ -71,7 +71,7 @@
 (defun get-lit-from-let-vars (var-form)
   (let* ((rel (second (second (second (second (second var-form))))))
          (fluents (second (second (first var-form))))
-         (indices (gethash rel (ww-get 'fluent-relation-indices)))
+         (indices (gethash rel *fluent-relation-indices*))
          (lit (get-pos-lit (cdr (second (second (second var-form)))))))
     (loop for fluent in fluents
           for index in indices

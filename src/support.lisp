@@ -8,7 +8,7 @@
 
 (defun either (&rest types)
   (loop for type in types
-      append (gethash type (ww-get 'types))))
+      append (gethash type *types*)))
 
 
 (defun achieve-goal (db)
@@ -68,7 +68,7 @@
         (setf (gethash (convert-to-integer proposition) db) t)  
         (setf (gethash proposition db) t)))
     ;do if proposition has a complement
-    (when (gethash (car proposition) (ww-get 'complements))
+    (when (gethash (car proposition) *complements*)
       (if int-db
         (remhash (convert-to-integer (get-complement-prop proposition)) db)
         (remhash (get-complement-prop proposition) db)))))
@@ -87,7 +87,7 @@
         (remhash (convert-to-integer proposition) db)
         (remhash proposition db))
     ;do if proposition has a complement
-    (when (gethash (car proposition) (ww-get 'complements))
+    (when (gethash (car proposition) *complements*)
       (if int-db
         (setf (gethash (convert-to-integer (get-complement-prop proposition)) db) t)
         (setf (gethash (get-complement-prop proposition) db) t)))))
@@ -96,7 +96,7 @@
 (defun add-proposition (proposition db)
   ;Adds a proposition and all its symmetries to the database.
   (declare (hash-table db))
-  (let ((symmetric-indexes (gethash (car proposition) (ww-get 'symmetrics))))
+  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
     (if (null symmetric-indexes)
       (add-prop proposition db)
       (let ((symmetric-variables
@@ -113,7 +113,7 @@
               
 (defun delete-proposition (proposition db)
   (declare (hash-table db))
-  (let ((symmetric-indexes (gethash (car proposition) (ww-get 'symmetrics))))
+  (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
     (if (null symmetric-indexes)
       (del-prop proposition db)
       (let ((symmetric-variables
@@ -170,7 +170,7 @@
 
 
 (defun commit1 (db literal)
-  (when (>= (ww-get 'debug) 4)
+  (when-debug>= 4
     (format t "~&    COMMIT => ~A" literal))
   (update db literal))
 
@@ -263,7 +263,7 @@
 
 
 (defun get-prop-fluent-indices (proposition)
-  (gethash (car proposition) (ww-get 'fluent-relation-indices)))
+  (gethash (car proposition) *fluent-relation-indices*))
 
 
 (defun get-prop-fluents (proposition)
@@ -287,7 +287,7 @@
 (defun get-complement-prop (proposition)
   ;Derives the complement proposition counterpart from a given proposition.
   (let* ((predicate (car proposition))
-         (joint-patterns (gethash predicate (ww-get 'complements)))
+         (joint-patterns (gethash predicate *complements*))
          (prop-pattern (first joint-patterns))
          (comp-pattern (copy-tree (second (second joint-patterns)))))
     (loop for const in (cdr proposition)
@@ -303,10 +303,10 @@
               (eq (car type) 'either))
         collect (let* ((combo-instances (remove-duplicates 
                                           (loop for typ in (cdr type)
-                                                append (gethash typ (ww-get 'types)))))
+                                                append (gethash typ *types*))))
                        (sorted-types (sort (cdr type) #'string< :key #'symbol-name))
                        (combo-type (intern (ut::interleave+ sorted-types))))
-                  (setf (gethash combo-type (ww-get 'types)) combo-instances)
+                  (setf (gethash combo-type *types*) combo-instances)
                   combo-type)
       else collect type))
 
@@ -316,7 +316,7 @@
   (when symbol-types   ;(remove 'fluent symbol-types))
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (item)
-                                (gethash item (ww-get 'types)))
+                                (gethash item *types*))
                               nonfluent-types)))
       (when (member nil instances)
         (return-from type-instantiations nil))
@@ -390,4 +390,4 @@
                                             (member x symbols))
                                           (cddr lambda-expr)))))
     (when ignores
-      (push `(declare (ignore ,@ignores)) (cddr lambda-expr)))))
+      (push `(declare (ignorable ,@ignores)) (cddr lambda-expr)))))

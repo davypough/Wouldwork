@@ -60,14 +60,15 @@
             (let (pre-result db-update)
               (when (setf pre-result (apply pre-fn state pinsts))
                 (setf db-update 
-                  (order-propositions (apply eff-fn state pre-result)))
+                  ;(order-propositions 
+                  (apply eff-fn state pre-result))
                 (loop for literal in (update-changes db-update)
                     do (if (eq (car literal) 'not)
-                         (if (gethash (caadr literal) (ww-get 'relations))
-                           (delete-proposition (second literal) (ww-get 'db))  ;dynamic relation
+                         (if (gethash (caadr literal) *relations*)
+                           (delete-proposition (second literal) *db*)  ;dynamic relation
                            (delete-proposition (second literal) *static-db*))
-                         (if (gethash (car literal) (ww-get 'relations))
-                           (add-proposition literal (ww-get 'db))  ;dynamic relation
+                         (if (gethash (car literal) *relations*)
+                           (add-proposition literal *db*)  ;dynamic relation
                            (add-proposition literal *static-db*)))))))
           precondition-instantiations)))))
 
@@ -80,61 +81,65 @@
     (dolist (action *actions*)
       (with-slots (name iprecondition precondition-variables precondition-types
                         precondition-instantiations ieffect)
-                  action
+          action
         (if (equal precondition-instantiations '(nil))
-          (when (>= (ww-get 'debug) 4) (format t "~&~A - skipping" name))  ;get next action
+          (when-debug>= 4 (format t "~&~A - skipping" name))  ;get next action
           (let (pre-results db-updates)  ;process this action
-            (when (>= (ww-get 'debug) 4) (format t "~&~A" name))
+            (when-debug>= 4 (format t "~&~A" name))
             (setf pre-results
               (mapcar (lambda (pinsts)
                         (apply iprecondition state pinsts))
-                      precondition-instantiations))
-            (when (= (ww-get 'debug) 5)
+                precondition-instantiations))
+            (when-debug>= 5
               (let ((*package* (find-package :ww)))
                 (ut::prt precondition-types precondition-variables pre-results)))
             (alexandria:deletef pre-results nil)  ;OK
-            (setf db-updates 
+            (setf db-updates  ;returns list of update structures
               (mapcar (lambda (pre-result)
                         (apply ieffect state pre-result))
-                      pre-results))
+                pre-results))
             ;(ut::prt 'first db-updates)
             (setf db-updates 
               (delete-duplicates db-updates
-                :test (lambda (upd1 upd2)
-                        (alexandria:set-equal upd1 upd2 :test #'equal))
-                :key #'update-changes))
+                                 :test (lambda (upd1 upd2)
+                                         (alexandria:set-equal upd1 upd2 :test #'equal))
+                                 :key #'update-changes))
             ;(ut::prt 'second db-updates)
-            (setf db-updates
-              (iter (for db-update in db-updates)
-                    (collect (order-propositions db-update))))
+            ;(setf db-updates
+            ;  (iter (for db-update in db-updates)
+            ;        (collect (order-propositions db-update))))
             ;(ut::prt 'third db-updates)
-            (when (>= (ww-get 'debug) 4)
+            (when-debug>= 4
               (let ((*package* (find-package :ww)))
                 (ut::prt db-updates)))
-            (mapcar
-              (lambda (db-update)
-                (let ((act-state (initialize-act-state action state db-update))
-                      net-state)
-                  (when act-state  ;no new act-state if wait action is cancelled
-                    (if *happenings*
-                      (setf net-state (amend-happenings state act-state))
-                      (if (and *constraint* 
-                               (not (funcall (symbol-function '*constraint*) act-state))) ;violated
-                        (setf net-state nil)
-                        (setf net-state act-state)))
-                    (when (>= (ww-get 'debug) 4)
-                      (if net-state
-                        (when *constraint*
-                          (format t "~&    ***NO CONSTRAINT VIOLATION***"))
-                        (when *constraint* 
-                          (format t "~&    ***CONSTRAINT VIOLATED***"))))
-                    (when net-state
-                      (setf net-state (process-followup-updates net-state db-update))
-                      (push net-state children)))))
-              db-updates)))))
-    children))
+            (alexandria:appendf children (get-new-states state action db-updates))))))
+    (nreverse children)))
 
-  
+
+(defun get-new-states (state action db-updates)
+  ;Creates new states given current state and the new updates.
+  (mapcan
+      (lambda (db-update)
+        (let ((act-state (initialize-act-state action state db-update))
+              net-state)
+          (when act-state  ;no new act-state if wait action is cancelled
+            (if *happenings*
+                (setf net-state (amend-happenings state act-state))
+              (if (and *constraint* 
+                       (not (funcall (symbol-function '*constraint*) act-state))) ;violated
+                  (setf net-state nil)
+                (setf net-state act-state)))
+            (when-debug>= 4
+              (if net-state
+                  (when *constraint*
+                    (format t "~&    ***NO CONSTRAINT VIOLATION***"))
+                (when *constraint* 
+                  (format t "~&    ***CONSTRAINT VIOLATED***"))))
+            (when net-state
+              (list (setf net-state (process-followup-updates net-state db-update)))))))
+    db-updates))
+
+
 (defun initialize-act-state (action state db-update)
   ;Returns a new child of state incorporating action db-update list,
   ;or nil if wait action and no point in waiting.
@@ -162,14 +167,14 @@
 (defun process-followup-updates (state db-update)
   ;triggering forms saved previously during effect apply
   (iter (for followup in (update-followups db-update))
-        (when (>= (ww-get 'debug) 4) (ut::prt followup))
+        (when-debug>= 4 (ut::prt followup))
         (for returns = (sort (apply (car followup) state (cdr followup))
                                    #'(lambda (x y) 
                                        (declare (ignore y))
                                        (and (listp x) (eq (car x) 'not)))))  ;get ordered updates
-        (when (>= (ww-get 'debug) 4) (ut::prt returns))
+        (when-debug>= 4 (ut::prt returns))
         (revise (problem-state-idb state) returns)
-        ;(when (>= (ww-get 'debug) 4) (ut::prt state))
+        ;(when-debug>= 4 (ut::prt state))
         (finally (return-from process-followup-updates state))))
 
 
@@ -180,7 +185,7 @@
                                                           (if (listp value)
                                                             (copy-list value)
                                                             value)))))
-    (remhash (gethash 'waiting (ww-get 'constant-integers)) new-state-idb)
+    (remhash (gethash 'waiting *constant-integers*) new-state-idb)
     (with-slots (name duration) action
       (make-problem-state
        :name name

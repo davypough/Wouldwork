@@ -27,9 +27,9 @@
                    (node-state node)
                    (node-depth node)
                    #|(ut::if-it (node-parent node) (node-state ut::it))|#))))
-  (state   nil :type problem-state)    ;problem state
-  (depth   0   :type fixnum)           ;depth in the search tree
-  (parent  nil :type (or null node)))  ;this node's parent
+  (state (make-problem-state) :type problem-state)    ;problem state
+  (depth 0 :type fixnum)           ;depth in the search tree
+  (parent nil :type (or null node)))  ;this node's parent
 
 
 (defstruct solution  ;the record of a solution
@@ -40,93 +40,128 @@
   (goal (make-problem-state) :type problem-state))
 
 
-(declaim
- (fixnum *num-idle-threads* *total-states-processed* *program-cycles*
-         *max-depth-explored* *count*)  ;*unique-states-encountered-graph* 
- (single-float *average-branching-factor*)
- (list *solutions*)  ; *search-tree*)
- (hs::hstack *open*)
- (hash-table *closed*)
- (function state-equal-p))
+#+:sbcl (sb-ext:define-hash-table-test state-equal-p state-equal-p-hash)
+;Hash stack test for *open*.
+(declaim (function state-equal-p state-equal-p-hash))
+
+
+;;;;;;;;;;;;;;;;;;; Shared Global Update Macros ;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro define-global-fixnum (var-name val-form &optional doc-string)
+  `(progn (declaim (fixnum ,var-name))
+     ,(if (> *num-parallel-threads* 0)
+       #+sbcl (when (not (boundp var-name))
+                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
+       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
+        `(defparameter ,var-name ,val-form ,doc-string))))
+
+
+(defmacro increment-global-fixnum (var-name &optional (delta-form 1))
+  (if (> *num-parallel-threads* 0)
+    #+sbcl `(sb-ext:atomic-incf ,var-name ,delta-form)
+    #+allegro `(excl:incf-atomic ,var-name ,delta-form)
+    `(incf ,var-name ,delta-form)))
+
+
+(defmacro push-global (item var-name)
+  (if (> *num-parallel-threads* 0)
+    #+sbcl `(sb-ext:atomic-push ,item ,var-name)
+    #+allegro `(excl:push-atomic ,item ,var-name)
+    `(push ,item ,var-name)))
+
+
+(defmacro update-branching-factor (n)
+  (if (> *num-parallel-threads* 0)
+    #+sbcl `(sb-ext:atomic-update *average-branching-factor* #'compute-average-branching-factor ,n)
+    #+allegro `(let ((abf (compute-average-branching-factor ,n 0.0)))
+                 (excl:update-atomic (*average-branching-factor* *average-branching-factor*) abf))  
+    `(setf *average-branching-factor* (compute-average-branching-factor ,n 0))))
+       
+
+(defmacro update-best-value-so-far (value)
+  (if (> *num-parallel-threads* 0)
+    #+sbcl `(sb-ext:atomic-update *best-value-so-far* #'compute-best-value-so-far ,value)
+    #+allegro `(excl:update-atomic (*best-value-so-far* *best-value-so-far*) ,value)
+    `(setf *best-value-so-far* ,value)))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;; Debugging ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 (defparameter *lock* (bt:make-lock))  ;for debugging
 
 
-(defmacro tprt (thread-index &rest vars)
-  "Locked version of parallel prt to print from one thread."
-  `(when (= (lparallel:kernel-worker-index) ,thread-index)
-     (bt:with-lock-held (*lock*) (terpri) (ut::prt ,@vars) (finish-output))))
-
-
 (defmacro lprt (&rest vars)
-  "Locked version of parallel prt with package binding for printout."
-  `(bt:with-lock-held (*lock*) (terpri) (ut::prt ,@vars) (finish-output)))
+  "Print some variable values in a thread for debugging."
+  `(bt:with-lock-held (*lock*)  ;grab lock for uninterrupted printing
+     (let ((*package* (find-package :ww))  ;suppress printing package prefixes
+           (thread-index  (lparallel:kernel-worker-index)))  ;get current thread
+       ;(with-open-file (s "D:\\output.lisp" :direction :output
+       ;            :if-exists :supersede)
+       ;  (format s "The value of *standard-output* is ~S~%" *standard-output*)
+       ;  (format s "The value of *terminal-io* is ~S~%" *terminal-io*))
+       (terpri)
+       (ut::prt thread-index)
+       (ut::prt ,@vars)
+       (finish-output))))  ;make sure printout is complete before continuing
 
 
 (defparameter *-* '---------------------------------------------------------)
-  ;Division marker for debugging.
+  ;Division marker for debugging printout convenience.
 
 
-#+:sbcl (sb-ext:define-hash-table-test state-equal-p state-equal-p-hash)  ;sxhash)
+;;;;;;;;;;;;;;;;;;;; Search Parameters ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+;(define-global-fixnum *count* 0
+;  "Counter for debugging thread iterations (shared).")
 
-;;; Search Parameters
+(define-global-fixnum *total-states-processed* 0
+  "Count of states either newly generated, updated, or regenerated while searching (shared).")
 
+;(define-global-fixnum *unique-states-encountered-graph* 0
+;  "Count of unique states encountered, only used during graph search (shared)")
 
-#+:sbcl (sb-ext:defglobal *count* 0)
-#+:allegro (defparameter *count* 0)
-  ;Counter for debugging thread iterations.
+(define-global-fixnum *program-cycles* 0
+  "Count of complete cycles of searching (shared).")
 
-#+:sbcl (sb-ext:defglobal *total-states-processed* 0)
-#+:allegro (defparameter *total-states-processed* 0)
-  ;Count of states either newly generated, updated, or regenerated while searching.
+(define-global-fixnum *num-idle-threads* 0
+  "Holds the number of currently idle threads (shared).")
 
-;#+:sbcl (sb-ext:defglobal *unique-states-encountered-graph* 0)
-;#+:allegro (defparameter *unique-states-encountered-graph* 0)
-  ;Count of unique states encountered, only used during graph search.
-
-#+:sbcl (sb-ext:defglobal *program-cycles* 0)
-#+:allegro (defparameter *program-cycles* 0)
-  ;Count of complete cycles of searching.
-
-#+:sbcl (sb-ext:defglobal *num-idle-threads* 0)
-#+:allegro (defparameter *num-idle-threads* 0)  ;holds the number of currently idle threads
-
-
-(defparameter *max-depth-explored* 0)
-  ;Keeps track of the maximum depth reached so far during the search.
+(define-global-fixnum *max-depth-explored* 0
+  "Keeps track of the maximum depth reached so far during the search (shared).")
 
 (defparameter *average-branching-factor* 0.0)
-  ;Average branching factor so far during search.
+;Average branching factor so far during search (shared).
+(declaim (single-float *average-branching-factor*))
 
 (defparameter *search-tree* nil)
-  ;DFS search tree for debugging.
+  ;DFS search tree for debugging (serial processing only).
+(declaim (list *search-tree*))
 
 (defparameter *solutions* nil)
   ;The resulting list of solutions found.
+(declaim (list *solutions*))
 
 (defparameter *best-value-so-far* 0.0)
   ;progressively holds the best (min or max) value during search
+(declaim (real *best-value-so-far*))
 
 
 (defparameter *open*
-  (if (and (ww-get 'parallel) (member :sbcl *features*))
-    (hs::create-hstack :element-type '(or node nil) :ht-keyfn #'node-state
+  (if (and (> *num-parallel-threads* 0) (alexandria:featurep :sbcl))
+    (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
                        :ht-test 'state-equal-p :synchronized t)
-    (hs::create-hstack :element-type '(or node nil) :ht-keyfn #'node-state
+    (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
                        :ht-test 'state-equal-p)))
   ;The hash-stack structure containing the set of open nodes, local to search-parallel.
-
-
-;put start-state on *open*
-(hs::push-hstack (make-node :state (ww-get 'start-state)) *open*)
+(declaim (hs::hstack *open*))
 
 
 #+:sbcl (defparameter *closed*
           (if (eq (ww-get 'tree-or-graph) 'graph)
-            (if (ww-get 'parallel)
+            (if (> *num-parallel-threads* 0)
               (make-hash-table :size (ww-get 'max-states)
                                :test 'state-equal-p
                                :synchronized t)
@@ -140,6 +175,7 @@
                (make-hash-table :size (ww-get 'max-states)
                                 :test 'state-equal-p)))
 ;The hash-table containing the set of closed nodes, global.
+(declaim (hash-table *closed*))
 
 
 
@@ -150,12 +186,12 @@
   (when (eql (ww-get 'tree-or-graph) 'graph)
     (clrhash *closed*))
   (setf *open*
-    (if (and (ww-get 'parallel) (member :sbcl *features*))
-      (hs::create-hstack :element-type '(or node nil) :ht-keyfn #'node-state
+    (if (and (> *num-parallel-threads* 0) (member :sbcl *features*))
+      (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
                          :ht-test 'state-equal-p :synchronized t)
-      (hs::create-hstack :element-type '(or node nil) :ht-keyfn #'node-state
+      (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
                          :ht-test 'state-equal-p)))
-  (hs::push-hstack (make-node :state (ww-get 'start-state)) *open*)
+  (hs::push-hstack (make-node :state *start-state*) *open*)
   (setf *program-cycles* 1)
   (setf *average-branching-factor* 0.0)
   (setf *total-states-processed* 1)
@@ -164,7 +200,7 @@
   (setf *num-idle-threads* 0)
   (setf *solutions* nil)
   (setf *search-tree* nil)
-  (if (ww-get 'parallel)
+  (if (> *num-parallel-threads* 0)
     ;(with-open-stream (*standard-output* (make-broadcast-stream)) ;ignore *standard-output*
     (process-threads)
     (search-serial))
@@ -176,80 +212,67 @@
 
 (defun process-threads ()
   "The main consumer of parallel thread processing."
-  (setf lparallel:*kernel* (lparallel:make-kernel (ww-get 'num-threads)))
+  (setf lparallel:*kernel* (lparallel:make-kernel *num-parallel-threads*))
   (let ((channel (lparallel:make-channel))
         (problems (lparallel.queue:make-queue))  ;holds current problems to be solved
         (done (lparallel.queue:make-queue)))  ;signals t when all processing is done
-    (loop for i from 1 to (ww-get 'num-threads)  ;get all threads up & running
+    (setf *num-idle-threads* *num-parallel-threads*)
+    (loop for i from 1 to *num-parallel-threads*  ;get all threads up & running
         do (lparallel:submit-task channel #'search-parallel problems done))
     (lparallel.queue:push-queue *open* problems)  ;setup the main problem for the thread pool
     (lparallel.queue:pop-queue done)  ;block until thread pool reports done
     (lparallel.queue:push-queue t done)  ;signal remaining threads to stop processing
-    (loop for i from 1 to (ww-get 'num-threads)
+    (loop for i from 1 to *num-parallel-threads*
        do (lparallel.queue:push-queue (hs::make-hstack) problems)))  ;send stop message to all threads
   (lparallel:end-kernel :wait t))
 
 
 (defun search-parallel (&optional problems done)
-  ;Branch & Bound DFS parallel search.
-  (setf *search-tree* nil)
+  ;Branch & Bound DFS parallel search in each thread.
   (iter
-    #+:sbcl (sb-ext:atomic-incf *num-idle-threads*)
-    #+:allegro (excl:incf-atomic *num-idle-threads*)
     (let ((open (lparallel.queue:pop-queue problems)))  ;open is local for this thread
-      #+:sbcl (sb-ext:atomic-decf *num-idle-threads*)
-      #+:allegro (excl:decf-atomic *num-idle-threads*)
-      ;(tprt 0 *-* 'entering open)
-      (when (= (ww-get 'debug) 1)
-        (let ((*package* (find-package :bnb)))
-          (lprt *-* 'entering (lparallel:kernel-worker-index)))
+      (increment-global-fixnum *num-idle-threads* -1)
+      (when-debug>= 1
+        (lprt *-* 'entering)
         (let ((*package* (find-package :hs)))
           (lprt open)))
-      (when (eq (hs::hstack-keyfn open) #'identity)  ;exit received from process-threads
-        ;(tprt 0 'exiting)
-        (when (= (ww-get 'debug) 1)
-          (let ((*package* (find-package :bnb)))
-            (lprt 'returning-from-search-parallel-1 (lparallel:kernel-worker-index))))
-        (return-from search-parallel))  ;exit this thread
+      (when (eq (hs::hstack-keyfn open) #'identity)  ;completion received from process-threads
+        (when-debug>= 1
+          (lprt 'completion))
+        (increment-global-fixnum *num-idle-threads*)
+        (return-from search-parallel))  ;complete & exit this thread
       (iter 
         (when (lparallel.queue:peek-queue done)  ;interrupt this thread when done
-          (when (= (ww-get 'debug) 1)
-            (let ((*package* (find-package :bnb)))
-              (lprt 'returning-from-search-parallel-2 (lparallel:kernel-worker-index))))
+          (when-debug>= 1
+            (lprt 'interrupted))
+          (increment-global-fixnum *num-idle-threads*)
           (return-from search-parallel))  ;exit this thread
         (when (and (not (linear open))
-                   ;(> *num-idle-threads* 0))  ;causes multiple splitting
-                   (< (lparallel.queue:queue-count problems)
-                      *num-idle-threads*))  ;ie, some threads are idle
-          ;(tprt 0 'pre-split open)
-          (when (= (ww-get 'debug) 1)
-            (lprt 'pre-split (lparallel:kernel-worker-index))
-            (let ((*package* (find-package :hs)))
-              (lprt open)))
+                   (> *num-idle-threads* 0))  ;causes multiple splitting
           (let ((subopen (split-off open)))  ;split open
-            ;(tprt 0 subopen open)
-            (when (= (ww-get 'debug) 1)
-              (lprt 'split (lparallel:kernel-worker-index))
+            (when-debug>= 1
+              (lprt 'splitting)
               (let ((*package* (find-package :hs)))
                 (lprt subopen open)))
             (lparallel.queue:push-queue subopen problems)))
         (let ((succ-nodes (df-bnb1 open)))  ;work a little more on current problem
           (when (equal succ-nodes '(first))  ;first solution sufficient & found detected
-            ;(tprt 0 'signal-first-done)
-            (when (= (ww-get 'debug) 1)
-              (lprt 'signal-first-done (lparallel:kernel-worker-index)))
+            (when-debug>= 1
+              (lprt 'signal-first-done))
             (lparallel.queue:push-queue t done)  ;signal all done to process-threads
+            (increment-global-fixnum *num-idle-threads*)
             (leave))  ;go back to top and wait for exit signal
           (when (hs::empty-hstack open)
-            ;(tprt 0 'exhausted-open)
-            (when (= (ww-get 'debug) 1)
-              (lprt 'exhausted-open (lparallel:kernel-worker-index)))
-            (when (= *num-idle-threads* (1- (ww-get 'num-threads)))  ;all other threads idle
-              ;(tprt 0 'signal-exhausted-done)
-              (when (= (ww-get 'debug) 1)
-                (lprt 'signal-exhausted-done (lparallel:kernel-worker-index)))
+            (when-debug>= 1
+              (lprt 'exhausted-open))
+            (when (= *num-idle-threads* (1- *num-parallel-threads*))  ;all other threads idle
+              (when-debug>= 1
+                (lprt 'signal-exhausted-done))
               (lparallel.queue:push-queue t done))  ;signal all done to process-threads
+            (increment-global-fixnum *num-idle-threads*)
             (leave))  ;get next open
+          (when-debug>= 1
+            (lprt 'expanding (length succ-nodes)))
           (loop for succ-node in succ-nodes
             do (hs::push-hstack succ-node open)))))))
 
@@ -340,9 +363,9 @@
   ;Performs expansion of one node from open. Returns
   ;new nodes, (first), or nil if no new nodes generated.
   (declare (hs::hstack open))
-  (when (>= (ww-get 'debug) 3)
+  (when-debug>= 3
     (format t "~&-----------------------------------------------------------~%"))
-  (when (= (ww-get 'debug) 5)
+  (when-debug>= 5
     (break))
   (let ((current-node (get-next-node-for-expansion open)))
      
@@ -353,7 +376,7 @@
     
     (when (null current-node)
       (return-from df-bnb1 nil))  ;open is empty
-    (when (>= (ww-get 'debug) 3)
+    (when-debug>= 3
       (format t "~3%Current node selected:~%~S~2%" current-node))
     (let ((succ-states (get-successors current-node))
           (current-state (node-state current-node))
@@ -361,7 +384,7 @@
       (if succ-states
         (progn (update-search-tree current-state current-depth "")
                (when (> (1+ current-depth) *max-depth-explored*)
-                 (setq *max-depth-explored* (1+ current-depth))))
+                 (increment-global-fixnum *max-depth-explored*)))
         (progn (update-search-tree current-state current-depth "No successor states")
                (close-barren-nodes current-node open)
                (return-from df-bnb1 nil)))
@@ -390,6 +413,7 @@
           (close-barren-nodes current-node open)
           (return-from df-bnb1 nil)) 
         ;(ut::prt succ-states 7)
+        (increment-global-fixnum *program-cycles*)
         (update-branching-factor (length succ-nodes))
         (return-from df-bnb1 (nreverse succ-nodes))))))
 
@@ -429,16 +453,16 @@
                (min-value
                 (if *solutions*
                   (when (< (problem-state-value state) *best-value-so-far*)
-                    (setf *best-value-so-far* (problem-state-value state))
+                    (update-best-value-so-far (problem-state-value state))
                     (register-solution current-node state))
-                  (progn (setf *best-value-so-far* (problem-state-value state))
+                  (progn (update-best-value-so-far (problem-state-value state))
                          (register-solution current-node state))))
                (max-value
                 (if *solutions*
                   (when (> (problem-state-value state) *best-value-so-far*)
-                    (setf *best-value-so-far* (problem-state-value state))
+                    (update-best-value-so-far (problem-state-value state))
                     (register-solution current-node state))
-                  (progn (setf *best-value-so-far* (problem-state-value state))
+                  (progn (update-best-value-so-far (problem-state-value state))
                          (register-solution current-node state))))
                (first
                  (register-solution current-node state)
@@ -462,7 +486,7 @@
       (min-length (>= (+ current-depth 2)
                           (solution-depth (first *solutions*))))
       (min-time (let ((min-succ-time (reduce #'min succ-states :key #'problem-state-time)))
-                      (>= (+ min-succ-time (ww-get 'min-action-duration))
+                      (>= (+ min-succ-time *min-action-duration*)
                           (solution-time (first *solutions*))))))))
 
 
@@ -498,29 +522,33 @@
         finally (return succ-nodes)))
 
 
-(defun update-branching-factor (n)
-  (declare (fixnum n))
-  (setq *average-branching-factor*  ;cumulative average of expanded states
-    (/ (+ n (* *program-cycles* *average-branching-factor*))
-       #+:sbcl (sb-ext:atomic-incf *program-cycles*)
-       #+:allegro (excl:incf-atomic *program-cycles*))))
+(defun compute-average-branching-factor (n prior-value)
+  ;Cumulative average of expanded states.
+  (declare (fixnum n) (ignore prior-value))
+  (/ (+ n (* *program-cycles* *average-branching-factor*))
+                       *program-cycles*))
+
+
+(defun compute-best-value-so-far (value prior-value)
+  ;When parallel for sbcl, returns value.
+  (declare (ignore prior-value))
+  value)
        
 
 (defun process-successor-graph (current-node succ-state open)
   ;Decides how to process the next successor state. Returns whether or not the
   ;current node still has life (ie, potential successors).
   (declare (node current-node) (problem-state succ-state) (hs::hstack open))
-  #+:sbcl (sb-ext:atomic-incf *total-states-processed*)
-  #+:allegro (excl:incf-atomic *total-states-processed*)
+  (increment-global-fixnum *total-states-processed*)
   (print-search-progress-graph)       ;#nodes expanded so far
   (let ((prior-succ-depth? (gethash succ-state *closed*))  ;early placement for multithreading
         (succ-depth (1+ (node-depth current-node))))
     (cond ((and (> (ww-get 'depth-cutoff) 0) (>= succ-depth (ww-get 'depth-cutoff)))
-             (when (>= (ww-get 'debug) 3)
+             (when-debug>= 3
                (format t "~2%State at max depth:~%~A" succ-state))
              (values "State at max depth" nil))
           ((hs::in-hstack succ-state open)
-             (when (>= (ww-get 'debug) 3)
+             (when-debug>= 3
                (format t "~2%State already on open:~%~A" succ-state))
              (values "State already on open" nil))
           ((null prior-succ-depth?)
@@ -528,7 +556,7 @@
           ((<= succ-depth prior-succ-depth?)
              (remhash succ-state *closed*) ;equal or shallower node found, swap nodes
              (values "" (generate-new-node current-node succ-state))) ;put back on open
-          (t (when (>= (ww-get 'debug) 3)
+          (t (when-debug>= 3
                (format t "~2%Better path to state already exists:~%~A" succ-state))
              (values "Better path to state already exists" nil)))))
 
@@ -537,15 +565,14 @@
   ;Decides how to process the next successor state. Returns whether or not the
   ;current node still has life (ie, potential successors).
   (declare (node current-node) (problem-state succ-state) (hs::hstack open))
-  #+:sbcl (sb-ext:atomic-incf *total-states-processed*)
-  #+:allegro (excl:incf-atomic *total-states-processed*)
+  (increment-global-fixnum *total-states-processed*)
   (print-search-progress-tree)       ;#nodes expanded so far
   (cond ((at-max-depth current-node)
-           (when (>= (ww-get 'debug) 3)
+           (when-debug>= 3
              (format t "~2%State at max depth:~%~A" succ-state))
            (values "State at max depth" nil))
         ((hs::in-hstack succ-state open)
-           (when (>= (ww-get 'debug) 3)
+           (when-debug>= 3
              (format t "~2%State already on open:~%~A" succ-state))
            (values "State already on open" nil))
         (t (values "" (generate-new-node current-node succ-state)))))
@@ -557,7 +584,7 @@
   (let ((succ-node (make-node :state succ-state
                               :depth (1+ (node-depth current-node))
                               :parent current-node)))
-    (when (>= (ww-get 'debug) 3)
+    (when-debug>= 3
       (format t "~2%Installing new or updated successor:~%~S" succ-node))
     succ-node))
 
@@ -573,19 +600,19 @@
         (node-depth node)))
     (setq parent (node-parent node))
     (setf (node-parent node) nil)
-    (when (>= (ww-get 'debug) 4)
+    (when-debug>= 4
       (format t "~2%Unproductive state:~%~S~%" node))
     (setq node parent)))
 
 
 (defun update-search-tree (state depth message)
   (declare (problem-state state) (fixnum depth) (string message))
-  (when (and (not (ww-get 'parallel)) (or (= (ww-get 'debug) 1) (= (ww-get 'debug) 2)))
+  (when (and (not (> *num-parallel-threads* 0)) (or (= *debug* 1) (= *debug* 2)))
     (push `((,(problem-state-name state) 
              ,@(problem-state-instantiations state))
            ,depth
            ,message
-           ,@(case (ww-get 'debug)
+           ,@(case *debug*
                (1 nil)
                (2 (list (list-database (problem-state-idb state))))))
           *search-tree*)))
@@ -657,7 +684,7 @@
   ;(format t "~2%Unique states encountered = ~:D" (unique-states-encountered-graph))
   (format t "~2%Program cycles (state expansions) = ~:D" *program-cycles*)
   (format t "~2%Average branching factor = ~F" *average-branching-factor*)
-  (format t "~2%Start state:~%~A" (list-database (problem-state-idb (ww-get 'start-state))))
+  (format t "~2%Start state:~%~A" (list-database (problem-state-idb *start-state*)))
   (format t "~2%Goal:~%~A" (get '*goal* 'formula))
   (if *solutions*
     (let* ((shallowest-depth (reduce #'min *solutions* :key #'solution-depth))
@@ -704,12 +731,12 @@
 
 
 (defun search-tree-debugging ()
-  (when (and (not (ww-get 'parallel)) (or (= (ww-get 'debug) 1) (= (ww-get 'debug) 2)))
+  (when (and (not (> *num-parallel-threads* 0)) (or (= *debug* 1) (= *debug* 2)))
     (format t "~2%Search tree:~%")
     (loop for act in (reverse *search-tree*)
           do (if (= (length act) 2)
                (format t "~vT~d:~a~%" (* 4 (second act)) (second act) (first act))
-               (case (ww-get 'debug)
+               (case *debug*
                  (1 (format t "~vT~d:~a ~a~%"
                               (* 4 (second act)) (second act) (first act) (third act)))
                  (2 (format t "~vT~d:~a ~a~%" 
@@ -732,11 +759,15 @@
                            (list (record-move (node-state current-node)
                                                   goal-state))) ;add final move
              :goal goal-state)))
-    (format t "~%New path to goal found at depth = ~:D~%" state-depth)
-    (when (>= (ww-get 'debug) 3)
+    (if (> *num-parallel-threads* 0)
+      (progn (when-debug>= 1
+               (lprt))
+             (bt:with-lock-held (*lock*)
+               (format t "~&New path to goal found at depth = ~:D~%" state-depth)))
+      (format t "~%New path to goal found at depth = ~:D~%" state-depth))
+    (when-debug>= 3
       (format t "~%New solution found:~%  ~A~%" solution))
-    (bt:with-lock-held (*lock*)
-      (push solution *solutions*))  ;pushnew
+    (push-global solution *solutions*)
     (update-search-tree goal-state state-depth "***goal***")))
 
 
@@ -768,11 +799,11 @@
 (defun solve ()
   ;Runs a branch & bound search on the problem specification.
   (initialize)
-  (when (and (ww-get 'parallel) (> (ww-get 'debug) 1))
-    (format t "ADVISORY: Running parallel threads, resetting 'debug' from ~D to 1." (ww-get 'debug))
-    (ww-set 'debug 1))
-  (if (ww-get 'parallel)
-    (format t "~%working with ~:D thread(s)...~%" (ww-get 'num-threads))
+  (when (and (> *num-parallel-threads* 0) (> *debug* 1))
+    (format t "ADVISORY: Running parallel threads, resetting *debug* from ~D to 1." *debug*)
+    (setf *debug* 1))
+  (if (> *num-parallel-threads* 0)
+    (format t "~%working with ~:D thread(s)...~2%" *num-parallel-threads*)
     (format t "~%working...~%"))
   (time (dfs))
   (finalize)

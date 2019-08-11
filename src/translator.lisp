@@ -20,17 +20,17 @@
   ;Eg, (velocity ?car wheel1 50 $direction) -> (list 'velocity ?car 'wheel1 50 $direction)
   (check-type form (satisfies atomic-formula))
   `(gethash ,(translate-list form)
-            ,(if (gethash (car form) (ww-get 'relations))
+            ,(if (gethash (car form) *relations*)
                '(problem-state-db state)
                '*static-db*)))
 
 
 (defun translate-fluent-atom (form)
   ;Pre/ante only.
-  (let* ((fluent-indices (get-prop-fluent-indices form))  ;(mapcar #'1+ (gethash (car form) (ww-get 'fluent-relation-indices))))
+  (let* ((fluent-indices (get-prop-fluent-indices form))
          (fluentless-atom (ut::remove-at-indexes fluent-indices form))
          (fluents (ut::collect-at-indexes fluent-indices form)))  ;eg, area1, ?area1, or $area1
-    `(equal (gethash ,(translate-list fluentless-atom) ,(if (gethash (car form) (ww-get 'relations))
+    `(equal (gethash ,(translate-list fluentless-atom) ,(if (gethash (car form) *relations*)
                                                           '(problem-state-db state)
                                                           '*static-db*))
             (list ,@(mapcar (lambda (x)
@@ -40,7 +40,7 @@
 
 (defun translate-proposition (form)
   ;Distinguishes fluent from non-fluent propositions.
-  (if (get-prop-fluent-indices form)  ;(gethash (car form) (ww-get 'fluent-relation-indices))
+  (if (get-prop-fluent-indices form)  ;(gethash (car form) *fluent-relation-indices))
     (translate-fluent-atom form)
     (translate-simple-atom form)))
 
@@ -57,19 +57,14 @@
 
 (defun translate-negative-relation (form flag)
   ;Translates a negated relation form.
-;  (if (gethash (car (second form)) (ww-get 'relations))
     (ecase flag
       ((pre ante) `(not ,(translate-std-relation (second form) flag)))
       (eff `(push (list 'not ,(translate-list (second form))) changes))))
-;    (ecase flag
-;      ((pre ante) `(not ,(translate (second form) flag)))
-;      (eff (error "~%Error: Only literals allowed in effect statement negative assertions: ~A~2%"
-;                  form)))))
 
 
 (defun translate-function (form flag)
   ;form consists only of the relation, ?vars, and/or objects.
-  ;Eg, (elevation! ?support)  ;pre
+  ;Eg, (elevation? ?support)  ;pre
   ;    (append (disengage-jammer! ?jammer $target) changes)  ;eff
   (check-type form (satisfies function-formula))
   (let ((fn-call (concatenate 'list (list (car form))
@@ -90,13 +85,13 @@
 (defun translate-binding (form flag)
   ;Translates a binding for a relation form, returns nil if there are no value bindings.
   (declare (ignore flag))
-  (let* ((fluent-indices (get-prop-fluent-indices (second form)))  ;(gethash (car (second form)) (ww-get 'fluent-relation-indices)))
+  (let* ((fluent-indices (get-prop-fluent-indices (second form)))
          (fluentless-atom (ut::remove-at-indexes fluent-indices (second form))))
     `(iter (with vals = ,(translate-simple-atom fluentless-atom))
            (for var in ',(remove-if-not #'$varp (second form)))
            (for val in vals)
            (setf (symbol-value var) val)
-           (finally (return vals)))))
+           (finally (return vals)))))   ;nil = no binding in database
 
 
 (defun translate-followup (form flag)
@@ -212,10 +207,17 @@
                   collect (translate statement flag))))
 
 
-(defun translate-setq (form flag)  ;always need to return t
+(defun translate-setq (form flag)  ;always need to return t, even if nil
   ;Translates a setq statement. Used to assign a variable the value of a function.
   `(progn (setq ,(second form) ,(translate (third form) flag)) t))
 
+
+(defun translate-case (form flag)
+  ;Translates a case statement.
+  `(case ,(second form)
+     ,@(loop for clause in (cddr form)
+           collect `(,(first clause) ,@(loop for statement in (rest clause)
+                                            collect (translate statement flag))))))
 
 (defun translate-print (form flag)
   ;Translates a print statement for debugging actions.
@@ -224,8 +226,9 @@
 
 (defun translate (form flag)  ;test-then distinguishes between if stmt forms
   ;Beginning translator for all forms in actions.
-  (cond ((atom form) form)  ;atom translates as itself
+  (cond ((atom form) form)  ;atom or (always-true) translates as itself
         ((eq form nil) t)  ;if form=nil simply continue processing
+        ((equal form '(always-true)) (translate-simple-atom form))
         ((eq (car form) 'assert) (translate-assertion form flag))
         ((member (car form) '(forsome exists exist)) (translate-existential form flag))  ;specialty first
         ((member (car form) '(forall forevery every)) (translate-universal form flag))
@@ -236,11 +239,12 @@
         ((member (car form) '(finally next)) (translate-followup form flag))
         ((eq (car form) 'commit) (translate-commit form flag))
         ((eq (car form) 'setq) (translate-setq form flag))
+        ((eq (car form) 'case) (translate-case form flag))
         ((eq (car form) 'print) (translate-print form flag))
         ;((eq (car form) 'set-objective-value) (translate-set-objective-value form flag))
-        ((and (eq (car form) 'not) (gethash (caadr form) (ww-get 'relations))) (translate-negative-relation form flag))
-        ((member (car form) (ww-get 'connectives)) (translate-connective form flag))
-        ((or (gethash (car form) (ww-get 'relations)) (gethash (car form) (ww-get 'static-relations))) (translate-std-relation form flag))
+        ((and (eq (car form) 'not) (gethash (caadr form) *relations*)) (translate-negative-relation form flag))
+        ((member (car form) *connectives*) (translate-connective form flag))
+        ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*)) (translate-std-relation form flag))
         ((member (car form) (append *query-names* *update-names*)) (translate-function form flag))
         ((fboundp (car form)) form)   ;any lisp function
         (t (translate-function form flag))))

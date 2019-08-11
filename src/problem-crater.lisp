@@ -12,6 +12,8 @@
 
 (ww-set 'solution-type 'min-time)
 
+(ww-set 'tree-or-graph 'tree)
+
 
 (define-types
   myself      (me)

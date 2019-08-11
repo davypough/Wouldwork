@@ -70,23 +70,22 @@
                 (setq $target-z $z2)
                 (empty? $target-x $target-y $target-z))))
   (?peg1 peg ($x1 $y1 $z1) fluent ?peg2 peg
-   ($x2 $y2 $z2) fluent)
-  (assert ;(not (loc ?peg1 $x1 $y1 $z1))
-          (not (loc ?peg2 $x2 $y2 $z2))
+    ($x2 $y2 $z2) fluent)
+  (assert (not (loc ?peg2 $x2 $y2 $z2))
           (loc ?peg1 $target-x $target-y $target-z)))
 
 
 (progn (format t "~&Initializing database...~%")
-  (loop with pegs = (gethash 'peg (ww-get 'types))
+  (loop with pegs = (gethash 'peg *types*)
     for ?x from 1 to *N*
     do (loop with max = (1+ (- *N* ?x))
            for ?y from 1 to max
            for ?z from max downto 1
            unless (and (= ?x 1) (= ?y 1) (= ?z *N*))
-           ;(ww-get 'db) is the name of the initial database
+           ;*db* is the name of the initial database
            ;update is the function that asserts a proposition
            ;into the database
-           do (update (ww-get 'db) `(loc ,(pop pegs) ,?x ,?y ,?z)))))
+           do (update *db* `(loc ,(pop pegs) ,?x ,?y ,?z)))))
 
 
 (define-goal  ;only one peg left
