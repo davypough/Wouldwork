@@ -40,7 +40,7 @@
 
 (defun translate-proposition (form)
   ;Distinguishes fluent from non-fluent propositions.
-  (if (get-prop-fluent-indices form)  ;(gethash (car form) *fluent-relation-indices))
+  (if (get-prop-fluent-indices form)
     (translate-fluent-atom form)
     (translate-simple-atom form)))
 
@@ -88,7 +88,7 @@
   (let* ((fluent-indices (get-prop-fluent-indices (second form)))
          (fluentless-atom (ut::remove-at-indexes fluent-indices (second form))))
     `(iter (with vals = ,(translate-simple-atom fluentless-atom))
-           (for var in ',(remove-if-not #'$varp (second form)))
+           (for var in ',(get-prop-fluents (second form)))  ; ',(remove-if-not #'$varp (second form)))
            (for val in vals)
            (setf (symbol-value var) val)
            (finally (return vals)))))   ;nil = no binding in database
@@ -120,11 +120,11 @@
   ;In eff, it asserts form for the first instantiation of the vars, and then exits.
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types) (dissect-parameters parameters)
+    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types)))))
+                                (ut::regroup-by-index (type-instantiations types restriction)))))
         `(some (lambda ,vars
                  ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))
@@ -138,11 +138,11 @@
   ;In eff, it asserts form for every instantiation of the vars.
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types) (dissect-parameters parameters)
+    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types)))))
+                                (ut::regroup-by-index (type-instantiations types restriction)))))
         `(every (lambda ,vars
                   ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))
@@ -155,11 +155,11 @@
   ;It can be used to do something for all instances of its variables.
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types) (dissect-parameters parameters)
+    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types)))))
+                                (ut::regroup-by-index (type-instantiations types restriction)))))
         `(mapcar (lambda ,vars
                    ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))
@@ -211,6 +211,13 @@
   ;Translates a setq statement. Used to assign a variable the value of a function.
   `(progn (setq ,(second form) ,(translate (third form) flag)) t))
 
+#|
+(defun translate-msetq (form flag)
+  ;Translates a multi-setq statement.
+  `(progn ,@(loop for var in (second form)
+                for val in (translate (third form) flag)
+                  collect (list 'setq var val))))
+|#
 
 (defun translate-case (form flag)
   ;Translates a case statement.
@@ -241,7 +248,7 @@
         ((eq (car form) 'setq) (translate-setq form flag))
         ((eq (car form) 'case) (translate-case form flag))
         ((eq (car form) 'print) (translate-print form flag))
-        ;((eq (car form) 'set-objective-value) (translate-set-objective-value form flag))
+        ((eq (car form) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote) (translate (eval form) flag))
         ((and (eq (car form) 'not) (gethash (caadr form) *relations*)) (translate-negative-relation form flag))
         ((member (car form) *connectives*) (translate-connective form flag))
         ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*)) (translate-std-relation form flag))

@@ -114,8 +114,11 @@
 ;;;;;;;;;;;;;;;;;;;; Search Parameters ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-;(define-global-fixnum *count* 0
-;  "Counter for debugging thread iterations (shared).")
+(define-global-fixnum *solution-count* 0
+  "Holds the total number of solutions found so far (shared).")
+
+(define-global-fixnum *num-idle-threads* 0
+  "Holds the number of currently idle threads (shared).")
 
 (define-global-fixnum *total-states-processed* 0
   "Count of states either newly generated, updated, or regenerated while searching (shared).")
@@ -125,9 +128,6 @@
 
 (define-global-fixnum *program-cycles* 0
   "Count of complete cycles of searching (shared).")
-
-(define-global-fixnum *num-idle-threads* 0
-  "Holds the number of currently idle threads (shared).")
 
 (define-global-fixnum *max-depth-explored* 0
   "Keeps track of the maximum depth reached so far during the search (shared).")
@@ -199,6 +199,7 @@
   (setf *max-depth-explored* 0)
   (setf *num-idle-threads* 0)
   (setf *solutions* nil)
+  (setf *solution-count* 0)
   (setf *search-tree* nil)
   (if (> *num-parallel-threads* 0)
     ;(with-open-stream (*standard-output* (make-broadcast-stream)) ;ignore *standard-output*
@@ -441,6 +442,8 @@
         for state in succ-states
         if (and (goal state) (not kill))
           do (ecase (ww-get 'solution-type)
+               (count  ;count solution, but don't save it
+                 (increment-global-fixnum *solution-count*))
                (min-length  ;no other goals will be found after first???
                  (register-solution current-node state)
                  (setq kill t))
@@ -672,12 +675,14 @@
     (first
       (format t "~2%Search ended with first solution found." ))
     (exhausted
-      (format t "~2%Search process completed normally,")
+      (format t "~2%Search process completed normally.")
       (ecase (ww-get 'solution-type)
+        (count
+          (format t "~2%Found ~:D solutions." *solution-count*))
         (every
-          (format t "~%examining every state up to the depth cutoff."))
+          (format t "~2%Examined every state up to the depth cutoff."))
         ((min-length min-time max-value min-value)
-          (format t "~%examining only worthwhile states up to the depth cutoff.")))))
+          (format t "~2%Examined only worthwhile states up to the depth cutoff.")))))
   (format t "~2%Depth cutoff = ~:D" (ww-get 'depth-cutoff))
   (format t "~2%Maximum depth explored = ~:D" *max-depth-explored*)
   (format t "~2%Total states processed = ~:D" *total-states-processed*)
@@ -685,7 +690,7 @@
   (format t "~2%Program cycles (state expansions) = ~:D" *program-cycles*)
   (format t "~2%Average branching factor = ~F" *average-branching-factor*)
   (format t "~2%Start state:~%~A" (list-database (problem-state-idb *start-state*)))
-  (format t "~2%Goal:~%~A" (get '*goal* 'formula))
+  (format t "~2%Goal:~%~A~2%" (get '*goal* 'formula))
   (if *solutions*
     (let* ((shallowest-depth (reduce #'min *solutions* :key #'solution-depth))
            (shallowest-depth-solution (find shallowest-depth *solutions* :key #'solution-depth))
@@ -726,7 +731,8 @@
             (progn (format t "~2%Duration of a minimum time solution = ~:D" minimum-time)
                    (format t "~2%A minimum time solution path from start state to goal state:~%")
                    (printout-solution minimum-time-solution))))))
-    (format t "~2%No goals recorded.~2%"))
+    (unless (eq (ww-get 'solution-type) 'count)
+      (format t "~2%No solutions found.~2%")))
   (search-tree-debugging))
 
 

@@ -312,7 +312,7 @@
 
 (define-action connect-to-2-terminus  ;using held connector
     .5
-  ((?terminus1 ?terminus2) terminus)
+  (combinations (?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))

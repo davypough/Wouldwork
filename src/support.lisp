@@ -168,6 +168,16 @@
     (delete-proposition (second literal) db)
     (add-proposition literal db)))
 
+#|
+(defun update2 (literal)
+  (if (eq (car literal) 'not)
+    (if (gethash (cadr literal) *relations*)
+      (delete-proposition (second literal) *db*)
+      (delete-proposition (second literal) *static-db*))
+    (if (gethash (car literal) *relations*)
+      (add-proposition literal *db*)
+      (add-proposition literal *static-db*))))
+|#
 
 (defun commit1 (db literal)
   (when-debug>= 4
@@ -311,18 +321,25 @@
       else collect type))
 
 
-(defun type-instantiations (symbol-types)
+(defun type-instantiations (symbol-types &optional restriction)
   ;Returns lists of possible variable instantiations for a list of (only) type symbols.
-  (when symbol-types   ;(remove 'fluent symbol-types))
+  ;May restrict symbol types to combinations or dot-products.
+  (when symbol-types
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (item)
                                 (gethash item *types*))
                               nonfluent-types)))
       (when (member nil instances)
         (return-from type-instantiations nil))
-      (let* ((product-instances (apply #'alexandria:map-product 'list instances))
-             (set-instances (get-set-instances nonfluent-types product-instances)))
-        (or set-instances (make-list (length nonfluent-types) :initial-element nil))))))
+      (if (eq restriction 'dot-products)
+        (apply #'mapcar #'list instances)
+        (let* ((product-instances (apply #'alexandria:map-product 'list instances))
+               (set-instances (get-set-instances nonfluent-types product-instances)))
+          (if (eq restriction 'combinations)
+            (or (delete-duplicates set-instances :test #'alexandria:set-equal)
+                (make-list (length nonfluent-types) :initial-element nil))
+            (or set-instances
+                (make-list (length nonfluent-types) :initial-element nil))))))))
 
 
 (defun get-set-instances (symbol-types product-instances)
@@ -353,8 +370,14 @@
 
 (defun dissect-parameters (parameter-list)
   ;Returns a list of primitive parameter variables and types.
-  (destructuring-bind (variables types) (ut::segregate-plist (expand-into-plist parameter-list))
-    (list variables (consolidate-types types))))
+  (let ((restriction (case (car parameter-list)
+                       (combinations 'combinations)
+                       (dot-products 'dot-products))))
+    (destructuring-bind (variables types)
+        (ut::segregate-plist (expand-into-plist (if restriction
+                                                  (cdr parameter-list)
+                                                  parameter-list)))
+      (list variables (consolidate-types types) restriction))))
 
 
 (defun duplicate-db-entry-test (predicate object db)

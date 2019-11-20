@@ -227,10 +227,10 @@
 (defun create-action (name duration pre-params precondition eff-params effect)
   (check-type name symbol)
   (check-type duration real)
-  (destructuring-bind (pre-param-?vars pre-types) (dissect-parameters pre-params)
+  (destructuring-bind (pre-param-?vars pre-types restriction) (dissect-parameters pre-params)
     (check-type pre-param-?vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
-    (destructuring-bind (eff-param-vars eff-types) (dissect-parameters eff-params)
+    (destructuring-bind (eff-param-vars eff-types *) (dissect-parameters eff-params)
       (check-type eff-param-vars (satisfies list-of-variables))
       (check-type eff-types (satisfies list-of-parameter-types))
       (let* ((pre-$vars (delete-duplicates (get-all-vars #'$varp precondition) :from-end t))
@@ -249,7 +249,7 @@
                        :duration duration
                        :precondition-variables (append pre-param-?vars pre-$vars)
                        :precondition-types pre-types
-                       :precondition-instantiations (or (type-instantiations pre-types) '(nil))
+                       :precondition-instantiations (or (type-instantiations pre-types restriction) '(nil))
                        :precondition-lits nil
                        :precondition-lambda `(lambda (state ,@pre-param-?vars)
                                                (let ,pre-$vars
@@ -276,20 +276,24 @@
 
 
 
-(defmacro define-init (&rest propositions)
-  `(install-init ',propositions))
+(defmacro define-init (&rest literals)
+  `(install-init ',literals))
 
 
-(defun install-init (propositions)
-  (declare (hash-table *static-db*))
+(defun install-init (literals)
+  (declare (hash-table *relations* *db* *static-db*))
   (format t "Creating initial propositional database...~%")
-  (dolist (proposition propositions)
-    ;(check-type proposition (satisfies proposition))
-    (if (gethash (car proposition) *relations*)
-      (add-proposition proposition *db*)  ;dynamic database
-      (add-proposition proposition *static-db*)))
-; (add-proposition '(always-true) *static-db*)
-  t)
+  (dolist (literal literals)
+    ;(check-type literal (satisfies literal))
+    (when (eq (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
+      (setq literal (eval literal)))
+    (if (eq (car literal) 'not)
+      (if (gethash (caadr literal) *relations*)
+        (delete-proposition (second literal) *db*)
+        (delete-proposition (second literal) *static-db*))
+      (if (gethash (car literal) *relations*)
+        (add-proposition literal *db*)
+        (add-proposition literal *static-db*)))))
 
 
 (defmacro define-goal (form)

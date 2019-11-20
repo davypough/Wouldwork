@@ -97,7 +97,7 @@
 
 
 (define-init
-  (capacity knapsack1 *max-knapsack-weight*)
+  `(capacity knapsack1 ,*max-knapsack-weight*)
   (load knapsack1 0)
   (worth knapsack1 0))
 
