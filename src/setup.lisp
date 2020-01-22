@@ -76,8 +76,8 @@
 
 (defmacro when-debug>= (n &rest expressions)
   "Inserts debugging expressions when *debug* >= n."
-  (when (>= *debug* n)
-    `(progn ,@expressions)))
+  `(when (>= *debug* ,n)
+     (progn ,@expressions)))
 
 
 (defun setup ()
@@ -113,7 +113,7 @@
 (defun display-parameter-settings ()
   (format t "~%Current parameter settings:")
   (ut::prt (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type) (ww-get 'depth-cutoff)
-           *num-parallel-threads* *debug*)
+           (ww-get 'progress-reporting-interval) *num-parallel-threads* *debug*)
   (terpri))
 
 

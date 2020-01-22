@@ -673,7 +673,8 @@
             (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type))
   (ecase condition
     (first
-      (format t "~2%Search ended with first solution found." ))
+      (when *solutions*
+        (format t "~2%Search ended with first solution found." )))
     (exhausted
       (format t "~2%Search process completed normally.")
       (ecase (ww-get 'solution-type)
