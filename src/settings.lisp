@@ -40,7 +40,7 @@
   ;Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.
     (setf (gethash 'solution-type settings) 'first)
   ;Print progress during search after each multiple n of states examined.
-    (setf (gethash 'progress-reporting-interval settings) 1000000)
+    (setf (gethash 'progress-reporting-interval settings) 100000)
   ;The max possible number of steps to consider toward any goal.
   ;Negative or 0 means no cutoff, value set in problem.lisp.
     (setf (gethash 'depth-cutoff settings) 10)
