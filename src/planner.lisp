@@ -82,8 +82,8 @@
       (with-slots (name iprecondition precondition-variables precondition-types
                         precondition-instantiations ieffect)
           action
-        (if (equal precondition-instantiations '(nil))
-          (when-debug>= 4 (format t "~&~A - skipping" name))  ;get next action
+        ;(if (equal precondition-instantiations '(nil))
+          ;(when-debug>= 4 (format t "~&~A - skipping" name))  ;get next action
           (let (pre-results db-updates)  ;process this action
             (when-debug>= 4 (format t "~&~A" name))
             (setf pre-results
@@ -92,8 +92,11 @@
                 precondition-instantiations))
             (when-debug>= 5
               (let ((*package* (find-package :ww)))
-                (ut::prt precondition-types precondition-variables pre-results)))
-            (alexandria:deletef pre-results nil)  ;OK
+                (ut::prt precondition-types precondition-variables
+                         precondition-instantiations pre-results)))
+            (when precondition-variables
+              (alexandria:deletef pre-results nil))  ;all nils -> nil
+            ;(setf pre-results '(nil))
             (setf db-updates  ;returns list of update structures
               (mapcar (lambda (pre-result)
                         (apply ieffect state pre-result))
@@ -112,7 +115,7 @@
             (when-debug>= 4
               (let ((*package* (find-package :ww)))
                 (ut::prt db-updates)))
-            (alexandria:appendf children (get-new-states state action db-updates))))))
+            (alexandria:appendf children (get-new-states state action db-updates)))))
     (nreverse children)))
 
 

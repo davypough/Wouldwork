@@ -6,6 +6,17 @@
 (in-package :ut)
 
 
+(set-pprint-dispatch '(array * (* *))
+  (lambda (stream array)
+    "User friendly printout for a state representation containing a 2D array."
+    (declare (simple-array array))
+    (loop for i below (first (array-dimensions array)) do
+          (format stream "~%    ")
+          (loop for j below (second (array-dimensions array)) do
+                (let ((cell (aref array i j)))
+                  (format stream "~A" cell))))))
+
+
 (defmacro if-it (form then &optional else)
   "Binds the variable 'it' to the result of evaluating the form,
    which can then be used subsequently in the then or else clauses."
@@ -184,14 +195,12 @@
              table)
     (setf alist (sort alist #'string< :key (ecase sort-by (key #'car) (value #'cdr))))
     (loop for (key . value) in alist
-        do (format t "~&~A ->~10T ~A~%" key value)))
-  table)
+        do (format t "~&~A ->~10T ~A~%" key value))))
 
 
 (defmethod show ((fn function) &rest rest)
   (declare (ignore rest))
-  (format t "~&~A~%" (function-lambda-expression fn))
-  fn)
+  (format t "~&~A~%" (function-lambda-expression fn)))
 
 
 (defmethod show ((lst list) &rest rest)
@@ -199,15 +208,13 @@
   (format t "~&(")
   (dolist (item lst)
     (show item))
-  (format t ")")
-  lst)
+  (format t ")"))
 
 
 (defmethod show ((object t) &rest rest)
   "Prints any basic lisp object."
   (declare (ignore rest))
-  (format t "~&~S~%" object)
-  object)
+  (format t "~&~S~%" object))
 
 
 (defun print-ht (table) 

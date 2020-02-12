@@ -1,11 +1,12 @@
 ;;;; Filename: problem-triangle.lisp
 
 
-;;; Problem specification for triangle peg problem with peg-count.
+;;; Problem specification for triangle peg problem
+;;; with peg-count.
 
-;;; The peg board holes have coordinates measured inward 
-;;; from each of the triangle's sides: left ($x), right ($y),
-;;; bottom ($z) varying from 1 to *N*.
+;;; The peg board holes have coordinates measured 
+;;; from the triangle's right (row) and top (col) sides,
+;;; from 1 to *N*.
 
 
 (in-package :ww)  ;required
@@ -13,8 +14,6 @@
 (ww-set 'problem 'triangle)
 
 (ww-set 'solution-type 'first)
-
-(ww-set 'depth-cutoff 13)
 
 (ww-set 'tree-or-graph 'tree)
 
@@ -25,56 +24,135 @@
 (define-types
   peg (compute (loop for i from 1  ;peg1, peg2, ...
                      below (/ (* *N* (1+ *N*)) 2)
-                 collect (intern (format nil "PEG~D" i)))))
+                   collect (intern (format nil "PEG~D" i))))
+  row (compute (loop for i below *N*
+                   collect i))
+  col (compute (loop for i below *N*
+                   collect i)))
 
 
 (define-dynamic-relations
-    (loc peg $x $y $z)  ;location of a peg
-    (peg-count $integer))  ;pegs remaining on the board
+    (loc peg $row $col)      ;location of a peg
+    (contents row col $peg)  ;peg contents at a location
+    (peg-count $integer))    ;pegs remaining on the board
 
 
-(define-query empty? (?x ?y ?z)  ;empty hole location
-  (not (exists (?p peg)
-         (loc ?p ?x ?y ?z))))
-
-
-(define-action jump
+(define-action jump+row  ;jump in the +row direction
     1
-  ((?peg1 ?peg2) peg)
-  (and (bind (loc ?peg1 $x1 $y1 $z1))
-       (bind (loc ?peg2 $x2 $y2 $z2))
-       (or (and (= $x1 $x2)  ;aligned in x direction
-                (<= $y2 (- *N* $x2))
-                (> $y2 1)
-                (setq $delta (- $y2 $y1))
-                (= (abs $delta) 1)
-                (setq $target-x $x2)
-                (setq $target-y (+ $y2 $delta))
-                (setq $target-z (- $z2 $delta))
-                (empty? $target-x $target-y $target-z))
-           (and (= $y1 $y2)  ;aligned in y direction
-                (<= $z2 (- *N* $y2))
-                (> $z2 1)
-                (setq $delta (- $z2 $z1))
-                (= (abs $delta) 1)
-                (setq $target-x (- $x2 $delta))
-                (setq $target-y $y2)
-                (setq $target-z (+ $z2 $delta))
-                (empty? $target-x $target-y $target-z))
-           (and (= $z1 $z2)  ;aligned in z direction
-                (<= $x2 (- *N* $z2))
-                (> $x2 1)
-                (setq $delta (- $x2 $x1))
-                (= (abs $delta) 1)
-                (setq $target-x (+ $x2 $delta))
-                (setq $target-y (- $y2 $delta))
-                (setq $target-z $z2)
-                (empty? $target-x $target-y $target-z)))
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (<= $r (- *N* 3))
+       (setq $r+1 (1+ $r))
+       (bind (contents $r+1 $c $adj-peg))
+       (setq $r+2 (+ $r 2))
+       (not (bind (contents $r+2 $c $any-peg)))
        (bind (peg-count $peg-count)))
-  (?peg1 peg ($x1 $y1 $z1) fluent
-   ?peg2 peg ($x2 $y2 $z2) fluent)
-  (assert (not (loc ?peg2 $x2 $y2 $z2))
-          (loc ?peg1 $target-x $target-y $target-z)
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r+2 $c)
+          (contents $r+2 $c ?peg)
+          (not (loc $adj-peg $r+1 $c))
+          (not (contents $r+1 $c $adj-peg))
+          (peg-count (1- $peg-count))))
+
+
+(define-action jump-row  ;jump in the -row direction
+    1
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (>= $r (+ $c 2))
+       (setq $r-1 (1- $r))
+       (bind (contents $r-1 $c $adj-peg))
+       (setq $r-2 (- $r 2))
+       (not (bind (contents $r-2 $c $any-peg)))
+       (bind (peg-count $peg-count)))
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r-2 $c)
+          (contents $r-2 $c ?peg)
+          (not (loc $adj-peg $r-1 $c))
+          (not (contents $r-1 $c $adj-peg))
+          (peg-count (1- $peg-count))))
+
+
+(define-action jump+col  ;jump in the +col direction
+    1
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (>= $r (+ $c 2))
+       (setq $c+1 (1+ $c))
+       (bind (contents $r $c+1 $adj-peg))
+       (setq $c+2 (+ $c 2))
+       (not (bind (contents $r $c+2 $any-peg)))
+       (bind (peg-count $peg-count)))
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r $c+2)
+          (contents $r $c+2 ?peg)
+          (not (loc $adj-peg $r $c+1))
+          (not (contents $r $c+1 $adj-peg))
+          (peg-count (1- $peg-count))))
+
+
+(define-action jump-col  ;jump in the -col direction
+    1
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (>= $c 2)
+       (setq $c-1 (1- $c))
+       (bind (contents $r $c-1 $adj-peg))
+       (setq $c-2 (- $c 2))
+       (not (bind (contents $r $c-2 $any-peg)))
+       (bind (peg-count $peg-count)))
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r $c-2)
+          (contents $r $c-2 ?peg)
+          (not (loc $adj-peg $r $c-1))
+          (not (contents $r $c-1 $adj-peg))
+          (peg-count (1- $peg-count))))
+
+
+
+(define-action jump+diag  ;jump in the +diagonal direction
+    1
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (<= $r (- *N* 3))
+       (setq $r+1 (1+ $r))
+       (setq $c+1 (1+ $c))
+       (bind (contents $r+1 $c+1 $adj-peg))
+       (setq $r+2 (+ $r 2))
+       (setq $c+2 (+ $c 2))
+       (not (bind (contents $r+2 $c+2 $any-peg)))
+       (bind (peg-count $peg-count)))
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r+2 $c+2)
+          (contents $r+2 $c+2 ?peg)
+          (not (loc $adj-peg $r+1 $c+1))
+          (not (contents $r+1 $c+1 $adj-peg))
+          (peg-count (1- $peg-count))))
+
+
+(define-action jump-diag  ;jump in the -diagonal direction
+    1
+  (?peg peg)
+  (and (bind (loc ?peg $r $c))
+       (>= $c 2)
+       (setq $r-1 (1- $r))
+       (setq $c-1 (1- $c))
+       (bind (contents $r-1 $c-1 $adj-peg))
+       (setq $r-2 (- $r 2))
+       (setq $c-2 (- $c 2))
+       (not (bind (contents $r-2 $c-2 $any-peg)))
+       (bind (peg-count $peg-count)))
+  (($r $c) fluent)
+  (assert (not (contents $r $c ?peg))
+          (loc ?peg $r-2 $c-2)
+          (contents $r-2 $c-2 ?peg)
+          (not (loc $adj-peg $r-1 $c-1))
+          (not (contents $r-1 $c-1 $adj-peg))
           (peg-count (1- $peg-count))))
 
 
@@ -84,12 +162,12 @@
     ;update is the function that asserts a proposition
     ;into the database
     initially (update *db* `(peg-count ,(length pegs)))
-    for ?x from 1 to *N*
-    do (loop with max = (1+ (- *N* ?x))
-           for ?y from 1 to max
-           for ?z from max downto 1
-           unless (and (= ?x 1) (= ?y 1) (= ?z *N*))
-           do (update *db* `(loc ,(pop pegs) ,?x ,?y ,?z)))))
+    for row from 1 below *N*
+      do (loop for col from 0 below *N*
+            when (<= col row)
+             do (let ((peg (pop pegs)))
+                  (update *db* `(loc ,peg ,row ,col))
+                  (update *db* `(contents ,row ,col ,peg))))))
 
 
 (define-goal  ;only one peg left

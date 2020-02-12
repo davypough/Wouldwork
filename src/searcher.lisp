@@ -373,7 +373,8 @@
 ;   Stop at specified node, for debugging <action name> <instantiations> <depth>
 ;   (probe current-node 'wait '(1 area4) 11)
 ;   (probe current-node 'pour '(jug4 9 jug2 0 4) 5)
-;   (probe current-node 'move '(AREA5 AREA4) 3)
+;   (probe current-node 'move '(AREA2 AREA4) 10)
+;   (probe current-node 'CONNECT-TO-2-TERMINUS '(CONNECTOR1 RECEIVER1 TRANSMITTER1 AREA5) 2)
     
     (when (null current-node)
       (return-from df-bnb1 nil))  ;open is empty
@@ -643,7 +644,7 @@
     (when (and (eql (problem-state-name state) name)
                (equal (problem-state-instantiations state) instantiations)
                (= (node-depth current-node) depth))
-    (ww-set 'debug 5))))
+    (setq *debug* 5))))
 
 
 ;;; Solution Processing Functions
@@ -793,6 +794,7 @@
   (when (= 0 (mod *total-states-processed* (ww-get 'progress-reporting-interval)))
     (format t "~%total states processed so far = ~:D"  ;, unique states encountered = ~:D"
       *total-states-processed*)  ; *unique-states-encountered-graph*)
+    (format t "~%ht count: ~:D    ht size: ~:D" (hash-table-count *closed*) (hash-table-size *closed*))
     (format t "~%average branching factor = ~F~%" *average-branching-factor*)))
 
 

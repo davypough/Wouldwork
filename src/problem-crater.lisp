@@ -10,7 +10,7 @@
 
 (ww-set 'depth-cutoff 9)
 
-(ww-set 'solution-type 'min-time)
+(ww-set 'solution-type 'first)
 
 (ww-set 'tree-or-graph 'tree)
 
@@ -387,20 +387,6 @@
   ($area1 fluent ?area2 area)
   (assert (loc me ?area2)))
 
-
-#|  ;doubles time to find 1st solution
-(define-action double-move
-    2
-  ((?area2 ?area3) area)
-  (and (bind (loc me $area1))
-       (different $area1 ?area2)
-       (different $area1 ?area3)
-       (passable? $area1 ?area2)
-       (passable? ?area2 ?area3))
-  ($area1 fluent (?area2 ?area3) area)
-  (assert (not (loc me $area1))
-          (loc me ?area3)))
-|#
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
            

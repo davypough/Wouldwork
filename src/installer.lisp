@@ -249,7 +249,8 @@
                        :duration duration
                        :precondition-variables (append pre-param-?vars pre-$vars)
                        :precondition-types pre-types
-                       :precondition-instantiations (or (type-instantiations pre-types restriction) '(nil))
+                       :precondition-instantiations (or (type-instantiations pre-types restriction)
+                                                        '(nil))
                        :precondition-lits nil
                        :precondition-lambda `(lambda (state ,@pre-param-?vars)
                                                (let ,pre-$vars

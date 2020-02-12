@@ -63,6 +63,7 @@
            (forall (?s switch)
              (and (controls ?s ?threat)
                   (green ?s))))))
+
 (define-query safe? (?area)
   (not (exists (?g gun)
          (and (watches ?g ?area)

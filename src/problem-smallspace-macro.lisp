@@ -1,18 +1,19 @@
-;;;; Filename: problem-smallspace.lisp
+;;;; Filename: problem-smallspace-macro.lisp
 
 
 ;;; Problem specification (in Talos Principle)
 ;;; for the small space problem in Road to Gehenna sigil 
 ;;; dome. First leg to area8.
+;;; Double-move macro action added to problem-smallspace.lisp
 
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'smallspace)
+(ww-set 'problem 'smallspace-macro)
 
 (ww-set 'depth-cutoff 19)
 
-(ww-set 'solution-type 'first)
+(ww-set 'solution-type 'min-length)
 
 
 (define-types
@@ -448,8 +449,19 @@
        (different $area1 ?area2)
        (passable? $area1 ?area2))
   ($area1 fluent ?area2 area)
-  (assert ;(not (loc me $area1))  ;don't remove first
-          (loc me ?area2)))
+  (assert (loc me ?area2)))
+
+
+(define-action double-move
+    2
+  ((?area2 ?area3) area)
+  (and (bind (loc me $area1))
+       (different $area1 ?area2)
+       (different $area1 ?area3)
+       (passable? $area1 ?area2)
+       (passable? ?area2 ?area3))
+  ($area1 fluent (?area2 ?area3) area)
+  (assert (loc me ?area3)))
 
 
 ;;;; INITIALIZATION ;;;;

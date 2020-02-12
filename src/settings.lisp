@@ -34,7 +34,7 @@
 (let ((settings (make-hash-table :test #'eq)))
   ;Estimated maximum number of unique states to be explored during search.
   ;If this number is exceeded, hash table resizing may slow graph search.
-    (setf (gethash 'max-states settings) 10000)
+    (setf (gethash 'max-states settings) 100000)
   ;Name of the current problem, assigned in problem.lisp by user.
     (setf (gethash 'problem settings) 'unspecified)
   ;Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.
@@ -43,7 +43,7 @@
     (setf (gethash 'progress-reporting-interval settings) 100000)
   ;The max possible number of steps to consider toward any goal.
   ;Negative or 0 means no cutoff, value set in problem.lisp.
-    (setf (gethash 'depth-cutoff settings) 10)
+    (setf (gethash 'depth-cutoff settings) 0)
   ;Whether there are repeated states (graph) or not (tree); try both
     (setf (gethash 'tree-or-graph settings) 'graph)
   (defun ww-get (var)  ;accessors for ww settings
