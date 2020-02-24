@@ -77,7 +77,11 @@
 (defmacro when-debug>= (n &rest expressions)
   "Inserts debugging expressions when *debug* >= n."
   `(when (>= *debug* ,n)
-     (progn ,@expressions)))
+     ,@expressions))
+
+
+(defun break-here ()
+  (break))
 
 
 (defun setup ()
