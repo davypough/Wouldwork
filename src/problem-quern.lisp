@@ -1,4 +1,4 @@
-;;;; Filename: problem-4jugs.lisp
+;;;; Filename: problem-4jugs-quern.lisp
 
 ;;; Fluent problem specification for pouring between 4 jugs
 ;;; to achieve 10 gal.
@@ -6,9 +6,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem '4jugs)
+(ww-set 'problem '4jugs-quern)
 
-(ww-set 'depth-cutoff 6)  ;set to expected # steps to goal
+(ww-set 'depth-cutoff 8)  ;set to expected # steps to goal
 
 (ww-set 'solution-type 'min-length)
 
@@ -53,4 +53,4 @@
 
 
 (define-goal
-    (contents jug3 10))
+    (contents jug3 6))

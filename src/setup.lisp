@@ -5,6 +5,15 @@
 (in-package :ww)
 
 
+(defmacro define-global-fixnum (var-name val-form &optional doc-string)
+  `(progn (declaim (fixnum ,var-name))
+     ,(if (> *num-parallel-threads* 0)
+       #+sbcl (when (not (boundp var-name))
+                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
+       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
+        `(defparameter ,var-name ,val-form ,doc-string))))
+
+
 (defstruct (problem-state (:print-function print-problem-state) (:copier nil))
   ;A planning state including the current propositional database
   (name nil :type symbol)  ;last action executed

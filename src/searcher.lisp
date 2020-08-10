@@ -48,13 +48,13 @@
 ;;;;;;;;;;;;;;;;;;; Shared Global Update Macros ;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
-(defmacro define-global-fixnum (var-name val-form &optional doc-string)
-  `(progn (declaim (fixnum ,var-name))
-     ,(if (> *num-parallel-threads* 0)
-       #+sbcl (when (not (boundp var-name))
-                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
-       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
-        `(defparameter ,var-name ,val-form ,doc-string))))
+;(defmacro define-global-fixnum (var-name val-form &optional doc-string)
+;  `(progn (declaim (fixnum ,var-name))
+;     ,(if (> *num-parallel-threads* 0)
+;       #+sbcl (when (not (boundp var-name))
+;                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
+;       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
+;        `(defparameter ,var-name ,val-form ,doc-string))))
 
 
 (defmacro increment-global-fixnum (var-name &optional (delta-form 1))
@@ -367,7 +367,7 @@
   (when-debug>= 3
     (format t "~&-----------------------------------------------------------~%"))
   (when-debug>= 5
-    (break))
+    (break-here))
   (let ((current-node (get-next-node-for-expansion open)))
      
 ;   Stop at specified node, for debugging <action name> <instantiations> <depth>

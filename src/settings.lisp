@@ -4,7 +4,8 @@
 
 (in-package :ww)
 
-
+;Note: It is necessary to close & reopen the lisp environment after
+;      changing from nonparallel to parallel, or parallel to nonparallel.
 (defparameter *num-parallel-threads* 0
   "Set the number of parallel threads to use.
     0 means no parallelism (ie, serial processing)

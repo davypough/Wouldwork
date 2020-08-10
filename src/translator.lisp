@@ -66,7 +66,7 @@
   ;form consists only of the relation, ?vars, and/or objects.
   ;Eg, (elevation? ?support)  ;pre
   ;    (append (disengage-jammer! ?jammer $target) changes)  ;eff
-  (check-type form (satisfies function-formula))
+;  (check-type form (satisfies function-formula))
   (let ((fn-call (concatenate 'list (list (car form))
                                     (list 'state)
                                     (mapcar (lambda (arg)
