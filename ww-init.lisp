@@ -1,5 +1,6 @@
 (setq *default-pathname-defaults*
         #p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\")
+        ;#p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\archive\\212-update triangle-new coords\\")
 
 #-quicklisp
 (let ((quicklisp-init (merge-pathnames "quicklisp\\setup.lisp" (user-homedir-pathname))))
@@ -30,7 +31,7 @@
 
 (defpackage :wouldwork-pkg
   (:use :cl :iterate)
-  (:shadowing-import-from :iterate :sum)
+  (:shadowing-import-from :iterate)   ; :sum)
   (:nicknames :ww))
 
 ;;;;;;;;;;;;;; Testing ;;;;;;;;;;;;;;;;;
@@ -38,10 +39,10 @@
 (in-package :ww)
 
 (defparameter *problem-files*
-  '("problem-blocks.lisp" "problem-boxes.lisp" "problem-2jugs.lisp" "problem-4jugs.lisp"
-    "problem-4queens.lisp" "problem-8queens.lisp" "problem-captjohn.lisp" "problem-crater.lisp"
-    "problem-hanoi.lisp" "problem-knap4.lisp" "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp"
-    "problem-smallspace2.lisp" "problem-triangle.lisp" "problem-u2.lisp"))
+  '("problem-blocks.lisp" "problem-boxes.lisp" "problem-4jugs.lisp" "problem-quern.lisp"
+    "problem-8queens.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
+    "problem-hanoi.lisp" "problem-knap4.lisp" "problem-sentry.lisp" "problem-smallspace.lisp"
+    "problem-triangle.lisp" "problem-u2.lisp" "problem-socrates1.lisp" "problem-socrates2.lisp"))
 
 (declaim (ftype (function () t) solve))
 
