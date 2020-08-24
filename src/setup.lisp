@@ -56,12 +56,14 @@
 (defstruct action
   (name nil :type symbol)
   (duration 0.0 :type real)
+  (precondition-params nil :type list)
   (precondition-variables nil :type list)
   (precondition-types nil :type list)
-  (precondition-instantiations nil :type list)
+  (dynamic nil :type (or nil t))  ;a dynamic rule requires recomputation of params on each execution
+  (precondition-instantiations nil :type (or list symbol))
   (precondition-lambda nil :type list)
   (iprecondition-lambda nil :type list)
-  (precondition-lits nil :type list)  ;used for backward search
+  (precondition-lits nil :type list)  ;used for backward search (not implemented)
   (iprecondition #'identity :type function)
   (effect-variables nil :type list)
   (effect-types nil :type list)
@@ -97,8 +99,6 @@
   (format t "Setting up...~%")
   (setf *query-names* (nreverse *query-names*))
   (setf *update-names* (nreverse *update-names*))
-  (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
-  (setf *min-action-duration* (reduce #'min *actions* :key #'action-duration))
   (setf *init-actions* (nreverse *init-actions*))
 ;  (dolist (action *actions*)  ;future backchaining
 ;    (install-precondition-lits action)
@@ -120,6 +120,16 @@
   (format t "Converting propositions to integers...~%")
   (do-integer-conversion)  ;allows integer hashtable db lookups, adds start-state idb
   (convert-ilambdas-to-fns) ;and compile
+  (if *actions*
+    (progn (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
+           (setf *min-action-duration* (reduce #'min *actions* :key #'action-duration)))
+    (format t "~%NOTE: There are no defined actions.~%"))
+  (iter (for action in *actions*)
+        (setf (action-precondition-instantiations action)  ;previous setting, nil or restriction
+              (or (type-instantiations (action-precondition-types action)
+                                       (action-precondition-instantiations action)
+                                       *start-state*)
+                  '(nil))))
   (display-parameter-settings))
 
 

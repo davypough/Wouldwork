@@ -321,13 +321,16 @@
       else collect type))
 
 
-(defun type-instantiations (symbol-types &optional restriction)
+(defun type-instantiations (symbol-types restriction state)
   ;Returns lists of possible variable instantiations for a list of (only) type symbols.
   ;May restrict symbol types to combinations or dot-products.
   (when symbol-types
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (item)
-                                (gethash item *types*))
+                                (let ((name (car (gethash item *types*))))
+                                  (if (member name *query-names*)
+                                    (funcall name state)
+                                    (gethash item *types*))))
                               nonfluent-types)))
       (when (member nil instances)
         (return-from type-instantiations nil))

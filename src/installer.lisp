@@ -247,10 +247,16 @@
              (action (make-action
                        :name name
                        :duration duration
+                       :precondition-params pre-params
                        :precondition-variables (append pre-param-?vars pre-$vars)
                        :precondition-types pre-types
-                       :precondition-instantiations (or (type-instantiations pre-types restriction)
-                                                        '(nil))
+                       :dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
+                                                                            (gethash typ *types*))
+                                                                           pre-types))
+                                              *query-names*)
+                       :precondition-instantiations restriction
+                                                         ; (or (type-instantiations pre-types restriction *start-state*)
+                                                         ;     '(nil))
                        :precondition-lits nil
                        :precondition-lambda `(lambda (state ,@pre-param-?vars)
                                                (let ,pre-$vars

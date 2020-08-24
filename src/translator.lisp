@@ -124,7 +124,7 @@
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types restriction)))))
+                                (ut::regroup-by-index (type-instantiations types restriction nil)))))
         `(some (lambda ,vars
                  ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))
@@ -142,7 +142,7 @@
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types restriction)))))
+                                (ut::regroup-by-index (type-instantiations types restriction nil)))))
         `(every (lambda ,vars
                   ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))
@@ -159,7 +159,24 @@
       (check-type vars (satisfies list-of-?variables))
       (check-type types (satisfies list-of-parameter-types))
       (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types restriction)))))
+                                (ut::regroup-by-index (type-instantiations types restriction nil)))))
+        `(mapcar (lambda ,vars
+                   ,(translate body flag))
+               ,@(if (equal quoted-instances '('nil))
+                   (make-list (length types) :initial-element nil)
+                   quoted-instances))))))
+
+
+(defun translate-doitems (form flag)
+  ;The doitems form is a generator for a set of variable instances. It always returns true. 
+  ;It can be used to do something for all instances of a list of variables.
+  (let ((parameters (second form))
+        (body (third form)))
+    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
+      (check-type vars (satisfies list-of-?variables))
+      (check-type types (satisfies list-of-parameter-types))
+      (let ((quoted-instances (ut::quote-elements
+                                (ut::regroup-by-index (type-instantiations types restriction nil)))))
         `(mapcar (lambda ,vars
                    ,(translate body flag))
                ,@(if (equal quoted-instances '('nil))

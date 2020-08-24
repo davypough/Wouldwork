@@ -374,7 +374,7 @@
 ;   (probe current-node 'wait '(1 area4) 11)
 ;   (probe current-node 'pour '(jug4 9 jug2 0 4) 5)
 ;   (probe current-node 'move '(AREA2 AREA4) 10)
-;   (probe current-node 'CONNECT-TO-2-TERMINUS '(CONNECTOR1 RECEIVER1 TRANSMITTER1 AREA5) 2)
+;   (probe current-node 'pickup-connector '(CONNECTOR3 AREA8) 4)
     
     (when (null current-node)
       (return-from df-bnb1 nil))  ;open is empty

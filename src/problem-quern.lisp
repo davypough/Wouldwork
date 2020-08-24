@@ -1,4 +1,4 @@
-;;;; Filename: problem-4jugs-quern.lisp
+;;;; Filename: problem-quern.lisp
 
 ;;; Fluent problem specification for pouring between 4 jugs
 ;;; to achieve 10 gal.

@@ -50,9 +50,17 @@
   (when *init-actions*
     (format t "~&Adding init-action propositions to initial database...~%"))
   (dolist (init-action *init-actions*)
-    (with-slots (name precondition-instantiations precondition-lambda effect-lambda)
+    (with-slots (name precondition-params precondition-types precondition-instantiations
+                      precondition-lambda effect-lambda)
         init-action
       (format t "~&~A...~%" name)
+      (setf precondition-instantiations
+            (or (type-instantiations precondition-types
+                                     (case (car precondition-params)
+                                       (combinations 'combinations)
+                                       (dot-products 'dot-products))
+                                     state)
+                     '(nil)))
       (let ((pre-fn (compile nil precondition-lambda))
             (eff-fn (compile nil effect-lambda)))
         (mapcar
@@ -79,11 +87,19 @@
   (declare (problem-state state))
   (let (children)
     (dolist (action *actions*)
-      (with-slots (name iprecondition precondition-variables precondition-types
-                        precondition-instantiations ieffect)
+      (with-slots (name iprecondition precondition-params precondition-variables
+                   precondition-types dynamic precondition-instantiations ieffect)
           action
         ;(if (equal precondition-instantiations '(nil))
           ;(when-debug>= 4 (format t "~&~A - skipping" name))  ;get next action
+          (when dynamic
+            (setf precondition-instantiations
+                 (or (type-instantiations precondition-types
+                                          (case (car precondition-params)
+                                            (combinations 'combinations)
+                                            (dot-products 'dot-products))
+                                          state)
+                     '(nil))))
           (let (pre-results db-updates)  ;process this action
             (when-debug>= 4 (format t "~&~A" name))
             (setf pre-results
@@ -108,9 +124,9 @@
                                          (alexandria:set-equal upd1 upd2 :test #'equal))
                                  :key #'update-changes))
             ;(ut::prt 'second db-updates)
-            ;(setf db-updates
-            ;  (iter (for db-update in db-updates)
-            ;        (collect (order-propositions db-update))))
+            (setf db-updates
+              (iter (for db-update in db-updates)
+                    (collect (order-propositions db-update))))
             ;(ut::prt 'third db-updates)
             (when-debug>= 4
               (let ((*package* (find-package :ww)))
