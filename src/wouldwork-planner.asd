@@ -20,6 +20,7 @@
     (:file "converter" :depends-on ("support"))
     (:file "planner" :depends-on ("installer" "happenings"))
     (:file "searcher" :depends-on ("hstack" "planner"))
+    (:file "frequencies" :depends-on ("searcher"))
     (:file "problem" :depends-on ("searcher"))
    ))
 

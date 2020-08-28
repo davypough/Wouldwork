@@ -12,7 +12,7 @@
     1 means use one parallel thread
       (in addition to parallel management, effectively serial, useful for debugging)
     2 means two or more parallel processing threads
-    N up to the number of available CPU threads -1")
+    N up to the number of available CPU threads")
 (declaim (fixnum *num-parallel-threads*))
 
 

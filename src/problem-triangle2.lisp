@@ -1,7 +1,8 @@
-;;;; Filename: problem-triangle.lisp
+;;;; Filename: problem-triangle2.lisp    stop at last pair
 
 
 ;;; Problem specification for triangle peg problem with peg-count.
+;;; Two adjacent pegs remaining.
 
 ;;; The peg board positions have coordinates measured 
 ;;; from the triangle's right diagonal (/) and left diagonal (\)
@@ -23,7 +24,7 @@
 (ww-set 'tree-or-graph 'tree)        (ww-set 'progress-reporting-interval 10000000)
 
 
-(defparameter *N* 5)  ;the number of pegs on a side
+(defparameter *N* 6)  ;the number of pegs on a side
 
 (defparameter *holes* '((1 1)))  ;coordinates of the initial holes
 
@@ -47,69 +48,32 @@
 
 
 (define-query get-current-pegs? ()
-  (do (bind (remaining-pegs $pegs))
-      $pegs))
-
-#|
-(define-action jump-left-up-right-up  ;double jump 1
-   1
-  (?peg current-peg)
-  (and (bind (loc ?peg $r $c))
-       (>= $r 3)
-       (>= $c 3)
-       (setq $r-1 (- $r 1))
-       (bind (contents $r-1 $c $adj-peg1))
-       (setq $r-2 (- $r 2))
-       (not (bind (contents $r-2 $c $any-peg)))
-       (setq $c-1 (1- $c))
-       (bind (contents $r-2 $c-1 $adj-peg2))
-       (setq $c-2 (- $c 2))
-       (not (bind (contents $r-2 $c-2 $any-peg)))
-       (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
-  (assert (not (contents $r $c ?peg))
-          (loc ?peg $r-2 $c-2)
-          (contents $r-2 $c-2 ?peg)
-          (not (loc $adj-peg1 $r-1 $c))
-          (not (contents $r-1 $c $adj-peg1))
-          (not (loc $adj-peg2 $r-2 $c-1))
-          (not (contents $r-2 $c-1 $adj-peg2))
-          (peg-count (- $peg-count 2))
-          (remaining-pegs (remove-if #'(lambda (peg)
-                                         (eq peg (or $adj-peg1 $adj-peg2)))
-                                     $pegs))))
+  (do (bind (remaining-pegs $rem-pegs))
+      $rem-pegs))
 
 
-(define-action jump-right-up-left-up  ;double jump 2
-   1
-  (?peg current-peg)
-  (and (bind (loc ?peg $r $c))
-       (>= $r 3)
-       (>= $c 3)
-       (setq $c-1 (- $c 1))
-       (bind (contents $r $c-1 $adj-peg1))
-       (setq $c-2 (- $c 2))
-       (not (bind (contents $r $c-2 $any-peg)))
-       (setq $r-1 (1- $r))
-       (bind (contents $r-1 $c-2 $adj-peg2))
-       (setq $r-2 (- $r 2))
-       (not (bind (contents $r-2 $c-2 $any-peg)))
-       (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
-  (assert (not (contents $r $c ?peg))
-          (loc ?peg $r-2 $c-2)
-          (contents $r-2 $c-2 ?peg)
-          (not (loc $adj-peg1 $r $c-1))
-          (not (contents $r $c-1 $adj-peg1))
-          (not (loc $adj-peg2 $r-1 $c-2))
-          (not (contents $r-1 $c-2 $adj-peg2))
-          (peg-count (- $peg-count 2))
-          (remaining-pegs (remove-if #'(lambda (peg)
-                                         (eq peg (or $adj-peg1 $adj-peg2)))
-                                     $pegs))))
-|#
+(define-query two-adj-pegs? ()
+  (exists (?peg current-peg)
+    (and (bind (loc ?peg $r $c))
+         (or (and (setq $c-1 (1- $c))
+                  (>= $c-1 1)
+                  (bind (contents $r $c-1 $any-peg)))
+             (and (setq $c+1 (1+ $c))
+                  (<= $c+1 *N*)
+                  (bind (contents $r $c+1 $any-peg)))
+             (and (setq $r-1 (1- $r))
+                  (>= $r-1 1)
+                  (bind (contents $r-1 $c $any-peg)))
+             (and (setq $r+1 (1+ $r))
+                  (<= $r+1 *N*)
+                  (bind (contents $r+1 $c $any-peg)))
+             (and (<= $r+1 *N*)
+                  (>= $c-1 1)
+                  (bind (contents $r+1 $c-1 $any-peg)))
+             (and (>= $r-1 1)
+                  (<= $c+1 *N*)
+                  (bind (contents $r-1 $c+1 $any-peg)))))))
+
 
 (define-action jump-left-down  ;jump downward in the / diagonal direction
     1
@@ -121,7 +85,7 @@
        (setq $c+2 (+ $c 2))
        (not (bind (contents $r $c+2 $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))  ;from
           (loc ?peg $r $c+2)           ;to
@@ -129,7 +93,7 @@
           (not (loc $adj-peg $r $c+1))       ;remove adj peg
           (not (contents $r $c+1 $adj-peg))  ;remove adj peg
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
 
 
 (define-action jump-right-up  ;jump upward in the / diagonal direction
@@ -142,7 +106,7 @@
        (setq $c-2 (- $c 2))
        (not (bind (contents $r $c-2 $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r $c-2)
@@ -150,7 +114,7 @@
           (not (loc $adj-peg $r $c-1))
           (not (contents $r $c-1 $adj-peg))
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
 
 
 (define-action jump-right-down  ;jump downward in the \ diagonal direction
@@ -163,7 +127,7 @@
        (setq $r+2 (+ $r 2))
        (not (bind (contents $r+2 $c $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r+2 $c)
@@ -171,7 +135,7 @@
           (not (loc $adj-peg $r+1 $c))
           (not (contents $r+1 $c $adj-peg))
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
 
 
 (define-action jump-left-up  ;jump upward in the \ diagonal direction
@@ -184,7 +148,7 @@
        (setq $r-2 (- $r 2))
        (not (bind (contents $r-2 $c $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r-2 $c)
@@ -192,7 +156,7 @@
           (not (loc $adj-peg $r-1 $c))
           (not (contents $r-1 $c $adj-peg))
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
 
 
 
@@ -208,7 +172,7 @@
        (setq $c-2 (- $c 2))
        (not (bind (contents $r+2 $c-2 $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r+2 $c-2)
@@ -216,7 +180,7 @@
           (not (loc $adj-peg $r+1 $c-1))
           (not (contents $r+1 $c-1 $adj-peg))
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
 
 
 (define-action jump-left-horiz  ;jump leftward in the horizontal direction
@@ -231,7 +195,7 @@
        (setq $c+2 (+ $c 2))
        (not (bind (contents $r-2 $c+2 $any-peg)))
        (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
+       (bind (remaining-pegs $rem-pegs)))
   (($r $c) fluent)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r-2 $c+2)
@@ -239,7 +203,7 @@
           (not (loc $adj-peg $r-1 $c+1))
           (not (contents $r-1 $c+1 $adj-peg))
           (peg-count (1- $peg-count))
-          (remaining-pegs (remove $adj-peg $pegs))))
+          (remaining-pegs (remove $adj-peg $rem-pegs))))
       
 
 (progn (format t "~&Initializing database...~%")
@@ -258,4 +222,5 @@
 
 
 (define-goal  ;only one peg left
-  (peg-count 1))
+  (and (peg-count 2)
+       (two-adj-pegs?)))
