@@ -204,10 +204,10 @@
 
 (define-update activate-receiver! (?receiver)
   (if (not (active ?receiver))
-    (do (assert (active ?receiver))
+    (do (active ?receiver)
         (doall (?g gate)  
           (if (controls ?receiver ?g)
-            (assert (not (active ?g))))))))
+            (not (active ?g)))))))
 
 
 (define-update deactivate-receiver! (?receiver)
@@ -225,11 +225,11 @@
 
 
 (define-update disengage-jammer! (?jammer ?target)
-  (assert (not (jamming ?jammer ?target))
-          (if (not (exists (?j jammer)
-                     (and (different ?j ?jammer)
-                          (jamming ?j ?target))))
-            (assert (active ?target)))))
+  (do (not (jamming ?jammer ?target))
+      (if (not (exists (?j jammer)
+                 (and (different ?j ?jammer)
+                      (jamming ?j ?target))))
+        (active ?target))))
 
 
 (define-update chain-activate! (?connector)
@@ -297,12 +297,12 @@
        (bind (loc me $area))
        (connectable? $area ?terminus))
   ($cargo fluent ?terminus terminus ($area $hue) fluent)
-  (do (assert (not (holding me $cargo))
-              (loc $cargo $area)
-              (connecting $cargo ?terminus))
-      (if (and (source? ?terminus)
-               (bind (color ?terminus $hue)))
-        (assert (active $cargo)
+  (assert (not (holding me $cargo))
+          (loc $cargo $area)
+          (connecting $cargo ?terminus)
+          (if (and (source? ?terminus)
+                   (bind (color ?terminus $hue)))
+            (do (active $cargo)
                 (color $cargo $hue)))))
 
 
@@ -315,12 +315,12 @@
        (connectable? $area ?terminus1)
        (connectable? $area ?terminus2))
   ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
-  (do (assert (not (holding me $cargo))
-              (loc $cargo $area)
-              (connecting $cargo ?terminus1)
-              (connecting $cargo ?terminus2))
-      (next (activate-connector-if! $cargo))
-      (finally (chain-activate! $cargo))))
+  (assert (not (holding me $cargo))
+          (loc $cargo $area)
+          (connecting $cargo ?terminus1)
+          (connecting $cargo ?terminus2)
+          (next (activate-connector-if! $cargo))
+          (finally (chain-activate! $cargo))))
 
 
 (define-action connect-to-3-terminus  ;using held connector
@@ -333,13 +333,13 @@
        (connectable? $area ?terminus2)
        (connectable? $area ?terminus3))
   ($cargo fluent (?terminus1 ?terminus2 ?terminus3) terminus $area fluent)
-  (do (assert (not (holding me $cargo))
-              (loc $cargo $area)
-              (connecting $cargo ?terminus1)
-              (connecting $cargo ?terminus2)
-              (connecting $cargo ?terminus3))
-      (next (activate-connector-if! $cargo))
-      (finally (chain-activate! $cargo))))
+  (assert (not (holding me $cargo))
+          (loc $cargo $area)
+          (connecting $cargo ?terminus1)
+          (connecting $cargo ?terminus2)
+          (connecting $cargo ?terminus3)
+          (next (activate-connector-if! $cargo))
+          (finally (chain-activate! $cargo))))
 
 
 (define-action jam
@@ -363,10 +363,10 @@
        (bind (loc me $area))
        (loc ?jammer $area))
   (?jammer jammer ($area $target) fluent)
-  (do (assert (holding me ?jammer)
-              (not (loc ?jammer $area)))
-      (if (bind (jamming ?jammer $target))
-        (disengage-jammer! ?jammer $target))))
+  (assert (holding me ?jammer)
+          (not (loc ?jammer $area))
+          (if (bind (jamming ?jammer $target))
+            (disengage-jammer! ?jammer $target))))
 
 
 (define-action pickup-connector
@@ -376,11 +376,11 @@
        (bind (loc me $area))
        (loc ?connector $area))
   (?connector connector $area fluent)
-  (do (assert (holding me ?connector)
-              (not (loc ?connector $area)))
-      (next (deactivate-connector! ?connector))
-      (next (disconnect-connector! ?connector))
-      (finally (deactivate-any-orphans!))))
+  (assert (holding me ?connector)
+          (not (loc ?connector $area))
+          (next (deactivate-connector! ?connector))
+          (next (disconnect-connector! ?connector))
+          (finally (deactivate-any-orphans!))))
 
 
 #|
@@ -426,7 +426,7 @@
 
 (define-init
   ;dynamic
-  (ACTIVE CONNECTOR1) (ACTIVE CONNECTOR2) (ACTIVE GATE1) (ACTIVE GATE3) (ACTIVE GATE4) (ACTIVE RECEIVER2) (COLOR CONNECTOR1 RED)
+ (ACTIVE CONNECTOR1) (ACTIVE CONNECTOR2) (ACTIVE GATE1) (ACTIVE GATE3) (ACTIVE GATE4) (ACTIVE RECEIVER2) (COLOR CONNECTOR1 RED)
  (COLOR CONNECTOR2 RED) (COLOR RECEIVER1 BLUE) (COLOR RECEIVER2 RED) (COLOR RECEIVER3 BLUE) (COLOR RECEIVER4 RED) (COLOR TRANSMITTER1 BLUE)
  (COLOR TRANSMITTER2 RED) (CONNECTING CONNECTOR1 CONNECTOR2) (CONNECTING CONNECTOR1 RECEIVER1) (CONNECTING CONNECTOR1 RECEIVER2)
  (CONNECTING CONNECTOR2 CONNECTOR1) (CONNECTING CONNECTOR2 TRANSMITTER2) (CONNECTING RECEIVER1 CONNECTOR1)

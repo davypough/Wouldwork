@@ -83,9 +83,9 @@
   (?object object ($row $col) fluent)
   (assert (loc ?object $row $col)
           (if (= $col 3)
-            (assert (next-col 1)
-                    (next-row (1+ $row)))
-            (assert (next-col (1+ $col))))))
+            (do (next-col 1)
+                (next-row (1+ $row)))
+            (next-col (1+ $col)))))
 
 
 (define-init

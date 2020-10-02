@@ -65,19 +65,20 @@
             (eff-fn (compile nil effect-lambda)))
         (mapcar
           (lambda (pinsts)
-            (let (pre-result db-update)
+            (let (pre-result db-updates)
               (when (setf pre-result (apply pre-fn state pinsts))
-                (setf db-update 
+                (setf db-updates 
                   ;(order-propositions 
                   (apply eff-fn state pre-result))
-                (loop for literal in (update-changes db-update)
-                    do (if (eq (car literal) 'not)
-                         (if (gethash (caadr literal) *relations*)
-                           (delete-proposition (second literal) *db*)  ;dynamic relation
-                           (delete-proposition (second literal) *static-db*))
-                         (if (gethash (car literal) *relations*)
-                           (add-proposition literal *db*)  ;dynamic relation
-                           (add-proposition literal *static-db*)))))))
+                (dolist (db-update db-updates)
+                  (loop for literal in (update-changes db-update)
+                      do (if (eq (car literal) 'not)
+                           (if (gethash (caadr literal) *relations*)
+                             (delete-proposition (second literal) *db*)  ;dynamic relation
+                             (delete-proposition (second literal) *static-db*))
+                           (if (gethash (car literal) *relations*)
+                             (add-proposition literal *db*)  ;dynamic relation
+                             (add-proposition literal *static-db*))))))))
           precondition-instantiations)))))
 
 
@@ -85,6 +86,7 @@
   ;Returns the legitimate children of a state. Checks precondition of each action,
   ;and if true, then updates db according to action effects.
   (declare (problem-state state))
+  ;(when (not (eql-pegs? state)) (setq *debug* 5) (ut::prt state))
   (let (children)
     (dolist (action *actions*)
       (with-slots (name iprecondition precondition-params precondition-variables
@@ -112,27 +114,28 @@
                          precondition-instantiations pre-results)))
             (when precondition-variables
               (alexandria:deletef pre-results nil))  ;all nils -> nil
-            ;(setf pre-results '(nil))
             (setf db-updates  ;returns list of update structures
-              (mapcar (lambda (pre-result)
+              (mapcan (lambda (pre-result)
                         (apply ieffect state pre-result))
-                pre-results))
-            ;(ut::prt 'first db-updates)
+                      pre-results))
+            ;(ut::prt db-updates)
             (setf db-updates 
               (delete-duplicates db-updates
                                  :test (lambda (upd1 upd2)
                                          (alexandria:set-equal upd1 upd2 :test #'equal))
                                  :key #'update-changes))
-            ;(ut::prt 'second db-updates)
             (setf db-updates
               (iter (for db-update in db-updates)
                     (collect (order-propositions db-update))))
-            ;(ut::prt 'third db-updates)
             (when-debug>= 4
               (let ((*package* (find-package :ww)))
                 (ut::prt db-updates)))
-            (alexandria:appendf children (get-new-states state action db-updates)))))
-    (nreverse children)))
+            (let ((child-states (get-new-states state action db-updates)))
+              (when (fboundp 'heuristic?)
+                (dolist (child-state child-states)
+                  (setf (problem-state-heuristic child-state) (funcall 'heuristic? child-state))))
+              (alexandria:appendf children child-states)))))
+    (nreverse children)))  ;put first action child states first
 
 
 (defun get-new-states (state action db-updates)
@@ -217,18 +220,18 @@
        :idb (revise new-state-idb (update-changes db-update))))))
 
 
-(defun bounded (state)
+;(defun bounded (state)
   ;Determines whether to bound (prune) a state
   ;eg, when (<= (problem-state-value state)
   ;             (problem-state-value *best-state*))
-  (declare (problem-state state) (ignore state))
-  nil)
+;  (declare (problem-state state) (ignore state))
+;  nil)
 
 
 (defun expand (state)
   ;Returns the new states.
   (declare (problem-state state))   
-  (when (not (bounded state))        ;don't expand state further if bounded 
+  (unless (and (fboundp 'prune?) (funcall 'prune? state)) ;don't expand state further if bounded 
     (generate-children state)))
 
 

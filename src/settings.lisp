@@ -64,6 +64,11 @@
   ;5 - display full nodes + break after each expansion cycle
 
 
+(fmakunbound 'heuristic?)
+(fmakunbound 'prune?)
+(fmakunbound 'get-best-relaxed-value?)
+
+
 (defparameter *types* (make-hash-table :test #'eq)
   "Table of all types.")
 (declaim (hash-table *types*))
@@ -151,3 +156,11 @@
 (defparameter *last-object-index* 0
   "Last index of object constants seen so far in propositions.")
 (declaim (fixnum *last-object-index*))
+
+(defparameter *solutions* nil)
+  ;The resulting list of solutions found.
+(declaim (list *solutions*))
+
+(defvar *state-codes* (make-hash-table)
+  "Holding place for integer state codes in bi-directional search.")
+(declaim (hash-table *state-codes*))

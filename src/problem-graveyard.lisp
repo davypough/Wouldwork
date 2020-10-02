@@ -24,14 +24,14 @@
 
 (define-update toggle! (?graveA ?graveB ?graveC)
   (do (if (on ?graveA)
-        (assert (not (on ?graveA)))
-        (assert (on ?graveA)))
+        (not (on ?graveA))
+        (on ?graveA))
       (if (on ?graveB)
-        (assert (not (on ?graveB)))
-        (assert (on ?graveB)))
+        (not (on ?graveB))
+        (on ?graveB))
       (if (on ?graveC)
-        (assert (not (on ?graveC)))
-        (assert (on ?graveC)))))
+        (not (on ?graveC))
+        (on ?graveC))))
 
 
 (define-action move  ;toggle a grave light on or off
@@ -39,19 +39,19 @@
   (?grave grave)
   (always-true)
   (?grave grave)
-  (case ?grave
-    (grave1 (toggle! 'grave1 'grave3 'grave10))
-    (grave2 (toggle! 'grave2 'grave5 'grave7))
-    (grave3 (toggle! 'grave2 'grave3 'grave10))
-    (grave4 (toggle! 'grave1 'grave4 'grave11))
-    (grave5 (toggle! 'grave5 'grave9 'grave12))
-    (grave6 (toggle! 'grave4 'grave6 'grave8))
-    (grave7 (toggle! 'grave6 'grave7 'grave11))
-    (grave8 (toggle! 'grave1 'grave8 'grave9))
-    (grave9 (toggle! 'grave3 'grave9 'grave12))
-    (grave10 (toggle! 'grave2 'grave7 'grave10))
-    (grave11 (toggle! 'grave4 'grave6 'grave11))
-    (grave12 (toggle! 'grave5 'grave8 'grave12))))
+  (assert (case ?grave
+            (grave1 (toggle! 'grave1 'grave3 'grave10))
+            (grave2 (toggle! 'grave2 'grave5 'grave7))
+            (grave3 (toggle! 'grave2 'grave3 'grave10))
+            (grave4 (toggle! 'grave1 'grave4 'grave11))
+            (grave5 (toggle! 'grave5 'grave9 'grave12))
+            (grave6 (toggle! 'grave4 'grave6 'grave8))
+            (grave7 (toggle! 'grave6 'grave7 'grave11))
+            (grave8 (toggle! 'grave1 'grave8 'grave9))
+            (grave9 (toggle! 'grave3 'grave9 'grave12))
+            (grave10 (toggle! 'grave2 'grave7 'grave10))
+            (grave11 (toggle! 'grave4 'grave6 'grave11))
+            (grave12 (toggle! 'grave5 'grave8 'grave12)))))
 
 
 (define-init

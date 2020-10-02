@@ -77,9 +77,7 @@
                                             (cdr form)))))
     (ecase flag
       ((pre ante) `,fn-call)
-      (eff `(let ((new-changes ,fn-call))
-              (when new-changes
-                (setf changes (append changes new-changes))))))))
+      (eff `(setf changes (nconc changes ,fn-call))))))
 
 
 (defun translate-binding (form flag)
@@ -87,13 +85,11 @@
   (declare (ignore flag))
   (let* ((fluent-indices (get-prop-fluent-indices (second form)))
          (fluentless-atom (ut::remove-at-indexes fluent-indices (second form))))
-    `(iter (with vals = ,(translate-simple-atom fluentless-atom))
-           (for var in ',(get-prop-fluents (second form)))  ; ',(remove-if-not #'$varp (second form)))
-           (for val in vals)
-           (setf (symbol-value var) val)
-           (finally (return vals)))))   ;nil = no binding in database
-
-
+    `(let ((values ,(translate-simple-atom fluentless-atom)))
+       (when values
+         (mapc #'set ',(get-prop-fluents (second form)) values)))))
+         
+         
 (defun translate-followup (form flag)
   ;Processes a trigger followup form for next & finally.
   (declare (ignore flag))
@@ -208,23 +204,6 @@
                       (make-list (length types) :initial-element nil)
                       quoted-instances)))))))
 
-#|
-(defun translate-doitems (form flag)
-  ;The doitems form is a generator for a set of variable instances. It always returns true. 
-  ;It can be used to do something for all instances of a list of variables.
-  (let ((parameters (second form))
-        (body (third form)))
-    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-?variables))
-      (check-type types (satisfies list-of-parameter-types))
-      (let ((quoted-instances (ut::quote-elements
-                                (ut::regroup-by-index (type-instantiations types restriction nil)))))
-        `(mapcar (lambda ,vars
-                   ,(translate body flag))
-               ,@(if (equal quoted-instances '('nil))
-                   (make-list (length types) :initial-element nil)
-                   quoted-instances))))))
-|#
 
 (defun translate-connective (form flag)
   ;Translates and, or statements.
@@ -253,11 +232,20 @@
 
 (defun translate-assertion (form flag)
   ;Translates an assert relation.
+  (declare (special eff-args eff-param-vars db-updates followups))
   (ecase flag
     ((pre ante) (error "~%Error: ASSERT statement not allowed as a precondion~%~A~%"
                        form))
-    (eff `(progn ,@(loop for statement in (cdr form)
-                         collect (translate statement flag))))))
+    (eff `(let (changes)
+            ,@(loop for statement in (cdr form)
+                    collect (translate statement flag))
+            (push (make-update :changes changes
+                               :value ,(if (member '$objective-value eff-args)
+                                         '$objective-value
+                                         0.0)
+                               :instantiations (list ,@eff-param-vars)
+                               :followups (nreverse followups))
+                  db-updates)))))
 
 
 (defun translate-do (form flag)
@@ -310,7 +298,8 @@
         ((eq (car form) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote) (translate (eval form) flag))
         ((and (eq (car form) 'not) (gethash (caadr form) *relations*)) (translate-negative-relation form flag))
         ((member (car form) *connectives*) (translate-connective form flag))
-        ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*)) (translate-std-relation form flag))
+        ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*))
+         (translate-std-relation form flag))
         ((member (car form) (append *query-names* *update-names*)) (translate-function form flag))
         ((fboundp (car form)) form)   ;any lisp function
         (t (translate-function form flag))))

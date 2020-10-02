@@ -21,6 +21,7 @@
   (happenings nil :type list)  ;(object (next-index next-time next-direction)) pairs
   (time 0.0 :type real)
   (value 0.0 :type real)
+  (heuristic 0.0 :type real)
   (idb (make-hash-table) :type hash-table))  ;integer hash table of propositions
 
 
@@ -34,12 +35,13 @@
 
 (defun print-problem-state (state stream depth)
   (declare (problem-state state) (ignore depth))
-  (format stream "<~A ~A ~A ~A ~A~%~A>"
+  (format stream "<~A ~A ~A ~A ~A ~A~%~A>"
       (problem-state-name state)
       (problem-state-instantiations state)
       (problem-state-happenings state)
       (problem-state-time state)
       (problem-state-value state)
+      (problem-state-heuristic state)
       (list-database (problem-state-idb state))))
 
 
@@ -50,6 +52,7 @@
    :happenings (copy-tree (problem-state-happenings state))
    :time (problem-state-time state)
    :value (problem-state-value state)
+   :heuristic (problem-state-heuristic state)
    :idb (alexandria:copy-hash-table (problem-state-idb state))))
 
 
@@ -63,7 +66,7 @@
   (precondition-instantiations nil :type (or list symbol))
   (precondition-lambda nil :type list)
   (iprecondition-lambda nil :type list)
-  (precondition-lits nil :type list)  ;used for backward search (not implemented)
+  ;(precondition-lits nil :type list)  ;used for backward search (not implemented)
   (iprecondition #'identity :type function)
   (effect-variables nil :type list)
   (effect-types nil :type list)
@@ -78,6 +81,14 @@
   (value 0.0 :type real)
   (instantiations nil :type list)
   (followups nil :type list))  ;next & finally followup function calls
+
+
+(defstruct solution  ;the record of a solution
+  (depth 0 :type fixnum)
+  (time 0.0 :type real)
+  (value 0.0 :type real)
+  (path nil :type list)
+  (goal (make-problem-state) :type problem-state))
 
 
 (defparameter *start-state* (make-problem-state)
@@ -103,7 +114,7 @@
 ;  (dolist (action *actions*)  ;future backchaining
 ;    (install-precondition-lits action)
 ;    (install-effect-adds action))
-  (with-slots (name instantiations happenings time value) *start-state*
+  (with-slots (name instantiations happenings time value heuristic) *start-state*
     (let ((first-event-time (loop for object in *happenings* 
                               minimize (car (aref (get object :events) 0)))))
       (setf happenings (loop for object in *happenings* ;property list of happening objects
@@ -111,6 +122,7 @@
                                           (list 0 first-event-time +1))))  ;next (index time direction)
       (setf time 0.0)
       (setf value 0.0)
+      (setf heuristic 0.0)
       (setf instantiations nil)
       (setf name nil)))
   (do-init-action-updates *start-state*)  ;updates db & static-db, but not start-state idb yet
@@ -130,14 +142,40 @@
                                        (action-precondition-instantiations action)
                                        *start-state*)
                   '(nil))))
+   (when (fboundp 'heuristic?)
+    (setf (problem-state-heuristic *start-state*) (funcall 'heuristic? *start-state*)))
   (display-parameter-settings))
 
 
 (defun display-parameter-settings ()
   (format t "~%Current parameter settings:")
-  (ut::prt (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type) (ww-get 'depth-cutoff)
-           (ww-get 'progress-reporting-interval) *num-parallel-threads* *debug*)
+  (ut::prt (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type)
+           (ww-get 'depth-cutoff) (ww-get 'progress-reporting-interval) 
+           *num-parallel-threads* *debug*)
   (terpri))
+  
+  
+(defun delete-actions (&rest names)
+  "Deletes named actions from *actions* at run-time."
+  (setf *actions* (delete-if (lambda (name)
+                               (member name names))
+                             *actions*
+                             :key #'action-name)))
+
+
+(defun get-state-codes ()  ;user calls this after finding backwards *solutions*
+  (format t "~%Working ...~%")
+  (clrhash *state-codes*)
+  (iter (for soln in *solutions*)
+        (for path = (solution-path soln))
+        (for db-props = (list-database (problem-state-idb (solution-goal soln))))
+        (setf (gethash (funcall 'encode-state db-props) *state-codes*) path))
+  *state-codes*)
+
+
+(defun backward-path-exists (state)
+  "Use in forward search goal to check existence of backward path."
+  (gethash (funcall 'encode-state (list-database (problem-state-idb state))) *state-codes*))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Type Specifiers ;;;;;;;;;;;;;;;;;;;;;;

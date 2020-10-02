@@ -32,29 +32,12 @@
   (parent nil :type (or null node)))  ;this node's parent
 
 
-(defstruct solution  ;the record of a solution
-  (depth 0 :type fixnum)
-  (time 0.0 :type real)
-  (value 0.0 :type real)
-  (path nil :type list)
-  (goal (make-problem-state) :type problem-state))
-
-
 #+:sbcl (sb-ext:define-hash-table-test state-equal-p state-equal-p-hash)
 ;Hash stack test for *open*.
 (declaim (function state-equal-p state-equal-p-hash))
 
 
 ;;;;;;;;;;;;;;;;;;; Shared Global Update Macros ;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-;(defmacro define-global-fixnum (var-name val-form &optional doc-string)
-;  `(progn (declaim (fixnum ,var-name))
-;     ,(if (> *num-parallel-threads* 0)
-;       #+sbcl (when (not (boundp var-name))
-;                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
-;       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
-;        `(defparameter ,var-name ,val-form ,doc-string))))
 
 
 (defmacro increment-global-fixnum (var-name &optional (delta-form 1))
@@ -139,10 +122,6 @@
 (defparameter *search-tree* nil)
   ;DFS search tree for debugging (serial processing only).
 (declaim (list *search-tree*))
-
-(defparameter *solutions* nil)
-  ;The resulting list of solutions found.
-(declaim (list *solutions*))
 
 (defparameter *best-value-so-far* 0.0)
   ;progressively holds the best (min or max) value during search
@@ -233,47 +212,51 @@
   (iter
     (let ((open (lparallel.queue:pop-queue problems)))  ;open is local for this thread
       (increment-global-fixnum *num-idle-threads* -1)
-      (when-debug>= 1
-        (lprt *-* 'entering)
-        (let ((*package* (find-package :hs)))
-          (lprt open)))
+      ;(when-debug>= 1
+      ;  (lprt *-* 'entering)
+      ;  (let ((*package* (find-package :hs)))
+      ;    (lprt open)))
       (when (eq (hs::hstack-keyfn open) #'identity)  ;completion received from process-threads
-        (when-debug>= 1
-          (lprt 'completion))
+        ;(when-debug>= 1
+        ;  (lprt 'completion))
         (increment-global-fixnum *num-idle-threads*)
         (return-from search-parallel))  ;complete & exit this thread
       (iter 
         (when (lparallel.queue:peek-queue done)  ;interrupt this thread when done
-          (when-debug>= 1
-            (lprt 'interrupted))
+          ;(when-debug>= 1
+          ;  (lprt 'interrupted))
           (increment-global-fixnum *num-idle-threads*)
           (return-from search-parallel))  ;exit this thread
         (when (and (not (linear open))
                    (> *num-idle-threads* 0))  ;causes multiple splitting
           (let ((subopen (split-off open)))  ;split open
-            (when-debug>= 1
-              (lprt 'splitting)
-              (let ((*package* (find-package :hs)))
-                (lprt subopen open)))
+            ;(when-debug>= 1
+            ;  (lprt 'splitting)
+            ;  (let ((*package* (find-package :hs)))
+            ;    (lprt subopen open)))
             (lparallel.queue:push-queue subopen problems)))
         (let ((succ-nodes (df-bnb1 open)))  ;work a little more on current problem
           (when (equal succ-nodes '(first))  ;first solution sufficient & found detected
-            (when-debug>= 1
-              (lprt 'signal-first-done))
+            ;(when-debug>= 1
+            ;  (lprt 'signal-first-done))
             (lparallel.queue:push-queue t done)  ;signal all done to process-threads
             (increment-global-fixnum *num-idle-threads*)
             (leave))  ;go back to top and wait for exit signal
           (when (hs::empty-hstack open)
-            (when-debug>= 1
-              (lprt 'exhausted-open))
+            ;(when-debug>= 1
+            ;  (lprt 'exhausted-open))
             (when (= *num-idle-threads* (1- *num-parallel-threads*))  ;all other threads idle
-              (when-debug>= 1
-                (lprt 'signal-exhausted-done))
+              ;(when-debug>= 1
+              ;  (lprt 'signal-exhausted-done))
               (lparallel.queue:push-queue t done))  ;signal all done to process-threads
             (increment-global-fixnum *num-idle-threads*)
             (leave))  ;get next open
-          (when-debug>= 1
-            (lprt 'expanding (length succ-nodes)))
+          ;(when-debug>= 1
+          ;  (lprt 'expanding (length succ-nodes)))
+          (when (fboundp 'heuristic?)
+            (setf succ-nodes (sort succ-nodes #'>
+                                   :key (lambda (node)
+                                          (problem-state-heuristic (node-state node))))))
           (loop for succ-node in succ-nodes
             do (hs::push-hstack succ-node open)))))))
 
@@ -350,8 +333,12 @@
     (when (hs::empty-hstack *open*)
       (leave))  ;terminate *open*
     (when succ-nodes
+      (when (fboundp 'heuristic?)
+        (setf succ-nodes (sort succ-nodes #'>
+                               :key (lambda (node)
+                                      (problem-state-heuristic (node-state node))))))
       (loop for succ-node in succ-nodes
-        do (hs::push-hstack succ-node *open*)))))
+        do (hs::push-hstack succ-node *open*)))))  ;push lowest heuristic value last
 
 
 (defun linear (open)
@@ -375,6 +362,7 @@
 ;   (probe current-node 'pour '(jug4 9 jug2 0 4) 5)
 ;   (probe current-node 'move '(AREA2 AREA4) 10)
 ;   (probe current-node 'pickup-connector '(CONNECTOR3 AREA8) 4)
+;   (probe current-node 'JUMP '(1 3 LD) 4)
     
     (when (null current-node)
       (return-from df-bnb1 nil))  ;open is empty
@@ -427,14 +415,14 @@
 
 
 (defun get-successors (current-node)
-  ;Returns children states of current node (unless same as parent).
+  ;Returns children states of current node.
   (declare (node current-node))
   (let ((states (expand (node-state current-node))))
+    states))
 ;    (ut::sortf states #'(lambda (x y)
 ;                          (declare (ignore y))
 ;                          (not (eq x (problem-state-name (node-state parent)))))
 ;               :key #'problem-state-name)
-    states))
 
 
 (defun process-goals-and-prune (current-node succ-states)
@@ -763,9 +751,14 @@
              :depth state-depth
              :time (problem-state-time goal-state)
              :value (problem-state-value goal-state)
-             :path (append (record-solution-path current-node)
-                           (list (record-move (node-state current-node)
-                                                  goal-state))) ;add final move
+             :path (let ((nominal-path (append (record-solution-path current-node)
+                                               (list (record-move (node-state current-node)
+                                                     goal-state)))))
+                     (if (= (hash-table-count *state-codes*) 0)  ;if in backward search
+                       nominal-path
+                       (append nominal-path 
+                               (reverse (gethash (funcall 'encode-state (list-database (problem-state-idb goal-state)))
+                                                 *state-codes*)))))
              :goal goal-state)))
     (if (> *num-parallel-threads* 0)
       (progn (when-debug>= 1

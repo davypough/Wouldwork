@@ -119,10 +119,10 @@
        (loc ?switch ?area))
   (?switch switch)
   (assert (if (red ?switch)
-            (assert (not (red ?switch))
-                    (green ?switch))
-            (assert (not (green ?switch))
-                    (red ?switch)))))
+            (do (not (red ?switch))
+                (green ?switch))
+            (do (not (green ?switch))
+                (red ?switch)))))
 
 
 (define-action pickup

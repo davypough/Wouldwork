@@ -171,17 +171,19 @@
   (check-type args (satisfies list-of-variables))
   (push `,name *update-names*)
   (setf (get `,name 'formula) body)
-  (ut::if-it (delete-duplicates (set-difference (get-all-vars #'$varp body) args))
-    (setf (get `,name 'fn) `(lambda (state ,@args)
-                                 (let (changes ,@ut::it)
+  (let (eff-args eff-param-vars)
+    (declare (special eff-args eff-param-vars))
+    (ut::if-it (delete-duplicates (set-difference (get-all-vars #'$varp body) args))
+      (setf (get `,name 'fn) `(lambda (state ,@args)
+                                (let (changes db-updates followups ,@ut::it)
                                    ,(when ut::it
-                                      `(declare (special ,@ut::it)))
+                                      `(declare (special ,@ut::it db-updates followups)))
                                    ,(translate body 'eff)
                                    changes)))
-    (setf (get `,name 'fn) `(lambda (state ,@args)
-                                 (let (changes)
+      (setf (get `,name 'fn) `(lambda (state ,@args)
+                                (let (changes)
                                    ,(translate body 'eff)
-                                   changes))))
+                                   changes)))))
   (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
@@ -231,6 +233,7 @@
     (check-type pre-param-?vars (satisfies list-of-?variables))
     (check-type pre-types (satisfies list-of-parameter-types))
     (destructuring-bind (eff-param-vars eff-types *) (dissect-parameters eff-params)
+      (declare (special eff-param-vars))
       (check-type eff-param-vars (satisfies list-of-variables))
       (check-type eff-types (satisfies list-of-parameter-types))
       (let* ((pre-$vars (delete-duplicates (get-all-vars #'$varp precondition) :from-end t))
@@ -255,9 +258,7 @@
                                                                            pre-types))
                                               *query-names*)
                        :precondition-instantiations restriction
-                                                         ; (or (type-instantiations pre-types restriction *start-state*)
-                                                         ;     '(nil))
-                       :precondition-lits nil
+                       ;:precondition-lits nil
                        :precondition-lambda `(lambda (state ,@pre-param-?vars)
                                                (let ,pre-$vars
                                                  (declare (special ,@pre-$vars))
@@ -267,16 +268,12 @@
                        :effect-variables eff-param-vars  ;user listed parameter variables
                        :effect-types eff-types
                        :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
-                                         (let (changes followups ,@eff-extra-$vars)
-                                           (declare (special ,@eff-extra-$vars))
+                                         (let (db-updates followups ,@eff-extra-$vars)
+                                           (declare (special eff-param-vars ,@eff-extra-$vars db-updates followups))
                                            ,(translate effect 'eff)
-                                           (make-update :changes changes
-                                                        :value ,(if (member '$objective-value eff-args)
-                                                                  '$objective-value
-                                                                  0.0)
-                                                        :instantiations (list ,@eff-param-vars)
-                                                        :followups (nreverse followups))))
+                                           db-updates))
                       :effect-adds nil)))
+        (declare (special eff-args eff-param-vars))  ;used in translate in :effect-lambda above
         (fix-if-ignore '(state) (action-precondition-lambda action))
         (fix-if-ignore `(state ,@eff-missing-vars) (action-effect-lambda action))
         action))))

@@ -7,7 +7,7 @@
 
 (in-package :ww)
 
-(defparameter *freq-ht* (make-hash-table))  ;the ht of sequence - count
+(defparameter *freq-ht* (make-hash-table))  ;the ht of action sequences - count
 
 (defun freq (&rest run-lengths)
   "Return the alist of sequences with their respective counts, max first."

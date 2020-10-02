@@ -1,7 +1,7 @@
-;;;; Filename: problem-triangle.lisp
+;;;; Filename: problem-triangle-xy.lisp
 
 
-;;; Problem specification for triangle peg problem with peg-count.
+;;; Basic problem specification for triangle peg problem with peg-count.
 
 ;;; The peg board positions have coordinates measured 
 ;;; from the triangle's right diagonal (/) and left diagonal (\)
@@ -16,11 +16,13 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'triangle)
+(ww-set 'problem 'triangle-xy)
 
 (ww-set 'solution-type 'first)
 
-(ww-set 'tree-or-graph 'tree)        (ww-set 'progress-reporting-interval 10000000)
+(ww-set 'tree-or-graph 'tree)
+
+(ww-set 'progress-reporting-interval 1000000)
 
 
 (defparameter *N* 5)  ;the number of pegs on a side
@@ -50,66 +52,6 @@
   (do (bind (remaining-pegs $pegs))
       $pegs))
 
-#|
-(define-action jump-left-up-right-up  ;double jump 1
-   1
-  (?peg current-peg)
-  (and (bind (loc ?peg $r $c))
-       (>= $r 3)
-       (>= $c 3)
-       (setq $r-1 (- $r 1))
-       (bind (contents $r-1 $c $adj-peg1))
-       (setq $r-2 (- $r 2))
-       (not (bind (contents $r-2 $c $any-peg)))
-       (setq $c-1 (1- $c))
-       (bind (contents $r-2 $c-1 $adj-peg2))
-       (setq $c-2 (- $c 2))
-       (not (bind (contents $r-2 $c-2 $any-peg)))
-       (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
-  (assert (not (contents $r $c ?peg))
-          (loc ?peg $r-2 $c-2)
-          (contents $r-2 $c-2 ?peg)
-          (not (loc $adj-peg1 $r-1 $c))
-          (not (contents $r-1 $c $adj-peg1))
-          (not (loc $adj-peg2 $r-2 $c-1))
-          (not (contents $r-2 $c-1 $adj-peg2))
-          (peg-count (- $peg-count 2))
-          (remaining-pegs (remove-if #'(lambda (peg)
-                                         (eq peg (or $adj-peg1 $adj-peg2)))
-                                     $pegs))))
-
-
-(define-action jump-right-up-left-up  ;double jump 2
-   1
-  (?peg current-peg)
-  (and (bind (loc ?peg $r $c))
-       (>= $r 3)
-       (>= $c 3)
-       (setq $c-1 (- $c 1))
-       (bind (contents $r $c-1 $adj-peg1))
-       (setq $c-2 (- $c 2))
-       (not (bind (contents $r $c-2 $any-peg)))
-       (setq $r-1 (1- $r))
-       (bind (contents $r-1 $c-2 $adj-peg2))
-       (setq $r-2 (- $r 2))
-       (not (bind (contents $r-2 $c-2 $any-peg)))
-       (bind (peg-count $peg-count))
-       (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
-  (assert (not (contents $r $c ?peg))
-          (loc ?peg $r-2 $c-2)
-          (contents $r-2 $c-2 ?peg)
-          (not (loc $adj-peg1 $r $c-1))
-          (not (contents $r $c-1 $adj-peg1))
-          (not (loc $adj-peg2 $r-1 $c-2))
-          (not (contents $r-1 $c-2 $adj-peg2))
-          (peg-count (- $peg-count 2))
-          (remaining-pegs (remove-if #'(lambda (peg)
-                                         (eq peg (or $adj-peg1 $adj-peg2)))
-                                     $pegs))))
-|#
 
 (define-action jump-left-down  ;jump downward in the / diagonal direction
     1

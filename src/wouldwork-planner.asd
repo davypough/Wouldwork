@@ -16,7 +16,7 @@
     (:file "translator" :depends-on ("support"))
     (:file "happenings" :depends-on ("support"))
     (:file "installer" :depends-on ("translator"))
-    (:file "backchain" :depends-on ("installer"))
+    ;(:file "backchain" :depends-on ("installer"))
     (:file "converter" :depends-on ("support"))
     (:file "planner" :depends-on ("installer" "happenings"))
     (:file "searcher" :depends-on ("hstack" "planner"))
