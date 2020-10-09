@@ -1,6 +1,7 @@
 ;;;; Filename: problem-knap4.lisp
 
 ;;; Problem specification for a 4-item knapsack problem.
+;;; Simple brute-force search for small problem.
 
 
 (in-package :ww)  ;required

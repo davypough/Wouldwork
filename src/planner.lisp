@@ -49,7 +49,7 @@
   (declare (problem-state state))
   (when *init-actions*
     (format t "~&Adding init-action propositions to initial database...~%"))
-  (dolist (init-action *init-actions*)
+  (iter (for init-action in *init-actions*)
     (with-slots (name precondition-params precondition-types precondition-instantiations
                       precondition-lambda effect-lambda)
         init-action
@@ -62,24 +62,29 @@
                                      state)
                      '(nil)))
       (let ((pre-fn (compile nil precondition-lambda))
-            (eff-fn (compile nil effect-lambda)))
-        (mapcar
-          (lambda (pinsts)
-            (let (pre-result db-updates)
-              (when (setf pre-result (apply pre-fn state pinsts))
-                (setf db-updates 
-                  ;(order-propositions 
-                  (apply eff-fn state pre-result))
-                (dolist (db-update db-updates)
-                  (loop for literal in (update-changes db-update)
-                      do (if (eq (car literal) 'not)
-                           (if (gethash (caadr literal) *relations*)
-                             (delete-proposition (second literal) *db*)  ;dynamic relation
-                             (delete-proposition (second literal) *static-db*))
-                           (if (gethash (car literal) *relations*)
-                             (add-proposition literal *db*)  ;dynamic relation
-                             (add-proposition literal *static-db*))))))))
-          precondition-instantiations)))))
+            (eff-fn (compile nil effect-lambda))
+            pre-results db-updates)
+        (setf pre-results
+             (remove-if #'null (mapcar (lambda (pinsts)
+                                        (apply pre-fn state pinsts))
+                                       precondition-instantiations)))
+        (when (null pre-results)
+          (next-iteration))
+        (setf db-updates  ;returns list of update structures
+              (mapcan (lambda (pre-result)
+                        (if (eql pre-result t)
+                          (funcall eff-fn state)
+                          (apply eff-fn state pre-result)))
+                      pre-results))
+        (dolist (db-update db-updates)
+          (loop for literal in (update-changes db-update)
+                do (if (eq (car literal) 'not)
+                     (if (gethash (caadr literal) *relations*)
+                       (delete-proposition (second literal) *db*)  ;dynamic relation
+                       (delete-proposition (second literal) *static-db*))
+                     (if (gethash (car literal) *relations*)
+                       (add-proposition literal *db*)  ;dynamic relation
+                       (add-proposition literal *static-db*)))))))))
 
 
 (defun generate-children (state)
@@ -88,12 +93,10 @@
   (declare (problem-state state))
   ;(when (not (eql-pegs? state)) (setq *debug* 5) (ut::prt state))
   (let (children)
-    (dolist (action *actions*)
+    (iter (for action in *actions*)
       (with-slots (name iprecondition precondition-params precondition-variables
                    precondition-types dynamic precondition-instantiations ieffect)
           action
-        ;(if (equal precondition-instantiations '(nil))
-          ;(when-debug>= 4 (format t "~&~A - skipping" name))  ;get next action
           (when dynamic
             (setf precondition-instantiations
                  (or (type-instantiations precondition-types
@@ -105,18 +108,20 @@
           (let (pre-results db-updates)  ;process this action
             (when-debug>= 4 (format t "~&~A" name))
             (setf pre-results
-              (mapcar (lambda (pinsts)
-                        (apply iprecondition state pinsts))
-                precondition-instantiations))
+              (remove-if #'null (mapcar (lambda (pinsts)  ;nil = failed precondition
+                                          (apply iprecondition state pinsts))
+                                        precondition-instantiations)))
             (when-debug>= 5
               (let ((*package* (find-package :ww)))
                 (ut::prt precondition-types precondition-variables
                          precondition-instantiations pre-results)))
-            (when precondition-variables
-              (alexandria:deletef pre-results nil))  ;all nils -> nil
+            (when (null pre-results)
+              (next-iteration))
             (setf db-updates  ;returns list of update structures
               (mapcan (lambda (pre-result)
-                        (apply ieffect state pre-result))
+                        (if (eql pre-result t)
+                          (funcall ieffect state)
+                          (apply ieffect state pre-result)))
                       pre-results))
             ;(ut::prt db-updates)
             (setf db-updates 
@@ -220,14 +225,6 @@
        :idb (revise new-state-idb (update-changes db-update))))))
 
 
-;(defun bounded (state)
-  ;Determines whether to bound (prune) a state
-  ;eg, when (<= (problem-state-value state)
-  ;             (problem-state-value *best-state*))
-;  (declare (problem-state state) (ignore state))
-;  nil)
-
-
 (defun expand (state)
   ;Returns the new states.
   (declare (problem-state state))   
@@ -239,5 +236,4 @@
   ;Heuristic (h) for estimating distance to a goal state from this state.
   ;Return 0 to use no heuristic.
   (declare (problem-state state) (ignore state))
-  ;(ignore-delete-lists-heuristic state)
   0)

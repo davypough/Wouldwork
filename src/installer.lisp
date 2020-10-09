@@ -264,7 +264,9 @@
                                                  (declare (special ,@pre-$vars))
                                                  (when ,(translate precondition 'pre)
                                                    ;return satisfied pre values
-                                                   (list ,@eff-args))))
+                                                   ,(if eff-args
+                                                      `(list ,@eff-args)
+                                                      `t))))
                        :effect-variables eff-param-vars  ;user listed parameter variables
                        :effect-types eff-types
                        :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
@@ -314,6 +316,5 @@
                                     `(declare (special ,@$vars)))
                                  ,(translate form 'pre)))))
   (fix-if-ignore '(state) (get '*goal* 'fn))
-  (setq *goal* (copy-tree (get '*goal* 'fn)))  ;to be compiled
-  (setup))
+  (setq *goal* (copy-tree (get '*goal* 'fn))))  ;to be compiled
     

@@ -22,5 +22,6 @@
     (:file "searcher" :depends-on ("hstack" "planner"))
     (:file "frequencies" :depends-on ("searcher"))
     (:file "problem" :depends-on ("searcher"))
+    (:file "initialize" :depends-on ("problem"))
    ))
 
