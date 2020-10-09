@@ -43,7 +43,7 @@
     "problem-8queens.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
     "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp" "problem-u2.lisp"
     "problem-triangle.lisp" "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
-    "problem-triangle-macros-one.lisp"))
+    "problem-triangle-macros-one.lisp" "problem-tsp.lisp"))
 
 (declaim (ftype (function () t) solve))
 
