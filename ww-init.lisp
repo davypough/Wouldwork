@@ -39,11 +39,11 @@
 (in-package :ww)
 
 (defparameter *problem-files*
-  '("problem-blocks.lisp" "problem-boxes.lisp" "problem-4jugs.lisp"
+  '("problem-blocks.lisp" "problem-boxes.lisp" "problem-2jugs.lisp" "problem-4jugs.lisp"
     "problem-8queens.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
-    "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp" "problem-u2.lisp"
+    "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp"
     "problem-triangle.lisp" "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
-    "problem-triangle-macros-one.lisp" "problem-tsp.lisp"))
+    "problem-triangle-macros-one.lisp" "problem-tsp.lisp" "problem-u2.lisp"))
 
 (declaim (ftype (function () t) solve))
 
