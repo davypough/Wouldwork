@@ -9,7 +9,7 @@
 
 (ww-set 'problem 'blocks)
 
-(ww-set 'solution-type 'min-length)
+(ww-set 'solution-type 'min-time)
 
 
 (define-types

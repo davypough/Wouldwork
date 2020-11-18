@@ -8,7 +8,7 @@
 
 (ww-set 'problem '4jugs)
 
-(ww-set 'depth-cutoff 6)  ;set to expected # steps to goal
+(ww-set 'depth-cutoff 10)  ;set to >= expected # steps to goal
 
 (ww-set 'solution-type 'min-length)
 

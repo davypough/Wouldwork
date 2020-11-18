@@ -9,11 +9,11 @@
 
 (ww-set 'problem 'sentry)
 
-(ww-set 'tree-or-graph 'graph)
+(ww-set 'tree-or-graph 'tree)
 
 (ww-set 'depth-cutoff 16)
 
-(ww-set 'solution-type 'min-length)
+(ww-set 'solution-type 'first)  ;'min-length)
 
 
 (define-types

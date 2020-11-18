@@ -20,12 +20,12 @@
 
 (ww-set 'solution-type 'first)
 
-(ww-set 'tree-or-graph 'tree)
+;(ww-set 'tree-or-graph 'tree)
 
 (ww-set 'progress-reporting-interval 1000000)
 
 
-(defparameter *N* 6)  ;the number of pegs on a side
+(defparameter *N* 5)  ;the number of pegs on a side
 
 (defparameter *size* (/ (* *N* (1+ *N*)) 2))  ;total number of positions
 

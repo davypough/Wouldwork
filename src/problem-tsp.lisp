@@ -11,7 +11,7 @@
 
 (ww-set 'solution-type 'min-value)
 
-(ww-set 'tree-or-graph 'tree)
+;(ww-set 'tree-or-graph 'tree)
 
 
 (define-types

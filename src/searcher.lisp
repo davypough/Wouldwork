@@ -2,15 +2,15 @@
 
 ;;; Nonstandard Depth First Branch & Bound. Optional duplicate checking for nodes
 ;;; previously visited (graph search) as specified in problem spec. Open nodes are
-;;; kept in an indexed stack and (optionally for graph search) closed nodes in a
+;;; kept in an indexed stack and (optionally for graph search) visited nodes in a
 ;;; hash table. Search
 ;;; follows the scheme described in "Ch 3&4 Artificial Intelligence: A Modern
 ;;; Approach" by Russell & Norvig, p87 (with closing of barren nodes),
 ;;; but keeps nodes on OPEN until the search skeleton is pruned (either dropped for
-;;; tree search or to CLOSED for graph search.
+;;; tree search or to VISITED for graph search.
 ;;; A complete path from a goal to the start state is then available in OPEN.
 ;;; Searches up to a user-specified depth cutoff.  In graph search a visited node is
-;;; either in OPEN or CLOSED at any particular time. A user-defined heuristic can be
+;;; either in OPEN or VISITED at any particular time. A user-defined heuristic can be
 ;;; used to expand the best states first at each level (beam search), but
 ;;; the entire search graph may ultimately be searched (completeness).
 
@@ -106,6 +106,9 @@
 (define-global-fixnum *total-states-processed* 0
   "Count of states either newly generated, updated, or regenerated while searching (shared).")
 
+(define-global-fixnum *repeated-states* 0
+  "Count of the repeated states during a graph search.")
+
 ;(define-global-fixnum *unique-states-encountered-graph* 0
 ;  "Count of unique states encountered, only used during graph search (shared)")
 
@@ -138,7 +141,7 @@
 (declaim (hs::hstack *open*))
 
 
-#+:sbcl (defparameter *closed*
+#+:sbcl (defparameter *visited*
           (if (eq (ww-get 'tree-or-graph) 'graph)
             (if (> *num-parallel-threads* 0)
               (make-hash-table :size (ww-get 'max-states)
@@ -149,12 +152,12 @@
             (make-hash-table :size 0)))  ;unused null placeholder
 
 
-#+:allegro (defparameter *closed*
+#+:allegro (defparameter *visited*
              (when (eq (ww-get 'tree-or-graph) 'graph)
                (make-hash-table :size (ww-get 'max-states)
                                 :test 'state-equal-p)))
 ;The hash-table containing the set of closed nodes, global.
-(declaim (hash-table *closed*))
+(declaim (hash-table *visited*))
 
 
 
@@ -163,7 +166,8 @@
 
 (defun dfs ()
   (when (eql (ww-get 'tree-or-graph) 'graph)
-    (clrhash *closed*))
+    (clrhash *visited*)
+    (setf (gethash *start-state* *visited*) (list 0 0 0)))  ;(depth time value)
   (setf *open*
     (if (and (> *num-parallel-threads* 0) (member :sbcl *features*))
       (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
@@ -253,10 +257,13 @@
             (leave))  ;get next open
           ;(when-debug>= 1
           ;  (lprt 'expanding (length succ-nodes)))
-          (when (fboundp 'heuristic?)
-            (setf succ-nodes (sort succ-nodes #'>
-                                   :key (lambda (node)
-                                          (problem-state-heuristic (node-state node))))))
+          (when succ-nodes
+            (if (fboundp 'heuristic?)
+              (setf succ-nodes (sort succ-nodes #'>
+                                     :key (lambda (node)
+                                            (problem-state-heuristic (node-state node)))))
+              (when *randomize-search*
+                (setf succ-nodes (alexandria:shuffle succ-nodes)))))
           (loop for succ-node in succ-nodes
             do (hs::push-hstack succ-node open)))))))
 
@@ -333,12 +340,14 @@
     (when (hs::empty-hstack *open*)
       (leave))  ;terminate *open*
     (when succ-nodes
-      (when (fboundp 'heuristic?)
+      (if (fboundp 'heuristic?)
         (setf succ-nodes (sort succ-nodes #'>
                                :key (lambda (node)
-                                      (problem-state-heuristic (node-state node))))))
-      (loop for succ-node in succ-nodes
-        do (hs::push-hstack succ-node *open*)))))  ;push lowest heuristic value last
+                                      (problem-state-heuristic (node-state node)))))
+        (when *randomize-search*
+          (setf succ-nodes (alexandria:shuffle succ-nodes)))))
+    (loop for succ-node in succ-nodes
+          do (hs::push-hstack succ-node *open*))))  ;push lowest heuristic value last
 
 
 (defun linear (open)
@@ -356,11 +365,11 @@
   (when-debug>= 5
     (break-here))
   (let ((current-node (get-next-node-for-expansion open)))
-     
+
 ;   Stop at specified node, for debugging <action name> <instantiations> <depth>
 ;   (probe current-node 'wait '(1 area4) 11)
 ;   (probe current-node 'pour '(jug4 9 jug2 0 4) 5)
-;   (probe current-node 'move '(AREA2 AREA4) 10)
+;   (probe current-node 'move '(AREA4 AREA5) 5)
 ;   (probe current-node 'pickup-connector '(CONNECTOR3 AREA8) 4)
 ;   (probe current-node 'JUMP '(1 3 LD) 4)
     
@@ -371,13 +380,11 @@
     (let ((succ-states (get-successors current-node))
           (current-state (node-state current-node))
           (current-depth (node-depth current-node)))
-      (if succ-states
-        (progn (update-search-tree current-state current-depth "")
-               (when (> (1+ current-depth) *max-depth-explored*)
-                 (increment-global-fixnum *max-depth-explored*)))
-        (progn (update-search-tree current-state current-depth "No successor states")
-               (close-barren-nodes current-node open)
-               (return-from df-bnb1 nil)))
+      (when (null succ-states)
+        (update-search-tree current-state current-depth "No successor states")
+        (close-barren-nodes current-node open)
+        (return-from df-bnb1 nil))
+      ;(ut::prt succ-states 0)
       (setf succ-states (process-goals-and-prune current-node succ-states))
       ;(ut::prt succ-states 1)
       (when (null succ-states)
@@ -396,13 +403,15 @@
       (when (fboundp 'get-best-relaxed-value?)
         (setf succ-states (prune-inferior-value-states succ-states)))
       ;(ut::prt succ-states 5)
+      (when succ-states
+        (update-search-tree current-state current-depth "")
+        (when (> (1+ current-depth) *max-depth-explored*)
+        (increment-global-fixnum *max-depth-explored*)))
       (let ((succ-nodes (process-succ-states current-node succ-states open)))
-        ;(ut::prt succ-states 6)
+        ;(ut::prt succ-nodes 6)
         (when (null succ-nodes)
-          (update-search-tree current-state current-depth "No productive successor states")
-          (close-barren-nodes current-node open)
-          (return-from df-bnb1 nil)) 
-        ;(ut::prt succ-states 7)
+          (close-barren-nodes current-node open))
+        ;(ut::prt succ-nodes 7)
         (increment-global-fixnum *program-cycles*)
         (update-branching-factor (length succ-nodes))
         (return-from df-bnb1 (nreverse succ-nodes))))))
@@ -415,14 +424,10 @@
 
 
 (defun get-successors (current-node)
-  ;Returns children states of current node.
+  ;Returns children states of current node to df-bnb1.
   (declare (node current-node))
   (let ((states (expand (node-state current-node))))
     states))
-;    (ut::sortf states #'(lambda (x y)
-;                          (declare (ignore y))
-;                          (not (eq x (problem-state-name (node-state parent)))))
-;               :key #'problem-state-name)
 
 
 (defun process-goals-and-prune (current-node succ-states)
@@ -434,14 +439,17 @@
                (count  ;count solution, but don't save it
                  (increment-global-fixnum *solution-count*))
                (min-length  ;no other goals will be found after first???
+                 (update-search-tree (node-state current-node) (node-depth current-node) "")
                  (register-solution current-node state)
                  (setq kill t))
                (min-time
+                 (update-search-tree (node-state current-node) (node-depth current-node) "")
                  (if *solutions*
                    (when (< (problem-state-time state)  ;better time found
                             (solution-time (first *solutions*)))
                      (register-solution current-node state))
-                   (register-solution current-node state)))
+                   (register-solution current-node state))
+                 (setq kill t))
                (min-value
                 (if *solutions*
                   (when (< (problem-state-value state) *best-value-so-far*)
@@ -502,11 +510,9 @@
   (loop with succ-nodes
         for state in succ-states ;nongoal states
         do (multiple-value-bind (message succ-node)
-                                  (ecase (ww-get 'tree-or-graph)
-                                    (graph
-                                      (process-successor-graph current-node state open))
-                                    (tree
-                                      (process-successor-tree current-node state open)))
+                (ecase (ww-get 'tree-or-graph)
+                  (graph (process-successor-graph current-node state))  ;new node or nil
+                  (tree (process-successor-tree current-node state open)))  ;new node or nil
              (when (not (string= message ""))
                (update-search-tree state (1+ (node-depth current-node)) message))
              (when succ-node
@@ -526,31 +532,85 @@
   (declare (ignore prior-value))
   value)
        
-
+#|
 (defun process-successor-graph (current-node succ-state open)
   ;Decides how to process the next successor state. Returns whether or not the
   ;current node still has life (ie, potential successors).
   (declare (node current-node) (problem-state succ-state) (hs::hstack open))
   (increment-global-fixnum *total-states-processed*)
   (print-search-progress-graph)       ;#nodes expanded so far
-  (let ((prior-succ-depth? (gethash succ-state *closed*))  ;early placement for multithreading
+  (let ((prior-succ-depth (gethash succ-state *visited*))  ;early placement for multithreading
         (succ-depth (1+ (node-depth current-node))))
     (cond ((and (> (ww-get 'depth-cutoff) 0) (>= succ-depth (ww-get 'depth-cutoff)))
              (when-debug>= 3
                (format t "~2%State at max depth:~%~A" succ-state))
              (values "State at max depth" nil))
           ((hs::in-hstack succ-state open)
+             (increment-global-fixnum *repeated-states*)
              (when-debug>= 3
                (format t "~2%State already on open:~%~A" succ-state))
              (values "State already on open" nil))
-          ((null prior-succ-depth?)
-             (values "" (generate-new-node current-node succ-state)))  ;not on *closed*
-          ((<= succ-depth prior-succ-depth?)
-             (remhash succ-state *closed*) ;equal or shallower node found, swap nodes
+          ((null prior-succ-depth)
+             (values "" (generate-new-node current-node succ-state)))  ;not on *visited*
+          ((<= succ-depth prior-succ-depth)
+             (increment-global-fixnum *repeated-states*)
+             (remhash succ-state *visited*) ;equal or shallower node found, swap nodes
              (values "" (generate-new-node current-node succ-state))) ;put back on open
-          (t (when-debug>= 3
+          (t (increment-global-fixnum *repeated-states*)
+             (when-debug>= 3
                (format t "~2%Better path to state already exists:~%~A" succ-state))
              (values "Better path to state already exists" nil)))))
+|#
+
+(defun process-successor-graph (current-node succ-state)
+  ;Decides how to process the next successor state. Returns whether or not the
+  ;current node still has life (ie, potential successors).
+  (declare (node current-node) (problem-state succ-state))
+  (increment-global-fixnum *total-states-processed*)
+  (print-search-progress-graph)       ;#nodes expanded so far
+  (let ((prior-dead-depth-time-val (gethash succ-state *visited*))
+        (succ-depth (1+ (node-depth current-node))))
+
+    (when (at-max-depth succ-depth)  ;at max depth
+      (when-debug>= 3
+        (format t "~2%State at max depth:~%~A" succ-state))
+      (return-from process-successor-graph (values "State at max depth" nil)))
+
+    (when (and prior-dead-depth-time-val (first prior-dead-depth-time-val))  ;previously closed
+      (increment-global-fixnum *repeated-states*)
+      (when-debug>= 3
+        (format t "~2%State previously closed:~%~A" succ-state))
+      (return-from process-successor-graph (values "State previously closed" nil)))
+
+    (when (and prior-dead-depth-time-val (not (first prior-dead-depth-time-val)))  ;already on open
+      (increment-global-fixnum *repeated-states*)
+      (case (ww-get 'solution-type)
+        ((first every count min-length)
+          (if (>= succ-depth (second prior-dead-depth-time-val))
+            (progn (when-debug>= 3
+                     (format t "~2%Shorter path to state already exists:~%~A" succ-state))
+                   (return-from process-successor-graph (values "Shorter path to state already exists" nil)))
+            (setf (second (gethash succ-state *visited*)) succ-depth)))
+        (min-time
+          (if (>= (problem-state-time succ-state) (third prior-dead-depth-time-val))
+            (progn (when-debug>= 3
+                     (format t "~2%Shorter path to state already exists:~%~A" succ-state))
+                   (return-from process-successor-graph (values "Shorter time to state already exists" nil)))
+            (setf (third (gethash succ-state *visited*)) (problem-state-time succ-state))))
+        (min-value
+          (if (>= (problem-state-value succ-state) (fourth prior-dead-depth-time-val))
+            (progn (when-debug>= 3
+                     (format t "~2%Lesser value at state already exists:~%~A" succ-state))
+                   (return-from process-successor-graph (values "Lesser value at state already exists" nil)))
+            (setf (fourth (gethash succ-state *visited*)) (problem-state-value succ-state))))
+        (max-value
+          (if (<= (problem-state-value succ-state) (fourth prior-dead-depth-time-val))
+            (progn (when-debug>= 3
+                     (format t "~2%Greater value at state already exists:~%~A" succ-state))
+                   (return-from process-successor-graph (values "Greater value at state already exists" nil)))
+            (setf (fourth (gethash succ-state *visited*)) (problem-state-value succ-state))))))
+
+    (values "" (generate-new-node current-node succ-state))))  ;create new node on open
 
 
 (defun process-successor-tree (current-node succ-state open)
@@ -559,7 +619,7 @@
   (declare (node current-node) (problem-state succ-state) (hs::hstack open))
   (increment-global-fixnum *total-states-processed*)
   (print-search-progress-tree)       ;#nodes expanded so far
-  (cond ((at-max-depth current-node)
+  (cond ((at-max-depth (1+ (node-depth current-node)))
            (when-debug>= 3
              (format t "~2%State at max depth:~%~A" succ-state))
            (values "State at max depth" nil))
@@ -578,28 +638,32 @@
                               :parent current-node)))
     (when-debug>= 3
       (format t "~2%Installing new or updated successor:~%~S" succ-node))
+    (when (eql (ww-get 'tree-or-graph) 'graph)
+      (setf (gethash succ-state *visited*) (list nil  ;whether dead or not, initially live
+                                                 (1+ (node-depth current-node))
+                                                 (problem-state-time succ-state)
+                                                 (problem-state-value succ-state))))
     succ-node))
 
 
 (defun close-barren-nodes (current-node open)
-  ;Move nodes from open to closed if barren, unless current-node has goal succ.
+  ;Remove nodes from open if barren, unless current-node has goal succ.
   (declare (node current-node) (hs::hstack open))
   (do ((node current-node) parent)
       ((or (null node) (not (eq node (hs::peek-hstack open)))))
     (hs::pop-hstack open)
-    (when (eq (ww-get 'tree-or-graph) 'graph)
-      (setf (gethash (node-state node) *closed*)
-        (node-depth node)))
+    (when (eql (ww-get 'tree-or-graph) 'graph)
+      (setf (first (gethash (node-state node) *visited*)) t))  ;close dead node
     (setq parent (node-parent node))
     (setf (node-parent node) nil)
     (when-debug>= 4
-      (format t "~2%Unproductive state:~%~S~%" node))
+      (format t "~2%Close barren node:~%~S~%" node))
     (setq node parent)))
 
 
 (defun update-search-tree (state depth message)
   (declare (problem-state state) (fixnum depth) (string message))
-  (when (and (not (> *num-parallel-threads* 0)) (or (= *debug* 1) (= *debug* 2)))
+  (when (and (not (> *num-parallel-threads* 0)) (>= *debug* 1))
     (push `((,(problem-state-name state) 
              ,@(problem-state-instantiations state))
            ,depth
@@ -610,13 +674,13 @@
           *search-tree*)))
 
 
-(defun at-max-depth (current-node)
+(defun at-max-depth (succ-depth)
   ;Determines if installing a nongoal successor to the current node will be
   ;pointless, based on it being at the max allowable depth.
-  (declare (node current-node))
-  (let ((depth (node-depth current-node)))
-    (when (> (ww-get 'depth-cutoff) 0)
-      (= depth (1- (ww-get 'depth-cutoff))))))
+  (declare (fixnum succ-depth))
+  (let ((depth-cutoff (ww-get 'depth-cutoff)))
+    (and (> depth-cutoff 0)
+         (= succ-depth depth-cutoff))))
 
 
 (defun best-states-last (state1 state2)
@@ -652,7 +716,7 @@
 ;(defun unique-states-encountered-graph (open)
 ;  ;Count of how many unique states have been encountered during searching.
 ;  (+ (hs::length-hstack open)
-;     (1- (hash-table-count *closed*))
+;     (1- (hash-table-count *visited*))
 ;     (length *solutions*)))
 
    
@@ -676,6 +740,10 @@
   (format t "~2%Depth cutoff = ~:D" (ww-get 'depth-cutoff))
   (format t "~2%Maximum depth explored = ~:D" *max-depth-explored*)
   (format t "~2%Total states processed = ~:D" *total-states-processed*)
+  (when (eql (ww-get 'tree-or-graph) 'graph)
+    (format t "~2%Repeated states = ~:D, ie, ~F percent" *repeated-states* 
+                                                         (* (/ *repeated-states* *total-states-processed*)
+                                                            100)))
   ;(format t "~2%Unique states encountered = ~:D" (unique-states-encountered-graph))
   (format t "~2%Program cycles (state expansions) = ~:D" *program-cycles*)
   (format t "~2%Average branching factor = ~F" *average-branching-factor*)
@@ -776,7 +844,8 @@
                  (format t "Objective value = ~:A~%" (solution-value solution))))))
     (when-debug>= 3
       (format t "~%New solution found:~%  ~A~%" solution))
-    (push-global solution *solutions*)
+    (unless (eql (ww-get 'solution-type) 'count)
+      (push-global solution *solutions*))
     (update-search-tree goal-state state-depth "***goal***")))
 
 
@@ -795,7 +864,7 @@
   (when (= 0 (mod *total-states-processed* (ww-get 'progress-reporting-interval)))
     (format t "~%total states processed so far = ~:D"  ;, unique states encountered = ~:D"
       *total-states-processed*)  ; *unique-states-encountered-graph*)
-    (format t "~%ht count: ~:D    ht size: ~:D" (hash-table-count *closed*) (hash-table-size *closed*))
+    (format t "~%ht count: ~:D    ht size: ~:D" (hash-table-count *visited*) (hash-table-size *visited*))
     (format t "~%average branching factor = ~F~%" *average-branching-factor*)))
 
 

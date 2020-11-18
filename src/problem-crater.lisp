@@ -12,8 +12,6 @@
 
 (ww-set 'solution-type 'first)
 
-(ww-set 'tree-or-graph 'tree)
-
 
 (define-types
   myself      (me)

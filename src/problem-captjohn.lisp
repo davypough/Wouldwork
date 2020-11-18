@@ -14,7 +14,6 @@
 (ww-set 'tree-or-graph 'tree)
 
 
-
 (define-types
     captain (john)
     ship    (wasp)

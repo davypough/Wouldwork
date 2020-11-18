@@ -16,6 +16,11 @@
 (declaim (fixnum *num-parallel-threads*))
 
 
+(defparameter *randomize-search* nil
+  "Set to t or nil.")
+(declaim ((or nil t) *randomize-search*))
+
+
 (defparameter *debug* 0
   "Set the debug level for subsequent runs.
     0 - no debugging
@@ -47,12 +52,13 @@
     (setf (gethash 'depth-cutoff settings) 0)
   ;Whether there are repeated states (graph) or not (tree); try both
     (setf (gethash 'tree-or-graph settings) 'graph)
-  (defun ww-get (var)  ;accessors for ww settings
-    (gethash var settings))
-  (defun ww-set (var value)
-    (if (ut::hash-table-present var settings)
-      (setf (gethash var settings) value)
-      (error "~A is not a setable Wouldwork parameter." var))))
+
+    (defun ww-get (var)  ;accessors for ww settings
+      (gethash var settings))
+    (defun ww-set (var value)
+      (if (ut::hash-table-present var settings)
+        (setf (gethash var settings) value)
+        (error "~A is not a setable Wouldwork parameter." var))))
 
 
 ;To display debugging info, (ww-set 'debug <n>) where <n> is 0-5.

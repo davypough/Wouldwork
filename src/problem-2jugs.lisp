@@ -9,9 +9,11 @@
 
 (ww-set 'problem '2jugs)
 
-(ww-set 'depth-cutoff 6)  ;set to expected # steps to goal
+(ww-set 'depth-cutoff 8)  ;set to expected # steps to goal
 
-(ww-set 'solution-type 'min-length)
+(ww-set 'solution-type 'min-time)
+
+(ww-set 'tree-or-graph 'tree)
 
 
 (define-types
@@ -37,7 +39,7 @@
 
 
 (define-action empty
-    1
+    10
   (?jug jug)
   (and (bind (contents ?jug $amt))
        (> $amt 0))
