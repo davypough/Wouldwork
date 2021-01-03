@@ -1,6 +1,11 @@
+;;; Filename: ww-init.lisp
+
+;;; Initializes a lisp image, before installing the Wouldwork System.
+
+(in-package :cl-user)
+
 (setq *default-pathname-defaults*
         #p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\")
-        ;#p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\archive\\212-update triangle-new coords\\")
 
 #-quicklisp
 (let ((quicklisp-init (merge-pathnames "quicklisp\\setup.lisp" (user-homedir-pathname))))
@@ -12,14 +17,20 @@
      (:tree ,*default-pathname-defaults*)
      :inherit-configuration))
 
+#+:sbcl
+(setq sb-ext:*debug-print-variable-alist*
+  '((*print-length* . 70) (*print-level* . 6)))
+
+(setq *compile-verbose* nil)
+(setq *compile-print* nil)
+
 (ql:quickload :alexandria)
 (ql:quickload :iterate)
 (ql:quickload :lparallel)
 
-#+:sbcl (setq sb-ext:*debug-print-variable-alist*
-          '((*print-length* . 70) (*print-level* . 6) (*print-pretty* . t)))
-
-(setq *compile-verbose* nil)
+;(asdf:load-system :lisp-critic)
+;(defpackage :lisp-critic
+;  (:nicknames :lc))
 
 (defpackage :utilities-pkg
   (:use :cl)
@@ -29,18 +40,23 @@
   (:use :cl)
   (:nicknames :hs))
 
+;(when (find-package :wouldwork-pkg)
+;  (in-package :cl-user)
+;  (delete-package :wouldwork-pkg))
+
 (defpackage :wouldwork-pkg
   (:use :cl :iterate)
-  (:shadowing-import-from :iterate)   ; :sum)
+  (:shadowing-import-from :iterate)
   (:nicknames :ww))
+
 
 ;;;;;;;;;;;;;; Testing ;;;;;;;;;;;;;;;;;
 
 (in-package :ww)
 
 (defparameter *problem-files*
-  '("problem-blocks.lisp" "problem-boxes.lisp" "problem-2jugs.lisp" "problem-4jugs.lisp"
-    "problem-8queens.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
+  '("problem-blocks3.lisp" "problem-blocks4.lisp" "problem-boxes.lisp" "problem-jugs2.lisp" "problem-jugs4.lisp"
+    "problem-queens8.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
     "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp"
     "problem-triangle.lisp" "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
     "problem-triangle-macros-one.lisp" "problem-tsp.lisp" "problem-u2.lisp"))
