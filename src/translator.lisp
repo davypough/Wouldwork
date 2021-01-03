@@ -6,6 +6,15 @@
 (in-package :ww)
 
 
+(defun merge-idb-hidb (state)
+  ;Merges the two databases of state.
+  (let ((idb (alexandria:copy-hash-table (problem-state-idb state))))
+    (maphash (lambda (key val)
+               (setf (gethash key idb) val))
+             (problem-state-hidb state))
+    idb))
+
+
 (defun translate-list (form)
   ;Most basic form translation.
   `(list ,@(loop for item in form
@@ -21,7 +30,9 @@
   (check-type form (satisfies atomic-formula))
   `(gethash ,(translate-list form)
             ,(if (gethash (car form) *relations*)
-               '(problem-state-db state)
+               (if *happenings*
+                 '(merge-db-hdb state)  ;dummy function replaced by merge-idb-hidb
+                 '(problem-state-db state))
                '*static-db*)))
 
 
@@ -66,7 +77,6 @@
   ;form consists only of the relation, ?vars, and/or objects.
   ;Eg, (elevation? ?support)  ;pre
   ;    (append (disengage-jammer! ?jammer $target) changes)  ;eff
-;  (check-type form (satisfies function-formula))
   (let ((fn-call (concatenate 'list (list (car form))
                                     (list 'state)
                                     (mapcar (lambda (arg)
@@ -78,6 +88,18 @@
     (ecase flag
       ((pre ante) `,fn-call)
       (eff `(setf changes (nconc changes ,fn-call))))))
+
+
+(defun get-prop-fluents (proposition)
+  ;Returns the fluent values in an arbitrary proposition.
+  (let ((indices (get-prop-fluent-indices proposition)))
+    (when indices
+      (mapcar (lambda (index)
+                (let ((item (nth index proposition)))
+                  (if (and (symbolp item) (boundp item))
+                    (symbol-value item)
+                    item)))
+        indices))))
 
 
 (defun translate-binding (form flag)

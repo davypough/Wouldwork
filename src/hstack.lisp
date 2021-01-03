@@ -8,6 +8,9 @@
 (in-package :hs)
 
 
+;(declaim (ftype (function (hstack stream fixnum) nil) print-hstack))
+
+
 (defstruct (hstack (:print-function print-hstack))
   "An hstack (hash stack) is a functional stack containing an adjustable
    one-dimensional array of elements, plus a hash table for quickly
@@ -20,8 +23,9 @@
 
 
 (defun print-hstack (hstack stream depth)
-  (declare (hstack hstack) (ignore stream depth))
-  (ut::show (hstack-vector hstack)))
+  (declare (hstack hstack) (ignore depth))
+  (format stream "~&~S~%" (hstack-vector hstack)))
+  ;(ut::show (hstack-vector hstack)))
   ;(format stream "{HSTACK :COUNT ~D}" (hash-table-count (hstack-table hstack))))
 
 

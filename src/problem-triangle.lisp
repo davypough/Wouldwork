@@ -16,13 +16,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'triangle-xy)
+(ww-set *problem* triangle-xy)
 
-(ww-set 'solution-type 'first)
-
-(ww-set 'tree-or-graph 'tree)
-
-(ww-set 'progress-reporting-interval 1000000)
+(ww-set *tree-or-graph* tree)
 
 
 (defparameter *N* 5)  ;the number of pegs on a side

@@ -16,10 +16,48 @@
 (declaim (fixnum *num-parallel-threads*))
 
 
+(setq *print-right-margin* 140)
+;Allows non-wrap printing of *search-tree* for deep trees.
+
+
+(defparameter *problem* 'unspecified
+  "Name of the current problem, assigned in problem.lisp by user.")
+(declaim (symbol *problem*))
+
+(defparameter *solution-type* 'first
+  "Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.")
+(declaim (symbol *solution-type*))
+
+(defparameter *tree-or-graph* 'graph
+  "Whether there are repeated states (graph) or not (tree); try both.")
+(declaim (symbol *tree-or-graph*))
+
+(defparameter *depth-cutoff* 0
+  "Negative or 0 means no cutoff.")
+(declaim (fixnum *depth-cutoff*))
+
+(defparameter *max-states* 100000
+  "If this number is exceeded, hash table resizing may slow graph search.")
+(declaim (fixnum *max-states*))
+
+(defparameter *progress-reporting-interval* 100000
+  "Print progress during search after each multiple n of states examined.")
+(declaim (fixnum *progress-reporting-interval*))
+
 (defparameter *randomize-search* nil
   "Set to t or nil.")
 (declaim ((or nil t) *randomize-search*))
 
+(defparameter *probe* nil
+  "Inserts a probe to stop processing at a specific state.")
+;Example probes:
+;   Stops at specified node, for debugging given <action name> <instantiations> <depth>
+;   (wait (1 area4) 11)
+;   (pour (jug4 9 jug2 0 4) 5)
+;   (move (AREA1 AREA8) 3)  ;problem-crater
+;   (pickup-connector (CONNECTOR3 AREA8) 4)
+;   (JUMP (1 3 LD) 4)
+(declaim (list *probe*))
 
 (defparameter *debug* 0
   "Set the debug level for subsequent runs.
@@ -32,42 +70,64 @@
 (declaim (fixnum *debug*))
 
 
-(setq *print-right-margin* 140)
-;Allows non-wrap printing of *search-tree* for deep trees.
-
-
-;Global settings for wouldwork planner
-(let ((settings (make-hash-table :test #'eq)))
-  ;Estimated maximum number of unique states to be explored during search.
-  ;If this number is exceeded, hash table resizing may slow graph search.
-    (setf (gethash 'max-states settings) 100000)
-  ;Name of the current problem, assigned in problem.lisp by user.
-    (setf (gethash 'problem settings) 'unspecified)
-  ;Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.
-    (setf (gethash 'solution-type settings) 'first)
-  ;Print progress during search after each multiple n of states examined.
-    (setf (gethash 'progress-reporting-interval settings) 100000)
-  ;The max possible number of steps to consider toward any goal.
-  ;Negative or 0 means no cutoff, value set in problem.lisp.
-    (setf (gethash 'depth-cutoff settings) 0)
-  ;Whether there are repeated states (graph) or not (tree); try both
-    (setf (gethash 'tree-or-graph settings) 'graph)
-
-    (defun ww-get (var)  ;accessors for ww settings
-      (gethash var settings))
-    (defun ww-set (var value)
-      (if (ut::hash-table-present var settings)
-        (setf (gethash var settings) value)
-        (error "~A is not a setable Wouldwork parameter." var))))
-
-
-;To display debugging info, (ww-set 'debug <n>) where <n> is 0-5.
-  ;0 - no debugging
-  ;1 - display full search tree
-  ;2 - display full search tree with states
-  ;3 - display basic nodes
-  ;4 - display full nodes
-  ;5 - display full nodes + break after each expansion cycle
+(defmacro ww-set (parameter value)
+  ;Allows resetting of user parameters after loading.
+  (case parameter
+    ((*problem* *depth-cutoff* *max-states* *progress-reporting-interval* *randomize-search*)
+       `(setq ,parameter ',value))
+    (*solution-type* 
+       `(progn (setq *solution-type* ',value)
+               (setf (symbol-function 'process-successor-graph)
+                   (compile nil (function-lambda-expression #'process-successor-graph)))
+               (setf (symbol-function 'process-successor-tree)
+                   (compile nil (function-lambda-expression #'process-successor-tree)))
+               (setf (symbol-function 'detect-goals)
+                 (compile nil (function-lambda-expression #'detect-goals)))
+               ',value))
+    (*debug*
+       `(progn (setq *debug* ',value)
+               (setf (symbol-function 'df-bnb1)
+                 (compile nil (function-lambda-expression #'df-bnb1)))
+               (setf (symbol-function 'process-successor-graph)
+                 (compile nil (function-lambda-expression #'process-successor-graph)))
+               (setf (symbol-function 'process-successor-tree)
+                 (compile nil (function-lambda-expression #'process-successor-tree)))
+               (setf (symbol-function 'generate-new-node)
+                 (compile nil (function-lambda-expression #'generate-new-node)))
+               (setf (symbol-function 'close-barren-nodes)
+                 (compile nil (function-lambda-expression #'close-barren-nodes)))
+               (setf (symbol-function 'pop-discontinued-node)
+                 (compile nil (function-lambda-expression #'pop-discontinued-node)))
+               (setf (symbol-function 'register-solution)
+                 (compile nil (function-lambda-expression #'register-solution)))
+               (setf (symbol-function 'amend-happenings)
+                 (compile nil (function-lambda-expression #'amend-happenings)))
+               (setf (symbol-function 'generate-children)
+                 (compile nil (function-lambda-expression #'generate-children)))
+               (setf (symbol-function 'get-new-states)
+                 (compile nil (function-lambda-expression #'get-new-states)))
+               (setf (symbol-function 'update-search-tree)
+                 (compile nil (function-lambda-expression #'update-search-tree)))
+               (setf (symbol-function 'process-followup-updates)
+                 (compile nil (function-lambda-expression #'process-followup-updates)))
+               (setf (symbol-function 'commit1)
+                 (compile nil (function-lambda-expression #'commit1)))
+               ',value))
+    (*tree-or-graph*
+       `(progn (setq *tree-or-graph* ',value)
+               (setf (symbol-function 'process-nongoal-succ-states)
+                 (compile nil (function-lambda-expression #'process-nongoal-succ-states)))
+               ',value))
+    (*probe*
+       `(progn (setq *probe* ',value)
+               (ww-set *debug* 0)
+               (setq *counter* 1)
+               ',value))
+    (*num-parallel-threads*
+       `(progn (format t "~%*num-parallel-threads* cannot be changed with ww-set.")
+               (format t "~%Instead, set its value in the file settings.lisp, and then recompile.~2%")))
+    (otherwise
+       (format t "~%~A is not a valid parameter name in ww-set.~%" parameter))))
 
 
 (fmakunbound 'heuristic?)
@@ -104,12 +164,20 @@
 (declaim (hash-table *fluent-relation-indices*))
 
 (defparameter *db* (make-hash-table :test #'equal)
-  "Initial database of dynamic relations.")
+  "Initial database of dynamic db relations.")
 (declaim (hash-table *db*))
 
+(defparameter *hdb* (make-hash-table :test #'equal)
+  "Initial database of dynamic hdb relations.")
+(declaim (hash-table *hdb*))
+
 (defparameter *idb* (make-hash-table)
-  "Initial integer database of dynamic propositions.")
+  "Initial integer database of dynamic idb propositions.")
 (declaim (hash-table *idb*))
+
+(defparameter *hidb* (make-hash-table)
+  "Initial integer database of dynamic hidb propositions.")
+(declaim (hash-table *hidb*))
 
 (defparameter *constant-integers* (make-hash-table)
   "Integer codes for the problem's object constants.")
@@ -150,6 +218,14 @@
 (defparameter *static-idb* (make-hash-table)
   "Initial integer database of static propositions.")
 (declaim (hash-table *static-idb*))
+
+(defparameter *hap-db* (make-hash-table :test #'equal)
+  "Initial database of happenings propositions.")
+(declaim (hash-table *hap-db*))
+
+(defparameter *hap-idb* (make-hash-table)
+  "Initial integer database of happenings propositions.")
+(declaim (hash-table *hap-idb*))
 
 (defparameter *goal* nil
   "Holds the goal test function--value is a lambda expression, symbol-function is the function.")

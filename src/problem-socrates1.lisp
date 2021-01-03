@@ -5,15 +5,14 @@
 
 (in-package :ww)
 
-(ww-set 'problem 'socrates1)
+(ww-set *problem* socrates1)
 
-(ww-set 'tree-or-graph 'tree)
+(ww-set *tree-or-graph* tree)
 
-(ww-set 'depth-cutoff 14)
+(ww-set *depth-cutoff* 14)
 
-(ww-set 'solution-type 'first)
+(ww-set *progress-reporting-interval* 1000000)
 
-(ww-set 'progress-reporting-interval 1000000)
 
 
 (define-types

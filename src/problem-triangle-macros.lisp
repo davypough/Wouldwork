@@ -16,13 +16,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'triangle-macros)
+(ww-set *problem* triangle-macros)
 
-(ww-set 'solution-type 'first)
-
-(ww-set 'tree-or-graph 'tree)
-
-(ww-set 'progress-reporting-interval 1000000)
+(ww-set *tree-or-graph* tree)
 
 
 (defparameter *N* 5)  ;the number of pegs on a side
@@ -34,7 +30,7 @@
 (defparameter *final-peg-count* 1)  ;number of pegs to be left at the end
 ;(defparameter *final-peg-count* 8)  ;number of pegs left at the end of backward search
 
-;(ww-set 'depth-cutoff 12) ;add when searching bidirectional to partial depth
+;(setq *depth-cutoff* 12) ;add when searching bidirectional to partial depth
                            ;DepthBackward + DepthForward = DepthTotal
 
 

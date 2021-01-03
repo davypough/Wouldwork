@@ -37,6 +37,11 @@
   `(multiple-value-bind ,vars ,values-form ,@body))
 
 
+(defmacro mvs (vars values-form &rest body)
+  "Abbreviation for multiple-value-setq."
+  `(multiple-value-setq ,vars ,values-form ,@body))
+
+
 (define-modify-macro sortf (function &rest sort-key)  ;can include function in &rest
   sort
   "Modifies a referenced sequence by sorting it.")
@@ -46,7 +51,7 @@
   "Removes items at given indexes from a list."
   (loop for i from 0
         for elt in lst
-        when (not (member i idxs :test #'=))
+        unless (member i idxs :test #'=)
         collect elt))
 
 
@@ -224,7 +229,6 @@
   (maphash #'(lambda (key val) (format t "~&~A ->~10T ~A" key val)) table)
   (terpri)
   table)
-
 
 
 (defun hash-table-same-keys (ht1 ht2)

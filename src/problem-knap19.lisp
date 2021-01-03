@@ -5,13 +5,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'knap19)
 
-(ww-set 'depth-cutoff 0)
+(ww-set *problem* knap19)
 
-(ww-set 'solution-type 'max-value)
+(ww-set *solution-type* max-value)
 
-(ww-set 'tree-or-graph 'tree)
 
 (defstruct item  ;an item template
   (name nil :type symbol)  ;item name--eg, ITEM14
@@ -33,7 +31,7 @@
       (let ((value (read ifile))
             (weight (read ifile)))
         (push (make-item :name (intern (concatenate 'string "ITEM"
-                                         (write-to-string i)))
+                                         (write-to-string (1+ i))))
                          :value value
                          :weight weight
                          :value/weight (/ value weight))
@@ -111,7 +109,7 @@
           (value ?item (item-value $item-structure))))
     
 
-(define-goal
+(define-goal  ;can't put any further item into the knapsack
   (not (exists (?knapsack knapsack ?item item)
          (and (not (in ?item ?knapsack))
               (bind (weight ?item $item-weight))

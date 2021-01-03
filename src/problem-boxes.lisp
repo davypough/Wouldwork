@@ -7,11 +7,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'boxes)
+(ww-set *problem* boxes)
 
-(ww-set 'depth-cutoff 10)
+(ww-set *depth-cutoff* 10)
 
-(ww-set 'solution-type 'min-length)
+(ww-set *solution-type* min-length)
 
 
 

@@ -4,7 +4,7 @@
 ;;; to middle depth. Use with spec for solving forward to middle depth match,
 ;;; with problem-triangle-xyz.lisp
 
-;;; Needs more than default --dynamic-space-size of 1024  (eg, 2048)
+;;; Needs more than default --dynamic-space-size of 1024  (eg, 4096)
 
 ;;; After collecting states from backward search to some depth,
 ;;; run (get-state-codes) to create hash table of those coded states. Then
@@ -24,14 +24,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'triangle-backward)
+(ww-set *problem* triangle-backward)
 
-(ww-set 'solution-type 'every)
+(ww-set *solution-type* every)
 
-(ww-set 'tree-or-graph 'tree)
-
-(ww-set 'progress-reporting-interval 1000000)
-
+(ww-set *tree-or-graph* tree)
 
 
 (defparameter *N* 6)  ;the number of pegs on a side
@@ -43,7 +40,7 @@
 
 (defparameter *reversed-pegs* nil)  ;list of pegs in reverse order
 
-(ww-set 'depth-cutoff 7)  ;add when searching bidirectional to partial depth
+(setq *depth-cutoff* 7)  ;add when searching bidirectional to partial depth
                           ;DepthBackward + DepthForward = DepthTotal
                           ;remove if full search backward to start state
 

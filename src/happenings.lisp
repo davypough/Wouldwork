@@ -1,3 +1,4 @@
+
 ;;; Filename: happenings.lisp
 
 ;;; Functions for processing happening events in planning.
@@ -10,39 +11,48 @@
   ;Creates hap-state with happenings up through the action completion time for all happenings.
   ;Returns net-state = act-state + hap-state, and checks for constraint violation.
   (declare (problem-state state act-state))
-;  (when (null *happenings*)
-;    (return-from amend-happenings act-state))
   (let ((hap-state (copy-problem-state state))  ;to be updated
-        (net-state (copy-problem-state act-state)) ;add happenings to hap-state & net-state
-        (next-happenings (copy-tree (problem-state-happenings state))) ;process each next happening
+        (next-happenings (copy-tree (problem-state-happenings state))) ;old next happenings
         (action-completion-time (problem-state-time act-state))
         next-happening following-happenings)  ;collect next happenings for net-state
-    (when-debug>= 4 (ut::prt action-completion-time))
+    (when-debug>= 4
+       (ut::prt action-completion-time))
+    (setf (problem-state-time hap-state) action-completion-time)
     (iter (while (setq next-happening (pop next-happenings)))
           (for (object (index time direction)) = next-happening)
           (when (> time action-completion-time)
             (push next-happening following-happenings)  ;keep same happening
             (next-iteration))
-          (for (ref-time . updates) = (aref (get object :events) index))
+          (for (ref-time . hap-updates) = (aref (get object :events) index))
           (for following-happening = (get-following-happening state object index time direction ref-time))
-          (when-debug>= 4 (ut::prt following-happening))
-          (when (null following-happening) (next-iteration))
+          (when-debug>= 4
+             (ut::prt following-happening))
+          (when (null following-happening)
+            (next-iteration))
           (when (/= (first (second following-happening)) index)  ;happening is not interrupted
-            (when-debug>= 4 (ut::prt updates))
-            (revise (problem-state-idb hap-state) updates)
-            (revise (problem-state-idb net-state) updates))
+            (revise (problem-state-hidb act-state) hap-updates)
+            (revise (problem-state-idb hap-state) hap-updates)  ;hap-state = state + updates
+            (when-debug>= 4
+               (ut::prt hap-updates)))
           (push following-happening next-happenings)) ;keep looking until past action-completion-time
-   (setf (problem-state-happenings hap-state) following-happenings)
-   (setf (problem-state-happenings net-state) following-happenings)
-   (when-debug>= 4 (ut::prt net-state))
-    (if (and *constraint*
-             (constraint-violated-in-act-hap-net act-state hap-state net-state))
-     (return-from amend-happenings nil)
-     (return-from amend-happenings net-state))))
+    (let ((net-state (copy-problem-state act-state))) ;add happenings to hap-state & net-state
+      (maphash (lambda (key value)  ;merge hidb into idb
+                 (setf (gethash key (problem-state-idb net-state))
+                   value))
+               (problem-state-hidb act-state))
+      (setf (problem-state-happenings act-state) following-happenings)
+      (setf (problem-state-happenings hap-state) following-happenings)
+      (setf (problem-state-happenings net-state) following-happenings)
+      (when-debug>= 4
+        (ut::prt act-state hap-state net-state))
+      (if (and *constraint*
+               (constraint-violated-in-act-hap-net act-state hap-state net-state))
+        (values nil nil)
+        (values net-state act-state)))))  ;act-state is final state
 
 
 (defun get-following-happening (state object index time direction ref-time)
-  ;Derive the following happening update  
+  ;Derive the following happening update for an object 
   (let* ((events (get object :events))
          (n (1- (length events)))
          following-index following-time)
@@ -74,7 +84,7 @@
 
 (defun constraint-violated-in-act-hap-net (act-state hap-state net-state)
   ;Determines whether the input states violate a constraint or not.
-  (declare (problem-state act-state hap-state net-state))
-  (or (and (not (funcall (symbol-function '*constraint*) act-state))
-           (not (funcall (symbol-function '*constraint*) hap-state)))
+  (declare (problem-state act-state hap-state net-state) (ignorable act-state))
+  (or ;(and (not (funcall (symbol-function '*constraint*) act-state))
+      (not (funcall (symbol-function '*constraint*) hap-state))  ;disallow swaps
       (not (funcall (symbol-function '*constraint*) net-state))))

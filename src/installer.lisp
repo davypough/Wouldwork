@@ -6,6 +6,11 @@
 (in-package :ww)
 
 
+(defun either (&rest types)
+  (loop for type in types
+      append (gethash type *types*)))
+
+
 (defmacro define-types (&rest types&constants)
   `(install-types ',types&constants))
 
@@ -29,6 +34,34 @@
           append constants into everything
       finally (setf (gethash 'something *types*)  ;every constant is a something
                 (remove-duplicates everything :test #'eql))))
+
+
+(defun symmetric-type-indexes (types)
+  ;Returns the set of type indexes for the multi-types of a symmetric relation.
+  (let ((dups (remove-duplicates types)))
+    (loop for dup in dups
+       collect (loop for type in types
+                     for i from 0
+                     when (eql type dup)
+                     collect i) into indices
+      finally (return (remove-if (lambda (elt) (= (length elt) 1))
+                                 indices)))))
+
+
+(defun sort-either-types (relation)
+  ;Alphabetically sorts the 'either' types in a relation.
+  (mapcar (lambda (item)  ;cannonically orders 'either' types
+            (if (symbolp item)
+              item
+              (cons 'either (sort (cdr item) #'string< 
+                                  :key #'symbol-name))))
+          relation))
+            
+            
+(defun final-charp (final-char var)
+  (and (symbolp var)
+       (let ((str (symbol-name var)))
+         (char= (elt str (1- (length str))) final-char))))
 
 
 (defmacro define-dynamic-relations (&rest relations)
@@ -126,6 +159,8 @@
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
   (makunbound object)
   (setf (the simple-vector (get object :events)) (coerce (getf plist :events) 'simple-vector))
+  (when (getf plist :inits)
+    (setf (get object :inits) (getf plist :inits)))
   (ut::if-it (getf plist :interrupt)
     (let (($vars (get-all-vars #'$varp ut::it)))
       (setf (get object :interrupt) `(lambda (state)
@@ -140,6 +175,15 @@
   ;  (setf (get object :rebound) `(lambda (state)
   ;                                 ,(translate (get object :rebound) 'pre)))
   ;  (setf (the function (get object :rebound-fn)) (compile nil (get object :rebound))))
+  (dolist (literal (get object :inits))
+    ;(check-type literal (satisfies literal))
+    (when (eq (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
+      (setq literal (eval literal)))
+    (if (eq (car literal) 'not)
+      (if (gethash (caadr literal) *relations*)
+        (delete-proposition (second literal) *hap-db*))
+      (if (gethash (car literal) *relations*)
+        (add-proposition literal *hap-db*))))
   (push object *happenings*))
            
 
@@ -280,6 +324,31 @@
         (fix-if-ignore `(state ,@eff-missing-vars) (action-effect-lambda action))
         action))))
 
+
+
+(defun get-bound-?vars (tree)
+  "Searches tree for an atom or cons satisfying the predicate, and returns
+   list of all such items. To include tree itself, pass in (list tree)."
+  (iter (for item in tree)
+        (when (consp item)
+          (if (member (car item) '(exists exist forsome forall forevery doall))
+            (nconcing (delete-if-not #'?varp (alexandria:flatten (second item))))
+            (nconcing (get-bound-?vars item))))))
+
+
+(defun get-all-vars (fn tree)
+  "Selects one each of variables in the tree satisfying fn."
+  (remove-duplicates (remove-if-not fn (alexandria:flatten tree))))
+
+
+(defun fix-if-ignore (symbols lambda-expr)
+  "Ignores variable symbols that are not in the lambda-body."
+  (let ((ignores (ut::list-difference
+                    symbols (get-all-vars (lambda (x)
+                                            (member x symbols))
+                                          (cddr lambda-expr)))))
+    (when ignores
+      (push `(declare (ignorable ,@ignores)) (cddr lambda-expr)))))
 
 
 (defmacro define-init (&rest literals)

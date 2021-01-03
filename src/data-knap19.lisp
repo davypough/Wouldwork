@@ -1,6 +1,9 @@
-19 31181
-1945 4990
-321 1142
+;Knapsack problem with 19 items
+
+19 31181   ;number of items, max allowed knapsack weight
+
+1945 4990  ;first item value & weight
+321 1142   ;second item value & weight, etc
 2945 7390
 4136 10372
 1107 3114

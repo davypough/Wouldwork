@@ -5,9 +5,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'hanoi)
+(ww-set *problem* hanoi)
 
-(ww-set 'solution-type 'min-length)
+(ww-set *solution-type* min-length)
 
 
 (define-types

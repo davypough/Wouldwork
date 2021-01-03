@@ -1,6 +1,7 @@
 ;Knapsack problem with 30 items
 
-30 100000    ;number-of-items knapsack-weight-capacity
+30 100000    ;number-of-items, knapsack-weight-capacity
+
 90000 90001  ;first item value & weight
 89750 89751  ;second item value & weight, etc
 10001 10002

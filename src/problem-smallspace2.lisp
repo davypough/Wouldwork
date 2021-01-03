@@ -7,11 +7,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'smallspace2)
+(ww-set *problem* smallspace2)
 
-(ww-set 'depth-cutoff 15)
-
-(ww-set 'solution-type 'first)
+(ww-set *depth-cutoff* 15)
 
 
 (define-types

@@ -6,13 +6,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'knap4)
+(ww-set *problem* knap4)
 
-(ww-set 'depth-cutoff 0)
-
-(ww-set 'solution-type 'max-value)
-
-(ww-set 'tree-or-graph 'tree)
+(ww-set *solution-type* max-value)
 
 
 (define-types

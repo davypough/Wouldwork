@@ -7,11 +7,11 @@
 
 (in-package :ww)
 
-(ww-set 'problem 'captjohn)
+(ww-set *problem* captjohn)
 
-(ww-set 'solution-type 'first)
+(ww-set *solution-type* first)
 
-(ww-set 'tree-or-graph 'tree)
+(ww-set *tree-or-graph* tree)
 
 
 (define-types

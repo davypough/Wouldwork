@@ -36,11 +36,10 @@
   (with-slots (name instantiations time) state
     (list time (cons name instantiations))))
 
-
 (defun goal (state)
   ;Returns t or nil depending on if state is a goal state.
   (declare (problem-state state))
-  (achieve-goal state))
+  (funcall (symbol-function '*goal*) state))
 
  
 (defun do-init-action-updates (state)  ;add init actions to start-state
@@ -87,11 +86,18 @@
                        (add-proposition literal *static-db*)))))))))
 
 
+(defun order-propositions (db-update)
+  ;NOTs first so addhash db not removed by later remhash
+  (ut::sortf (update-changes db-update) #'(lambda (x y) 
+                                            (declare (ignore y))
+                                            (and (listp x) (eq (car x) 'not))))
+  db-update)
+
+
 (defun generate-children (state)
   ;Returns the legitimate children of a state. Checks precondition of each action,
   ;and if true, then updates db according to action effects.
   (declare (problem-state state))
-  ;(when (not (eql-pegs? state)) (setq *debug* 5) (ut::prt state))
   (let (children)
     (iter (for action in *actions*)
       (with-slots (name iprecondition precondition-params precondition-variables
@@ -147,82 +153,86 @@
   ;Creates new states given current state and the new updates.
   (mapcan
       (lambda (db-update)
-        (let ((act-state (initialize-act-state action state db-update))
-              net-state)
-          (when act-state  ;no new act-state if wait action is cancelled
+        (let ((act-state (initialize-act-state action state db-update))  ;act-state from action
+              net-state new-state)
+          (when act-state  ;no new act-state if wait action was cancelled
             (if *happenings*
-                (setf net-state (amend-happenings state act-state))
+              (ut::mvs (net-state new-state) (amend-happenings state act-state))  ;net-state idb includes happenings
               (if (and *constraint* 
                        (not (funcall (symbol-function '*constraint*) act-state))) ;violated
-                  (setf net-state nil)
-                (setf net-state act-state)))
+                (setf new-state nil)
+                (setf new-state act-state)))
             (when-debug>= 4
               (if net-state
-                  (when *constraint*
-                    (format t "~&    ***NO CONSTRAINT VIOLATION***"))
+                (when *constraint*
+                  (format t "~&  ***NO CONSTRAINT VIOLATION"))
                 (when *constraint* 
-                  (format t "~&    ***CONSTRAINT VIOLATED***"))))
-            (when net-state
-              (list (setf net-state (process-followup-updates net-state db-update)))))))
-    db-updates))
+                  (format t "~&  ***CONSTRAINT VIOLATED"))))
+            (when new-state
+              (list (setf new-state (process-followup-updates act-state db-update)))))))
+      db-updates))
 
 
 (defun initialize-act-state (action state db-update)
   ;Returns a new child of state incorporating action db-update list,
-  ;or nil if wait action and no point in waiting.
+  ;or nil if repeating previous wait action.
   (declare (action action) (problem-state state) (update db-update))
-  (if (eql (action-name action) 'wait)
-    (if (and *happenings* (not (eql (problem-state-name state) 'wait))) ;previous act not wait
-      (let ((next-event-time (get-next-event-time state)))
-        (if (>= (problem-state-time state) next-event-time)  ;cancel wait action
-          (return-from initialize-act-state nil)  ;no more exogenous events to wait for
-          (progn (setf (action-duration action) (- next-event-time (problem-state-time state)))
-                 (create-action-state action state db-update))))
-      (return-from initialize-act-state nil))  ;no exogenous events to wait for, or previous wait
-    (let ((new-state (create-action-state action state db-update)))  ;create non-wait state
-      new-state)))  
-      
-           
-(defun get-next-event-time (state)
-  ;Returns the time of the next happening event, considering all objects.
-  (declare (problem-state state))
-  (let ((next-event-time (loop for (nil (nil time nil)) in (problem-state-happenings state)
-                               minimize time)))
-    next-event-time))
-
-
-(defun process-followup-updates (state db-update)
-  ;triggering forms saved previously during effect apply
-  (iter (for followup in (update-followups db-update))
-        (when-debug>= 4 (ut::prt followup))
-        (for returns = (sort (apply (car followup) state (cdr followup))
-                                   #'(lambda (x y) 
-                                       (declare (ignore y))
-                                       (and (listp x) (eq (car x) 'not)))))  ;get ordered updates
-        (when-debug>= 4 (ut::prt returns))
-        (revise (problem-state-idb state) returns)
-        ;(when-debug>= 4 (ut::prt state))
-        (finally (return-from process-followup-updates state))))
+  (unless (and *happenings*
+               (eql (action-name action) 'wait)
+               (eql (problem-state-name state) 'wait))
+    (create-action-state action state db-update)))  ;create non-wait state
 
 
 (defun create-action-state (action state db-update)
   ;Creates a new wait or non-wait state.
-  (let ((new-state-idb (alexandria:copy-hash-table (problem-state-idb state)
-                                                   :key (lambda (value)
-                                                          (if (listp value)
-                                                            (copy-list value)
-                                                            value)))))
-    (remhash (gethash 'waiting *constant-integers*) new-state-idb)
-    (with-slots (name duration) action
-      (make-problem-state
-       :name name
-       :instantiations (if (eql name 'wait)
-                         (cons duration (update-instantiations db-update))
-                         (update-instantiations db-update))
-       :happenings (copy-tree (problem-state-happenings state))  ;to be updated by happenings
-       :time (+ (problem-state-time state) duration)
+  (let* ((new-state-idb (copy-db (problem-state-idb state)))
+         (new-action-duration (if (eql (action-name action) 'wait)
+                                (- (get-next-event-time state) (problem-state-time state))
+                                (action-duration action)))
+         (new-state-instantiations (if (eql (action-name action) 'wait)
+                                     (list new-action-duration)
+                                     (update-instantiations db-update))))
+    (remhash (gethash 'waiting *constant-integers*) new-state-idb)  ;if prior was wait
+    (make-problem-state
+       :name (action-name action)
+       :instantiations new-state-instantiations
+       :happenings nil  ;to be updated by happenings
+       :time (+ (problem-state-time state) new-action-duration)
        :value (update-value db-update)
-       :idb (revise new-state-idb (update-changes db-update))))))
+       :idb (revise new-state-idb (update-changes db-update))
+       :hidb (copy-db (problem-state-hidb state)))))  ;to be updated by happenings
+
+
+(defun get-wait-happenings (state)
+  (iter (for (object (index time direction)) in (problem-state-happenings state))
+    (for event in (problem-state-happenings state))
+    (for ref-time = (car (aref (get object :events) index)))
+    (if (<= time (problem-state-time state))
+      (collect (get-following-happening state object index time direction ref-time))
+      (collect event))))
+
+           
+(defun get-next-event-time (state)
+  ;Returns the time of the next happening event, considering all objects.
+  (declare (problem-state state))
+  (loop for (nil (nil time nil)) in (problem-state-happenings state)
+        minimize time))
+
+
+(defun process-followup-updates (net-state db-update)
+  ;triggering forms saved previously during effect apply
+  (iter (for followup in (update-followups db-update))
+        (when-debug>= 4
+          (ut::prt followup))
+        (for returns = (sort (apply (car followup) net-state (cdr followup))
+                                   #'(lambda (x y) 
+                                       (declare (ignore y))
+                                       (and (listp x) (eq (car x) 'not)))))  ;get ordered updates
+        (when-debug>= 4
+          (ut::prt returns))
+        (revise (problem-state-idb net-state) returns)
+        ;(when-debug>= 4 (ut::prt state))
+        (finally (return-from process-followup-updates net-state))))
 
 
 (defun expand (state)

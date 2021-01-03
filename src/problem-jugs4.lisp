@@ -1,4 +1,4 @@
-;;;; Filename: problem-quern.lisp
+;;;; Filename: problem-jugs4.lisp
 
 ;;; Fluent problem specification for pouring between 4 jugs
 ;;; to achieve 10 gal.
@@ -6,9 +6,9 @@
 
 (in-package :ww)  ;required
 
-(ww-set *problem* quern)
+(ww-set *problem* jugs4)
 
-(ww-set *depth-cutoff* 8)  ;set to expected # steps to goal
+(ww-set *depth-cutoff* 10)  ;set to >= expected # steps to goal
 
 (ww-set *solution-type* min-length)
 
@@ -34,11 +34,11 @@
        (bind (capacity ?jugB $capB))
        (< $amtB $capB))
   (?jugA jug $amtA fluent ?jugB jug ($amtB $capB) fluent)
-  (assert (if (<= $amtA (- $capB $amtB))
-            (do (contents ?jugA 0)
-                (contents ?jugB (+ $amtB $amtA)))
-            (do (contents ?jugA (- $amtA (- $capB $amtB)))
-                (contents ?jugB $capB)))))
+  (if (<= $amtA (- $capB $amtB))
+    (assert (contents ?jugA 0)
+            (contents ?jugB (+ $amtB $amtA)))
+    (assert (contents ?jugA (- $amtA (- $capB $amtB)))
+            (contents ?jugB $capB))))
                  
 
 (define-init
@@ -53,4 +53,4 @@
 
 
 (define-goal
-    (contents jug3 6))
+    (contents jug3 10))

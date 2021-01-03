@@ -6,12 +6,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'graveyard)
+(ww-set *problem* graveyard)
 
-(ww-set 'depth-cutoff 10)
+(ww-set *solution-type* min-length)
 
-(ww-set 'solution-type 'min-length)
-
+(ww-set *depth-cutoff* 10)
 
 
 (define-types

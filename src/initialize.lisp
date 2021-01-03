@@ -9,18 +9,7 @@
   (setf *query-names* (nreverse *query-names*))
   (setf *update-names* (nreverse *update-names*))
   (setf *init-actions* (nreverse *init-actions*))
-  (with-slots (name instantiations happenings time value heuristic) *start-state*
-    (let ((first-event-time (loop for object in *happenings* 
-                              minimize (car (aref (get object :events) 0)))))
-      (setf happenings (loop for object in *happenings* ;property list of happening objects
-                             collect (list object 
-                                          (list 0 first-event-time +1))))  ;next (index time direction)
-      (setf time 0.0)
-      (setf value 0.0)
-      (setf heuristic 0.0)
-      (setf instantiations nil)
-      (setf name nil)))
-  (do-init-action-updates *start-state*)  ;updates db & static-db, but not start-state idb yet
+  (init-start-state)  ;finish start-state init later in converter.lisp
   (when (> (length *happenings*) 1)
     (setq *happenings* (sort *happenings* #'< :key (lambda (object)
                                                      (first (aref (get object :events) 0))))))
@@ -42,19 +31,59 @@
     (when *randomize-search*
       (format t "~%NOTE: Defining a heuristic? search function is incompatible with randomize-search setting.")
       (format t "~%Ignoring randomization.~%")))
-  (when (and *happenings* (eql (ww-get 'tree-or-graph) 'graph))
+  (when (and *happenings* (eql *tree-or-graph* 'graph))
     (format t "~%ERROR: Graph search is incompatible with exogenous happenings, since states cannot be closed.~%"))
   (display-parameter-settings))
 
 
+(defun init-start-state ()
+  (with-slots (name instantiations happenings time value heuristic) *start-state*
+    (let ((first-event-time (loop for object in *happenings* 
+                              minimize (car (aref (get object :events) 0)))))
+      (setf happenings (loop for object in *happenings* ;property list of happening objects
+                             collect (list object 
+                                          (list 0 first-event-time +1))))  ;next (index time direction)
+      (setf time 0.0)
+      (setf value 0.0)
+      (setf heuristic 0.0)
+      (setf instantiations nil)
+      (setf name 'start)))
+  (do-init-action-updates *start-state*))  ;updates start-state db & static-db, but not idb & hidb yet
+
+
+(defun convert-ilambdas-to-fns ()
+  (format t "~&Converting lambda expressions to functions...~%")
+  (iter (for fname in (append *query-names* *update-names*))
+        (format t "~&~A...~%" fname)
+        (when (fboundp `,fname)
+          (fmakunbound `,fname))
+        (eval `(defun ,fname ,@(cdr (eval fname))))
+        (compile `,fname))
+  (when *constraint*
+    (format t "~&~A...~%" '*constraint*)
+    (setf (symbol-function '*constraint*)
+      (compile nil *constraint*)))
+  (iter (for object in *happenings*)
+        (format t "~&~A...~%" object)
+        (setf (get object :interrupt-fn) (compile nil (eval object))))
+  (format t "~&~A...~%" '*goal*)
+  (setf (symbol-function '*goal*)
+    (compile nil *goal*))
+  (dolist (action *actions*)
+    (format t "~&~A...~%" (action-name action))
+    (with-slots (iprecondition-lambda iprecondition ieffect-lambda ieffect) action
+      (setf iprecondition (compile nil iprecondition-lambda))
+      (setf ieffect (compile nil ieffect-lambda)))))
+
+
 (defun display-parameter-settings ()
   (format t "~%Current parameter settings:")
-  (ut::prt (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type)
-           (ww-get 'depth-cutoff) (ww-get 'progress-reporting-interval) 
-           *num-parallel-threads* *randomize-search* *debug*)
-  (format t "~&  HEURISTIC? => ~A" (if (fboundp 'heuristic?) 'YES 'NO))
-  (format t "~&  EXOGENOUS HAPPENINGS => ~A" (if *happenings* 'YES 'NO))
-  (format t "~&  GET-BEST-RELAXED-VALUE? => ~A" (if (fboundp 'get-best-relaxed-value?) 'YES 'NO))
+  (ut::prt *problem* *tree-or-graph* *solution-type*
+           *depth-cutoff* *progress-reporting-interval* 
+           *num-parallel-threads* *randomize-search* *debug* *probe*)
+  (format t "~&  HEURISTIC? => ~A" (when (fboundp 'heuristic?) 'YES))
+  (format t "~&  EXOGENOUS HAPPENINGS => ~A" (when *happenings* 'YES))
+  (format t "~&  GET-BEST-RELAXED-VALUE? => ~A" (when (fboundp 'get-best-relaxed-value?) 'YES))
   (terpri) (terpri))
   
 

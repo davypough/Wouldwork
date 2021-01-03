@@ -16,13 +16,10 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'triangle-heuristic)
 
-(ww-set 'solution-type 'first)
+(ww-set *problem* triangle-heuristic)
 
-(ww-set 'tree-or-graph 'tree)
-
-(ww-set 'progress-reporting-interval 1000000)
+(ww-set *tree-or-graph* tree)
 
 
 (defparameter *N* 6)  ;the number of pegs on a side

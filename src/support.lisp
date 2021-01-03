@@ -6,50 +6,33 @@
 (in-package :ww)
 
 
-(defun either (&rest types)
-  (loop for type in types
-      append (gethash type *types*)))
+(defun delete-actions (&rest names)
+  "Deletes named actions from *actions* at run-time."
+  (setf *actions* (delete-if (lambda (name)
+                               (member name names))
+                             *actions*
+                             :key #'action-name)))
 
 
-(defun achieve-goal (db)
-  (funcall (symbol-function '*goal*) db))
+(defun get-state-codes ()  ;user calls this after finding backwards *solutions*
+  (format t "~%Working ...~%")
+  (clrhash *state-codes*)
+  (iter (for soln in *solutions*)
+        (for path = (solution-path soln))
+        (for db-props = (list-database (problem-state-idb (solution-goal soln))))
+        (setf (gethash (funcall 'encode-state db-props) *state-codes*) path))
+  *state-codes*)
 
 
-(defun symmetric-type-indexes (types)
-  ;Returns the set of type indexes for the multi-types of a symmetric relation.
-  (let ((dups (remove-duplicates types)))
-    (loop for dup in dups
-       collect (loop for type in types
-                     for i from 0
-                     when (eql type dup)
-                     collect i) into indices
-      finally (return (remove-if (lambda (elt) (= (length elt) 1))
-                                 indices)))))
+(defun backward-path-exists (state)
+  "Use in forward search goal to check existence of backward path."
+  (gethash (funcall 'encode-state (list-database (problem-state-idb state))) *state-codes*))
 
 
-(defun convert-ilambdas-to-fns ()
-  (format t "~&Converting lambda expressions to functions...~%")
-  (iter (for fname in (append *query-names* *update-names*))
-        (format t "~&~A...~%" fname)
-        (when (fboundp `,fname)
-          (fmakunbound `,fname))
-        (eval `(defun ,fname ,@(cdr (eval fname))))
-        (compile `,fname))
-  (when *constraint*
-    (format t "~&~A...~%" '*constraint*)
-    (setf (symbol-function '*constraint*)
-      (compile nil *constraint*)))
-  (iter (for object in *happenings*)
-        (format t "~&~A...~%" object)
-        (setf (get object :interrupt-fn) (compile nil (eval object))))
-  (format t "~&~A...~%" '*goal*)
-  (setf (symbol-function '*goal*)
-    (compile nil *goal*))
-  (dolist (action *actions*)
-    (format t "~&~A...~%" (action-name action))
-    (with-slots (iprecondition-lambda iprecondition ieffect-lambda ieffect) action
-      (setf iprecondition (compile nil iprecondition-lambda))
-      (setf ieffect (compile nil ieffect-lambda)))))
+(defmacro when-debug>= (n &rest expressions)
+  "Inserts debugging expressions when *debug* >= n, otherwise NIL"
+  `(when (>= *debug* ,n)
+     ,@expressions))
 
 
 (defun add-prop (proposition db)
@@ -145,14 +128,6 @@
     propositions))
 
 
-(defun order-propositions (db-update)
-  ;NOTs first so addhash db not removed by later remhash
-  (ut::sortf (update-changes db-update) #'(lambda (x y) 
-                                            (declare (ignore y))
-                                            (and (listp x) (eq (car x) 'not))))
-  db-update)
-
-
 (defun revise (db literals)
   ;Use for simple list of literals.
   (declare (hash-table db))
@@ -185,37 +160,27 @@
   (update db literal))
 
 
-(defun complement-literals (literals)
-  (order-propositions
-   (map 'list #'(lambda (lit)
-                  (if (eq (car lit) 'not)
-                      (cadr lit)
-                    (list 'not lit)))
-     literals)))
+;(defun complement-literals (literals)
+;  (order-propositions
+;   (map 'list #'(lambda (lit)
+;                  (if (eq (car lit) 'not)
+;                      (cadr lit)
+;                    (list 'not lit)))
+;     literals)))
 
 
-(defun assign-fluents (fluents fluent-accessor db)
-  ;Assigns fluents to their current values.
-  (loop for fluent in fluents
-      for value in ;(or 
-                   (gethash fluent-accessor db)
-                   ;(make-list (length fluents) :initial-element 0))
-      do (cond ((symbolp fluent) (set fluent value))
-               ((realp fluent) (when (not (= fluent value)) (return nil)))
-               (t (error "Given fluent not a $var or real number: ~A" fluent)))
-      finally (return t)))
+;(defun assign-fluents (fluents fluent-accessor db)
+;  ;Assigns fluents to their current values.
+;  (loop for fluent in fluents
+;      for value in ;(or 
+;                   (gethash fluent-accessor db)
+;                   ;(make-list (length fluents) :initial-element 0))
+;      do (cond ((symbolp fluent) (set fluent value))
+;               ((realp fluent) (when (not (= fluent value)) (return nil)))
+;               (t (error "Given fluent not a $var or real number: ~A" fluent)))
+;      finally (return t)))
 
 
-(defun sort-either-types (relation)
-  ;Alphabetically sorts the 'either' types in a relation.
-  (mapcar (lambda (item)  ;cannonically orders 'either' types
-            (if (symbolp item)
-              item
-              (cons 'either (sort (cdr item) #'string< 
-                                  :key #'symbol-name))))
-          relation))
-            
-            
 (defun expand-into-plist (parameters)
   ;Return alternating plist of variable/type from input parameter list.
   (loop for (vars type) on parameters by #'cddr
@@ -225,67 +190,24 @@
         finally (return plist)))
 
 
-(defun fluentp (item)
-  (or (numberp item)
-      ($varp item)
-      (and (listp item) (fboundp (car item)))))
+;(defun fluentp (item)
+;  (or (numberp item)
+;      ($varp item)
+;      (and (listp item) (fboundp (car item)))))
 
 
-(defun $varp (item)
-  (and (symbolp item)
-       (char= (elt (symbol-name item) 0) #\$)))
-
-
-(defun ?varp (item)
-  (and (symbolp item)
-       (char= (elt (symbol-name item) 0) #\?)))
-
-
-(defun varp (sym)
-  (or (?varp sym)
-      ($varp sym)))
-
-
-(defun final-charp (final-char var)
-  (and (symbolp var)
-       (let ((str (symbol-name var)))
-         (char= (elt str (1- (length str))) final-char))))
-
-
-(defun get-vars (lead-char form)
-  ;Returns all vars in form starting with lead-char.
-    (remove-if-not #'(lambda (item)
-                       (and (symbolp item)
-                            (char= (elt (symbol-name item) 0) lead-char)))
-                   form))
+;(defun get-vars (lead-char form)
+;  ;Returns all vars in form starting with lead-char.
+;    (remove-if-not #'(lambda (item)
+;                       (and (symbolp item)
+;                            (char= (elt (symbol-name item) 0) lead-char)))
+;                   form))
 
 
 (defun different (sym1 sym2)
   (if (and (symbolp sym1) (symbolp sym2))
     (not (eql sym1 sym2))
     (error "Arguments must be symbols: ~A ~A" sym1 sym2)))
-
-
-(defun extract-type (value-symbol)
-  (if ($varp value-symbol)
-      (intern (subseq (symbol-name value-symbol) 1))
-    value-symbol))
-
-
-(defun get-prop-fluent-indices (proposition)
-  (gethash (car proposition) *fluent-relation-indices*))
-
-
-(defun get-prop-fluents (proposition)
-  ;Returns the fluent values in an arbitrary proposition.
-  (let ((indices (get-prop-fluent-indices proposition)))
-    (when indices
-      (mapcar (lambda (index)
-                (let ((item (nth index proposition)))
-                  (if (and (symbolp item) (boundp item))
-                    (symbol-value item)
-                    item)))
-        indices))))
 
 
 (defun get-fluentless-prop (proposition)
@@ -383,37 +305,12 @@
       (list variables (consolidate-types types) restriction))))
 
 
-(defun duplicate-db-entry-test (predicate object db)
-  (loop with partial-keys
-      for key being the hash-keys of db
-      do (let ((partial-key (list (first key) (second key))))
-           (if (and (eql (first key) predicate)
-                    (eql (second key) object)
-                    (member partial-key partial-keys :test #'equal))
-            (return-from duplicate-db-entry-test t)
-            (push partial-key partial-keys)))))
-
-
-(defun get-all-vars (fn tree)
-  "Selects one each of variables in the tree satisfying fn."
-  (remove-duplicates (remove-if-not fn (alexandria:flatten tree))))
-
-
-(defun get-bound-?vars (tree)
-  "Searches tree for an atom or cons satisfying the predicate, and returns
-   list of all such items. To include tree itself, pass in (list tree)."
-  (iter (for item in tree)
-        (when (consp item)
-          (if (member (car item) '(exists exist forsome forall forevery doall))
-            (nconcing (delete-if-not #'?varp (alexandria:flatten (second item))))
-            (nconcing (get-bound-?vars item))))))
-
-
-(defun fix-if-ignore (symbols lambda-expr)
-  "Ignores variable symbols that are not in the lambda-body."
-  (let ((ignores (ut::list-difference
-                    symbols (get-all-vars (lambda (x)
-                                            (member x symbols))
-                                          (cddr lambda-expr)))))
-    (when ignores
-      (push `(declare (ignorable ,@ignores)) (cddr lambda-expr)))))
+;(defun duplicate-db-entry-test (predicate object db)
+;  (loop with partial-keys
+;      for key being the hash-keys of db
+;      do (let ((partial-key (list (first key) (second key))))
+;           (if (and (eql (first key) predicate)
+;                    (eql (second key) object)
+;                    (member partial-key partial-keys :test #'equal))
+;            (return-from duplicate-db-entry-test t)
+;            (push partial-key partial-keys)))))

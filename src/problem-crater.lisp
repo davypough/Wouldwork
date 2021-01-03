@@ -6,11 +6,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'crater)
+(ww-set *problem* crater)
 
-(ww-set 'depth-cutoff 9)
+(ww-set *depth-cutoff* 9)
 
-(ww-set 'solution-type 'first)
+(ww-set *solution-type* first)
 
 
 (define-types

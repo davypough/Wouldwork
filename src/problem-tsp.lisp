@@ -5,13 +5,10 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'tsp)
 
-(ww-set 'depth-cutoff 0)
+(ww-set *problem* tsp)
 
-(ww-set 'solution-type 'min-value)
-
-;(ww-set 'tree-or-graph 'tree)
+(ww-set *solution-type* min-value)
 
 
 (define-types
@@ -66,7 +63,7 @@
 
 
 (define-init
-  (path (a))
+  (path (a))  ;start at a & end at a
   (path-distance 0)
   (distance a b 3)
   (distance a c 1)

@@ -24,9 +24,7 @@
                  ;Prints out a node. Used for debugging.
                  (declare (ignore depth) (node node) (stream stream))
                  (format stream "~&NODE: STATE=~A DEPTH=~:D"   ;PARENT=~S~%"
-                   (node-state node)
-                   (node-depth node)
-                   #|(ut::if-it (node-parent node) (node-state ut::it))|#))))
+                   (node-state node) (node-depth node)))))
   (state (make-problem-state) :type problem-state)    ;problem state
   (depth 0 :type fixnum)           ;depth in the search tree
   (parent nil :type (or null node)))  ;this node's parent
@@ -35,6 +33,27 @@
 #+:sbcl (sb-ext:define-hash-table-test state-equal-p state-equal-p-hash)
 ;Hash stack test for *open*.
 (declaim (function state-equal-p state-equal-p-hash))
+
+
+(defparameter *lock* (bt:make-lock))  ;for debugging
+
+
+(defmacro lprt (&rest vars)
+  "Print some variable values in a thread for debugging."
+  `(bt:with-lock-held (*lock*)  ;grab lock for uninterrupted printing
+     (let ((*package* (find-package :ww))  ;suppress printing package prefixes
+           (thread-index  (lparallel:kernel-worker-index)))  ;get current thread
+       ;(with-open-file (s "D:\\output.lisp" :direction :output
+       ;            :if-exists :supersede)
+       ;  (format s "The value of *standard-output* is ~S~%" *standard-output*)
+       ;  (format s "The value of *terminal-io* is ~S~%" *terminal-io*))
+       (terpri)
+       (ut::prt thread-index)
+       (ut::prt ,@vars)
+       (finish-output))))  ;make sure printout is complete before continuing
+
+
+(defparameter *counter* 1)  ;for debugging
 
 
 ;;;;;;;;;;;;;;;;;;; Shared Global Update Macros ;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -62,39 +81,20 @@
     `(setf *average-branching-factor* (compute-average-branching-factor ,n 0))))
        
 
-(defmacro update-best-value-so-far (value)
-  (if (> *num-parallel-threads* 0)
-    #+sbcl `(sb-ext:atomic-update *best-value-so-far* #'compute-best-value-so-far ,value)
-    #+allegro `(excl:update-atomic (*best-value-so-far* *best-value-so-far*) ,value)
-    `(setf *best-value-so-far* ,value)))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;; Debugging ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-(defparameter *lock* (bt:make-lock))  ;for debugging
-
-
-(defmacro lprt (&rest vars)
-  "Print some variable values in a thread for debugging."
-  `(bt:with-lock-held (*lock*)  ;grab lock for uninterrupted printing
-     (let ((*package* (find-package :ww))  ;suppress printing package prefixes
-           (thread-index  (lparallel:kernel-worker-index)))  ;get current thread
-       ;(with-open-file (s "D:\\output.lisp" :direction :output
-       ;            :if-exists :supersede)
-       ;  (format s "The value of *standard-output* is ~S~%" *standard-output*)
-       ;  (format s "The value of *terminal-io* is ~S~%" *terminal-io*))
-       (terpri)
-       (ut::prt thread-index)
-       (ut::prt ,@vars)
-       (finish-output))))  ;make sure printout is complete before continuing
-
-
 (defparameter *-* '---------------------------------------------------------)
   ;Division marker for debugging printout convenience.
 
 
 ;;;;;;;;;;;;;;;;;;;; Search Parameters ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defmacro define-global-fixnum (var-name val-form &optional doc-string)
+  `(progn (declaim (fixnum ,var-name))
+     ,(if (> *num-parallel-threads* 0)
+       #+sbcl (when (not (boundp var-name))
+                `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
+       #+allegro `(defparameter ,var-name ,val-form ,doc-string)
+        `(defparameter ,var-name ,val-form ,doc-string))))
 
 
 (define-global-fixnum *solution-count* 0
@@ -126,10 +126,6 @@
   ;DFS search tree for debugging (serial processing only).
 (declaim (list *search-tree*))
 
-(defparameter *best-value-so-far* 0.0)
-  ;progressively holds the best (min or max) value during search
-(declaim (real *best-value-so-far*))
-
 
 (defparameter *open*
   (if (and (> *num-parallel-threads* 0) (alexandria:featurep :sbcl))
@@ -142,21 +138,21 @@
 
 
 #+:sbcl (defparameter *visited*
-          (if (eq (ww-get 'tree-or-graph) 'graph)
+          (if (eq *tree-or-graph* 'graph)
             (if (> *num-parallel-threads* 0)
-              (make-hash-table :size (ww-get 'max-states)
+              (make-hash-table :size *max-states*
                                :test 'state-equal-p
                                :synchronized t)
-              (make-hash-table :size (ww-get 'max-states)
+              (make-hash-table :size *max-states*
                                :test 'state-equal-p))
             (make-hash-table :size 0)))  ;unused null placeholder
 
 
 #+:allegro (defparameter *visited*
-             (when (eq (ww-get 'tree-or-graph) 'graph)
-               (make-hash-table :size (ww-get 'max-states)
+             (when (eq *tree-or-graph* 'graph)
+               (make-hash-table :size *max-states*
                                 :test 'state-equal-p)))
-;The hash-table containing the set of closed nodes, global.
+;The hash-table containing the set of visited and closed nodes, global.
 (declaim (hash-table *visited*))
 
 
@@ -165,9 +161,9 @@
 
 
 (defun dfs ()
-  (when (eql (ww-get 'tree-or-graph) 'graph)
+  (when (eql *tree-or-graph* 'graph)
     (clrhash *visited*)
-    (setf (gethash *start-state* *visited*) (list 0 0 0)))  ;(depth time value)
+    (setf (gethash *start-state* *visited*) (list nil 0 0.0 0.0)))  ;(dead depth time value)
   (setf *open*
     (if (and (> *num-parallel-threads* 0) (member :sbcl *features*))
       (hs::create-hstack :element-type '(or node null) :ht-keyfn #'node-state
@@ -189,147 +185,10 @@
     (process-threads)
     (search-serial))
   (let ((*package* (find-package :ww)))  ;avoid printing package prefixes
-    (summarize-search-results (if (eq (ww-get 'solution-type) 'first)
+    (summarize-search-results (if (eq *solution-type* 'first)
                                 'first
                                 'exhausted))))
 
-
-(defun process-threads ()
-  "The main consumer of parallel thread processing."
-  (setf lparallel:*kernel* (lparallel:make-kernel *num-parallel-threads*))
-  (let ((channel (lparallel:make-channel))
-        (problems (lparallel.queue:make-queue))  ;holds current problems to be solved
-        (done (lparallel.queue:make-queue)))  ;signals t when all processing is done
-    (setf *num-idle-threads* *num-parallel-threads*)
-    (loop for i from 1 to *num-parallel-threads*  ;get all threads up & running
-        do (lparallel:submit-task channel #'search-parallel problems done))
-    (lparallel.queue:push-queue *open* problems)  ;setup the main problem for the thread pool
-    (lparallel.queue:pop-queue done)  ;block until thread pool reports done
-    (lparallel.queue:push-queue t done)  ;signal remaining threads to stop processing
-    (loop for i from 1 to *num-parallel-threads*
-       do (lparallel.queue:push-queue (hs::make-hstack) problems)))  ;send stop message to all threads
-  (lparallel:end-kernel :wait t))
-
-
-(defun search-parallel (&optional problems done)
-  ;Branch & Bound DFS parallel search in each thread.
-  (iter
-    (let ((open (lparallel.queue:pop-queue problems)))  ;open is local for this thread
-      (increment-global-fixnum *num-idle-threads* -1)
-      ;(when-debug>= 1
-      ;  (lprt *-* 'entering)
-      ;  (let ((*package* (find-package :hs)))
-      ;    (lprt open)))
-      (when (eq (hs::hstack-keyfn open) #'identity)  ;completion received from process-threads
-        ;(when-debug>= 1
-        ;  (lprt 'completion))
-        (increment-global-fixnum *num-idle-threads*)
-        (return-from search-parallel))  ;complete & exit this thread
-      (iter 
-        (when (lparallel.queue:peek-queue done)  ;interrupt this thread when done
-          ;(when-debug>= 1
-          ;  (lprt 'interrupted))
-          (increment-global-fixnum *num-idle-threads*)
-          (return-from search-parallel))  ;exit this thread
-        (when (and (not (linear open))
-                   (> *num-idle-threads* 0))  ;causes multiple splitting
-          (let ((subopen (split-off open)))  ;split open
-            ;(when-debug>= 1
-            ;  (lprt 'splitting)
-            ;  (let ((*package* (find-package :hs)))
-            ;    (lprt subopen open)))
-            (lparallel.queue:push-queue subopen problems)))
-        (let ((succ-nodes (df-bnb1 open)))  ;work a little more on current problem
-          (when (equal succ-nodes '(first))  ;first solution sufficient & found detected
-            ;(when-debug>= 1
-            ;  (lprt 'signal-first-done))
-            (lparallel.queue:push-queue t done)  ;signal all done to process-threads
-            (increment-global-fixnum *num-idle-threads*)
-            (leave))  ;go back to top and wait for exit signal
-          (when (hs::empty-hstack open)
-            ;(when-debug>= 1
-            ;  (lprt 'exhausted-open))
-            (when (= *num-idle-threads* (1- *num-parallel-threads*))  ;all other threads idle
-              ;(when-debug>= 1
-              ;  (lprt 'signal-exhausted-done))
-              (lparallel.queue:push-queue t done))  ;signal all done to process-threads
-            (increment-global-fixnum *num-idle-threads*)
-            (leave))  ;get next open
-          ;(when-debug>= 1
-          ;  (lprt 'expanding (length succ-nodes)))
-          (when succ-nodes
-            (if (fboundp 'heuristic?)
-              (setf succ-nodes (sort succ-nodes #'>
-                                     :key (lambda (node)
-                                            (problem-state-heuristic (node-state node)))))
-              (when *randomize-search*
-                (setf succ-nodes (alexandria:shuffle succ-nodes)))))
-          (loop for succ-node in succ-nodes
-            do (hs::push-hstack succ-node open)))))))
-
-
-
-(defun split-off (open)
-  ;Removes the top unexplored node on open and starts a new split-off open with it.
-  (declare (hs::hstack open))
-  (iter (with i = 1) (with j = 2)
-        (while (< i (1- (hs::length-hstack open))))
-        (when (= (node-depth (hs::nth-hstack i open)) (node-depth (hs::nth-hstack j open)))
-          (let ((new-open #+:sbcl (hs::create-hstack :element-type '(or node nil) 
-                                                     :ht-keyfn #'node-state
-                                                     :ht-test 'state-equal-p :synchronized t)
-                          #+:allegro (hs::create-hstack :element-type '(or node nil) 
-                                                        :ht-keyfn #'node-state
-                                                        :ht-test 'state-equal-p)))
-            (iter (for n from 0 to i)
-                  (hs::push-hstack (copy-node (hs::nth-hstack n open)) new-open)
-                  (when (> n 0)
-                    (setf (node-parent (hs::nth-hstack n new-open))
-                      (hs::nth-hstack (1- n) new-open))))
-            (hs::deletef-nth-hstack i open)
-            (leave new-open)))
-        (incf i) (incf j)))
-
-#|
-(defun split-off (open)
-  ;Removes half of the nodes on open and moves them to a new open, returning both.
-  (declare (hs::hstack open))
-  (let* ((open-stack (hs::hstack-vector open))
-         (open-table (hs::hstack-table open))
-         (new-stack (make-array (length open-stack) :adjustable t :fill-pointer 0))
-         (new-table #+:sbcl (make-hash-table :test #'equalp :synchronized t)
-                    #+:allegro (make-hash-table :test #'equalp)))
-    (iter (with i = 0) (with j = 1) (with k = 2)
-          (while (< i (- (length open-stack) 2)))
-          (if (= (node-depth (aref open-stack i)) (node-depth (aref open-stack j)))
-            (if (= (node-depth (aref open-stack j)) (node-depth (aref open-stack k)))
-              ;i = j = k
-              (progn (vector-push (aref open-stack j) new-stack)
-                     (setf (gethash (aref open-stack j) new-table) t)
-                     (setf (aref open-stack j) nil)
-                     (remhash (aref open-stack j) open-table)
-                     (incf i 2) (incf j 2) (incf k 2))
-              ;i = j /= k
-              (progn (vector-push (aref open-stack j) new-stack)
-                     (setf (gethash (aref open-stack j) new-table) t)
-                     (incf i) (incf j) (incf k)))
-            (if (= (node-depth (aref open-stack j)) (node-depth (aref open-stack k)))
-              ;i /= j = k
-              (progn (vector-push (aref open-stack i) new-stack)
-                     (setf (gethash (aref open-stack i) new-table) t)
-                     (vector-push (aref open-stack j) new-stack)
-                     (setf (gethash (aref open-stack j) new-table) t)
-                     (setf (aref open-stack j) nil)
-                     (remhash (aref open-stack j) open-table)
-                     (incf i 2) (incf j 2) (incf k 2))
-              ;i /= j /= k
-              (progn (vector-push (aref open-stack i) new-stack)
-                     (setf (gethash (aref open-stack i) new-table) t)
-                     (incf i) (incf j) (incf k)))))
-    (alexandria:deletef open-stack nil)  ;remove nils
-    (let ((new-open (hs::make-hstack :vector new-stack :table new-table :keyfn #'state-equal-p)))
-      (values open new-open))))
-|#
 
 (defun search-serial ()
   ;Branch & Bound DFS serial search.
@@ -350,71 +209,64 @@
           do (hs::push-hstack succ-node *open*))))  ;push lowest heuristic value last
 
 
-(defun linear (open)
-  (declare (hs::hstack open))
-  (= (1+ (node-depth (hs::peek-hstack open)))
-     (hs::length-hstack open)))
+(defun break-here ()  ;inhibits debugger printing of open on break in df-bnb1
+  (break))
 
 
 (defun df-bnb1 (open)
   ;Performs expansion of one node from open. Returns
-  ;new nodes, (first), or nil if no new nodes generated.
+  ;new successor nodes, (first), or nil if no new nodes generated.
   (declare (hs::hstack open))
   (when-debug>= 3
-    (format t "~&-----------------------------------------------------------~%"))
+     (format t "~&-----------------------------------------------------------~%"))
   (when-debug>= 5
-    (break-here))
+     (break-here))
   (let ((current-node (get-next-node-for-expansion open)))
-
-;   Stop at specified node, for debugging <action name> <instantiations> <depth>
-;   (probe current-node 'wait '(1 area4) 11)
-;   (probe current-node 'pour '(jug4 9 jug2 0 4) 5)
-;   (probe current-node 'move '(AREA4 AREA5) 5)
-;   (probe current-node 'pickup-connector '(CONNECTOR3 AREA8) 4)
-;   (probe current-node 'JUMP '(1 3 LD) 4)
-    
-    (when (null current-node)
-      (return-from df-bnb1 nil))  ;open is empty
+    (when *probe*
+      (apply #'probe current-node *probe*))
     (when-debug>= 3
       (format t "~3%Current node selected:~%~S~2%" current-node))
-    (let ((succ-states (get-successors current-node))
-          (current-state (node-state current-node))
-          (current-depth (node-depth current-node)))
-      (when (null succ-states)
-        (update-search-tree current-state current-depth "No successor states")
+    (when (null current-node)  ;open is empty
+      (return-from df-bnb1 nil))
+    (let ((succ-states (get-successors current-node)))
+      (when-debug>= 4
+        (format t "~%ALL SUCCESSORS~%  ~S" succ-states))
+      (update-max-depth-explored (1+ (node-depth current-node)))
+      (when (null succ-states)  ;no successors
+        (when-debug>= 3
+          (format t "~%No successor states"))
+        (update-search-tree (node-state current-node) (node-depth current-node) "No successor states")
         (close-barren-nodes current-node open)
         (return-from df-bnb1 nil))
-      ;(ut::prt succ-states 0)
-      (setf succ-states (process-goals-and-prune current-node succ-states))
-      ;(ut::prt succ-states 1)
-      (when (null succ-states)
-        (close-barren-nodes current-node open)
-        (return-from df-bnb1 nil))
-      ;(ut::prt succ-states 2)
-      (when (eq succ-states 'one-goal-only)
-        (return-from df-bnb1 '(first)))
-      ;(ut::prt succ-states 3)
-      (when (inferior-length/time-successors current-depth succ-states)
-        (update-search-tree current-state current-depth
-                            "No successor states better than best so far")
-        (close-barren-nodes current-node open)
-        (return-from df-bnb1 nil))
-      ;(ut::prt succ-states 4)
-      (when (fboundp 'get-best-relaxed-value?)
-        (setf succ-states (prune-inferior-value-states succ-states)))
-      ;(ut::prt succ-states 5)
-      (when succ-states
-        (update-search-tree current-state current-depth "")
-        (when (> (1+ current-depth) *max-depth-explored*)
-        (increment-global-fixnum *max-depth-explored*)))
-      (let ((succ-nodes (process-succ-states current-node succ-states open)))
-        ;(ut::prt succ-nodes 6)
-        (when (null succ-nodes)
-          (close-barren-nodes current-node open))
-        ;(ut::prt succ-nodes 7)
-        (increment-global-fixnum *program-cycles*)
-        (update-branching-factor (length succ-nodes))
-        (return-from df-bnb1 (nreverse succ-nodes))))))
+      (ut::mvb (goal-succ-states nongoal-succ-states) (detect-goals current-node succ-states)
+         (when-debug>= 3
+            (format t "~%GOAL SUCCESSOR STATES~%  ~S" goal-succ-states)
+            (format t "~&NONGOAL SUCCESSOR STATES~%  ~S" nongoal-succ-states))
+         (cond (goal-succ-states
+                  (update-search-tree (node-state current-node) (node-depth current-node) "")
+                  (iter (for state in goal-succ-states)
+                     (update-search-tree state (1+ (node-depth current-node)) "***goal***"))
+                  (when (and goal-succ-states (eql *solution-type* 'first))
+                     (return-from df-bnb1 '(first))))
+               (nongoal-succ-states
+                  (update-search-tree (node-state current-node) (node-depth current-node) ""))
+               (t (update-search-tree (node-state current-node) (node-depth current-node) "No viable successor states")
+                  (close-barren-nodes current-node open)
+                  (return-from df-bnb1 nil)))
+         ;nongoal successors will be updated on subsequent get-current-node
+         (let ((succ-nodes (process-nongoal-succ-states current-node nongoal-succ-states)))
+            (when (null succ-nodes)
+              (if (and goal-succ-states (eql *tree-or-graph* 'graph))
+                 (pop-discontinued-node open)
+                 (close-barren-nodes current-node open)))
+            (increment-global-fixnum *program-cycles*)
+            (update-branching-factor (length succ-nodes))
+            (return-from df-bnb1 (nreverse succ-nodes)))))))
+
+
+(defun update-max-depth-explored (succ-depth)
+  (when (> succ-depth *max-depth-explored*)
+    (increment-global-fixnum *max-depth-explored* (- succ-depth *max-depth-explored*))))
 
 
 (defun get-next-node-for-expansion (open)
@@ -426,141 +278,109 @@
 (defun get-successors (current-node)
   ;Returns children states of current node to df-bnb1.
   (declare (node current-node))
-  (let ((states (expand (node-state current-node))))
-    states))
+  (expand (node-state current-node)))
 
 
-(defun process-goals-and-prune (current-node succ-states)
-  (declare (node current-node) (list succ-states))
-  (loop with kill  ;kill all sibling states if min-length & goal found
-        for state in succ-states
-        if (and (goal state) (not kill))
-          do (ecase (ww-get 'solution-type)
-               (count  ;count solution, but don't save it
-                 (increment-global-fixnum *solution-count*))
-               (min-length  ;no other goals will be found after first???
-                 (update-search-tree (node-state current-node) (node-depth current-node) "")
-                 (register-solution current-node state)
-                 (setq kill t))
-               (min-time
-                 (update-search-tree (node-state current-node) (node-depth current-node) "")
-                 (if *solutions*
-                   (when (< (problem-state-time state)  ;better time found
-                            (solution-time (first *solutions*)))
-                     (register-solution current-node state))
-                   (register-solution current-node state))
-                 (setq kill t))
-               (min-value
-                (if *solutions*
-                  (when (< (problem-state-value state) *best-value-so-far*)
-                    (update-best-value-so-far (problem-state-value state))
-                    (register-solution current-node state))
-                  (progn (update-best-value-so-far (problem-state-value state))
-                         (register-solution current-node state))))
-               (max-value
-                (if *solutions*
-                  (when (> (problem-state-value state) *best-value-so-far*)
-                    (update-best-value-so-far (problem-state-value state))
-                    (register-solution current-node state))
-                  (progn (update-best-value-so-far (problem-state-value state))
-                         (register-solution current-node state))))
-               (first
-                 (register-solution current-node state)
-                 (return-from process-goals-and-prune 'one-goal-only))
-               (every
-                 (register-solution current-node state)))
-          else collect state into remaining-states
-        finally (if kill
-                  (return (loop for state in remaining-states
-                                do (update-search-tree state (1+ (node-depth current-node))
-                                                             "State killed")))
-                  (return remaining-states))))
+(defmacro process-goal-code ()
+  ;Inserts the proper code for each *solution-type* into detect-goals
+  ;for each goal.
+  (ecase *solution-type*
+    (first
+      `(register-solution current-node state))
+    (every
+      `(register-solution current-node state))
+    (count  ;count solution, but don't save it
+      `(increment-global-fixnum *solution-count*))
+    (min-length
+      `(when (or (null *solutions*)
+                 (< (1+ (node-depth current-node))
+                    (solution-depth (first *solutions*))))
+         (register-solution current-node state)))
+    (min-time
+      `(when (or (null *solutions*)
+                 (< (problem-state-time state)  ;better time found
+                    (solution-time (first *solutions*))))
+         (register-solution current-node state)))
+    (min-value
+      `(when (or (null *solutions*)
+                 (< (problem-state-value state)
+                    (solution-value (first *solutions*))))
+         (register-solution current-node state)))
+    (max-value
+      `(when (or (null *solutions*)
+                 (> (problem-state-value state)
+                    (solution-value (first *solutions*))))
+         (register-solution current-node state)))))
 
 
-(defun inferior-length/time-successors (current-depth succ-states)
-  ;If minimizing length or time, are all nongoal successors
-  ;worse than the best depth/time so far?
-  (declare (fixnum current-depth) (list succ-states))
-  (when *solutions*
-    (case (ww-get 'solution-type)
-      (min-length (>= (+ current-depth 2)
-                          (solution-depth (first *solutions*))))
-      (min-time (let ((min-succ-time (reduce #'min succ-states :key #'problem-state-time)))
-                      (>= (+ min-succ-time *min-action-duration*)
-                          (solution-time (first *solutions*))))))))
+(defun detect-goals (current-node succ-states)
+  (declare (list succ-states) (ignorable current-node))
+  (iter (for state in succ-states)
+     (cond ((goal state)
+              (collect state into goal-succ-states)
+              (process-goal-code))  ;code inserted from above
+           (t (collect state into nongoal-succ-states)))
+     (finally (return (values goal-succ-states nongoal-succ-states)))))
 
 
-(defun prune-inferior-value-states (succ-states)
-  (if *solutions*
-    (case (ww-get 'solution-type)
-      (min-value (loop for succ-state in succ-states
-                       when (< (funcall 'get-best-relaxed-value? succ-state)
-                               (solution-value (first *solutions*)))
-                         collect succ-state))
-      (max-value (loop for succ-state in succ-states
-                       when (> (funcall 'get-best-relaxed-value? succ-state)
-                               (solution-value (first *solutions*)))
-                         collect succ-state))
-      (t succ-states))
-    succ-states))
+(defmacro insert-tree-or-graph-code ()
+  (ecase *tree-or-graph*
+    (graph `(process-successor-graph current-node state))  ;rtn new node or nil
+    (tree `(process-successor-tree current-node state))))  ;rtn new node or nil  
 
 
-(defun process-succ-states (current-node succ-states open)
-  (declare (node current-node) (list succ-states) (hs::hstack open))     
+(defun process-nongoal-succ-states (current-node nongoal-succ-states)
+  ;Determines how to handle nongoal succ states for both tree or graph search.
+  (declare (node current-node) (list nongoal-succ-states))
   (loop with succ-nodes
-        for state in succ-states ;nongoal states
-        do (multiple-value-bind (message succ-node)
-                (ecase (ww-get 'tree-or-graph)
-                  (graph (process-successor-graph current-node state))  ;new node or nil
-                  (tree (process-successor-tree current-node state open)))  ;new node or nil
-             (when (not (string= message ""))
-               (update-search-tree state (1+ (node-depth current-node)) message))
-             (when succ-node
-               (push succ-node succ-nodes)))  ;collect non-dead-end succ-nodes
-        finally (return succ-nodes)))
+        for state in nongoal-succ-states
+        do (ut::mvb (message succ-node) (insert-tree-or-graph-code)
+             (if succ-node
+               (push succ-node succ-nodes)
+               (update-search-tree state (1+ (node-depth current-node)) message)))
+      finally (return succ-nodes)))
 
 
 (defun compute-average-branching-factor (n prior-value)
   ;Cumulative average of expanded states.
   (declare (fixnum n) (ignore prior-value))
   (/ (+ n (* *program-cycles* *average-branching-factor*))
-                       *program-cycles*))
+     *program-cycles*))
 
 
-(defun compute-best-value-so-far (value prior-value)
-  ;When parallel for sbcl, returns value.
-  (declare (ignore prior-value))
-  value)
-       
-#|
-(defun process-successor-graph (current-node succ-state open)
-  ;Decides how to process the next successor state. Returns whether or not the
-  ;current node still has life (ie, potential successors).
-  (declare (node current-node) (problem-state succ-state) (hs::hstack open))
-  (increment-global-fixnum *total-states-processed*)
-  (print-search-progress-graph)       ;#nodes expanded so far
-  (let ((prior-succ-depth (gethash succ-state *visited*))  ;early placement for multithreading
-        (succ-depth (1+ (node-depth current-node))))
-    (cond ((and (> (ww-get 'depth-cutoff) 0) (>= succ-depth (ww-get 'depth-cutoff)))
-             (when-debug>= 3
-               (format t "~2%State at max depth:~%~A" succ-state))
-             (values "State at max depth" nil))
-          ((hs::in-hstack succ-state open)
-             (increment-global-fixnum *repeated-states*)
-             (when-debug>= 3
-               (format t "~2%State already on open:~%~A" succ-state))
-             (values "State already on open" nil))
-          ((null prior-succ-depth)
-             (values "" (generate-new-node current-node succ-state)))  ;not on *visited*
-          ((<= succ-depth prior-succ-depth)
-             (increment-global-fixnum *repeated-states*)
-             (remhash succ-state *visited*) ;equal or shallower node found, swap nodes
-             (values "" (generate-new-node current-node succ-state))) ;put back on open
-          (t (increment-global-fixnum *repeated-states*)
-             (when-debug>= 3
-               (format t "~2%Better path to state already exists:~%~A" succ-state))
-             (values "Better path to state already exists" nil)))))
-|#
+(defmacro insert-graph-code ()
+  ;Inserts the proper code for each *solution-type* into process-successor-graph.
+  ;Analyzes states already visited to determine if a successor can be pruned.
+  (ecase *solution-type*
+    ((first every count min-length)
+      `(let ((succ-depth (1+ (node-depth current-node))))
+         (if (>= succ-depth (second prior-dead-depth-time-val))
+           (progn (when-debug>= 3
+                    (format t "~2%Same or shorter path length to state already exists:~%~A" succ-state))
+                  (return-from process-successor-graph (values "Same or shorter path length to state already exists" nil))))
+         (setf (second prior-dead-depth-time-val) succ-depth)))
+    (min-time
+      `(let ((succ-time (problem-state-time succ-state)))
+         (if (>= succ-time (third prior-dead-depth-time-val))
+           (progn (when-debug>= 3
+                    (format t "~2%Same or shorter time to state already exists:~%~A" succ-state))
+                  (return-from process-successor-graph (values "Same or shorter time to state already exists" nil)))
+           (setf (third prior-dead-depth-time-val) succ-time))))
+    (min-value
+      `(let ((succ-value (problem-state-value succ-state)))
+         (if (>= succ-value (fourth prior-dead-depth-time-val))
+           (progn (when-debug>= 3
+                    (format t "~2%Same or lesser value at state already exists:~%~A" succ-state))
+                  (return-from process-successor-graph (values "Same or lesser value at state already exists" nil)))
+           (setf (fourth prior-dead-depth-time-val) succ-value))))
+    (max-value
+      `(let ((succ-value (problem-state-value succ-state)))
+         (if (<= succ-value (fourth prior-dead-depth-time-val))
+           (progn (when-debug>= 3
+                    (format t "~2%Same or greater value at state already exists:~%~A" succ-state))
+                  (return-from process-successor-graph (values "Same or greater value at state already exists" nil)))
+           (setf (fourth prior-dead-depth-time-val) succ-value))))))
+
 
 (defun process-successor-graph (current-node succ-state)
   ;Decides how to process the next successor state. Returns whether or not the
@@ -568,67 +388,66 @@
   (declare (node current-node) (problem-state succ-state))
   (increment-global-fixnum *total-states-processed*)
   (print-search-progress-graph)       ;#nodes expanded so far
-  (let ((prior-dead-depth-time-val (gethash succ-state *visited*))
-        (succ-depth (1+ (node-depth current-node))))
-
-    (when (at-max-depth succ-depth)  ;at max depth
-      (when-debug>= 3
-        (format t "~2%State at max depth:~%~A" succ-state))
-      (return-from process-successor-graph (values "State at max depth" nil)))
-
+  (when (at-max-depth (1+ (node-depth current-node)))  ;at max depth, if *depth-cutoff* specified
+    (when-debug>= 3
+      (format t "~2%State at max depth:~%~A" succ-state))
+    (return-from process-successor-graph (values "State at max depth" nil)))
+  (let ((prior-dead-depth-time-val (gethash succ-state *visited*)))
     (when (and prior-dead-depth-time-val (first prior-dead-depth-time-val))  ;previously closed
       (increment-global-fixnum *repeated-states*)
       (when-debug>= 3
         (format t "~2%State previously closed:~%~A" succ-state))
       (return-from process-successor-graph (values "State previously closed" nil)))
-
-    (when (and prior-dead-depth-time-val (not (first prior-dead-depth-time-val)))  ;already on open
+    (when (and prior-dead-depth-time-val (not (first prior-dead-depth-time-val)))  ;already on open, not closed
       (increment-global-fixnum *repeated-states*)
-      (case (ww-get 'solution-type)
-        ((first every count min-length)
-          (if (>= succ-depth (second prior-dead-depth-time-val))
-            (progn (when-debug>= 3
-                     (format t "~2%Shorter path to state already exists:~%~A" succ-state))
-                   (return-from process-successor-graph (values "Shorter path to state already exists" nil)))
-            (setf (second (gethash succ-state *visited*)) succ-depth)))
-        (min-time
-          (if (>= (problem-state-time succ-state) (third prior-dead-depth-time-val))
-            (progn (when-debug>= 3
-                     (format t "~2%Shorter path to state already exists:~%~A" succ-state))
-                   (return-from process-successor-graph (values "Shorter time to state already exists" nil)))
-            (setf (third (gethash succ-state *visited*)) (problem-state-time succ-state))))
-        (min-value
-          (if (>= (problem-state-value succ-state) (fourth prior-dead-depth-time-val))
-            (progn (when-debug>= 3
-                     (format t "~2%Lesser value at state already exists:~%~A" succ-state))
-                   (return-from process-successor-graph (values "Lesser value at state already exists" nil)))
-            (setf (fourth (gethash succ-state *visited*)) (problem-state-value succ-state))))
-        (max-value
-          (if (<= (problem-state-value succ-state) (fourth prior-dead-depth-time-val))
-            (progn (when-debug>= 3
-                     (format t "~2%Greater value at state already exists:~%~A" succ-state))
-                   (return-from process-successor-graph (values "Greater value at state already exists" nil)))
-            (setf (fourth (gethash succ-state *visited*)) (problem-state-value succ-state))))))
-
-    (values "" (generate-new-node current-node succ-state))))  ;create new node on open
+      (insert-graph-code)))  ;from macro above depending on *solution-type*
+  (values "" (generate-new-node current-node succ-state)))  ;create new node on open
 
 
-(defun process-successor-tree (current-node succ-state open)
+(defmacro insert-tree-code ()
+  ;Inserts the proper code for each *solution-type* into process-successor-graph.
+  ;Analyzes states already visited to determine if a successor can be pruned.
+  (ecase *solution-type*
+    (first  ;present only to allow compilation with default solution-type = first, exited earlier via detect-goals
+      `nil)
+    ((every count min-value max-value)
+      `nil)  ;continue searching
+    (min-length
+      `(when (and *solutions* (>= (1+ (node-depth current-node)) (solution-depth (first *solutions*))))
+         (when-debug>= 3
+           (format t "~2%Same or shorter path length to a solution already exists:~%~A" succ-state))
+         (return-from process-successor-tree (values "Same or shorter path length to a solution already exists" nil))))
+    (min-time
+      `(when (and *solutions* (>= (problem-state-time succ-state) (solution-time (first *solutions*))))
+         (when-debug>= 3
+           (format t "~2%Same or shorter time to a solution already exists:~%~A" succ-state))
+         (return-from process-successor-tree (values "Same or shorter time to a solution already exists" nil))))))
+
+
+(defun process-successor-tree (current-node succ-state)
   ;Decides how to process the next successor state. Returns whether or not the
   ;current node still has life (ie, potential successors).
-  (declare (node current-node) (problem-state succ-state) (hs::hstack open))
+  (declare (node current-node) (problem-state succ-state))
   (increment-global-fixnum *total-states-processed*)
   (print-search-progress-tree)       ;#nodes expanded so far
-  (cond ((at-max-depth (1+ (node-depth current-node)))
-           (when-debug>= 3
-             (format t "~2%State at max depth:~%~A" succ-state))
-           (values "State at max depth" nil))
-        ((hs::in-hstack succ-state open)
-           (when-debug>= 3
-             (format t "~2%State already on open:~%~A" succ-state))
-           (values "State already on open" nil))
-        (t (values "" (generate-new-node current-node succ-state)))))
+  (when (on-current-path succ-state current-node)
+    (when-debug>= 3
+      (format t "~2%State already on current path:~%~A" succ-state))
+    (return-from process-successor-tree (values "State already on current path" nil)))
+  (when (at-max-depth (1+ (node-depth current-node)))
+    (when-debug>= 3
+      (format t "~2%State at max depth:~%~A" succ-state))
+    (return-from process-successor-tree (values "State at max depth" nil)))
+  (insert-tree-code)  ;from macro above depending on *solution-type*
+  (values "" (generate-new-node current-node succ-state)))
 
+
+(defun on-current-path (succ-state current-node)
+  ;Determines if a successor is already on the current path from the start state.
+  (iter (for node initially current-node then (node-parent node))
+        (while node)  
+        (thereis (state-equal-p succ-state (node-state node)))))
+          
 
 (defun generate-new-node (current-node succ-state)
   ;Produces a new node for a given successor.
@@ -638,7 +457,7 @@
                               :parent current-node)))
     (when-debug>= 3
       (format t "~2%Installing new or updated successor:~%~S" succ-node))
-    (when (eql (ww-get 'tree-or-graph) 'graph)
+    (when (eql *tree-or-graph* 'graph)
       (setf (gethash succ-state *visited*) (list nil  ;whether dead or not, initially live
                                                  (1+ (node-depth current-node))
                                                  (problem-state-time succ-state)
@@ -647,18 +466,27 @@
 
 
 (defun close-barren-nodes (current-node open)
-  ;Remove nodes from open if barren, unless current-node has goal succ.
+  ;Remove nodes from open & close, unless current-node has goal succ.
   (declare (node current-node) (hs::hstack open))
   (do ((node current-node) parent)
       ((or (null node) (not (eq node (hs::peek-hstack open)))))
     (hs::pop-hstack open)
-    (when (eql (ww-get 'tree-or-graph) 'graph)
+    (when (eql *tree-or-graph* 'graph)
       (setf (first (gethash (node-state node) *visited*)) t))  ;close dead node
     (setq parent (node-parent node))
     (setf (node-parent node) nil)
     (when-debug>= 4
-      (format t "~2%Close barren node:~%~S~%" node))
+      (format t "~2%Closing barren node:~%~S~%" node))
     (setq node parent)))
+
+
+(defun pop-discontinued-node (open)
+  ;Discontinue node if all successors are goals
+  (let ((node (hs::pop-hstack open)))
+     (when-debug>= 4
+                   (format t "~2%Popping discontinued node:~%~S~%" node))
+     (when (= (hs::length-hstack open) 1)  ;last node on open = start node
+        (close-barren-nodes (hs::pop-hstack open) open))))
 
 
 (defun update-search-tree (state depth message)
@@ -670,7 +498,8 @@
            ,message
            ,@(case *debug*
                (1 nil)
-               (2 (list (list-database (problem-state-idb state))))))
+               (2 (list (list-database (problem-state-idb state))
+                        (list-database (problem-state-hidb state))))))
           *search-tree*)))
 
 
@@ -678,7 +507,7 @@
   ;Determines if installing a nongoal successor to the current node will be
   ;pointless, based on it being at the max allowable depth.
   (declare (fixnum succ-depth))
-  (let ((depth-cutoff (ww-get 'depth-cutoff)))
+  (let ((depth-cutoff *depth-cutoff*))
     (and (> depth-cutoff 0)
          (= succ-depth depth-cutoff))))
 
@@ -689,14 +518,16 @@
   (> (estimate-to-goal state1) (estimate-to-goal state2)))
 
 
-(defun probe (current-node name instantiations depth)
-  ;Breaks when the current node matches action name, instantiations, and depth.
+(defun probe (current-node name instantiations depth &optional (count 1))
+  ;Breaks when the current node matches action name, instantiations, depth, and count.
   (declare (node current-node))
   (let ((state (node-state current-node)))
     (when (and (eql (problem-state-name state) name)
                (equal (problem-state-instantiations state) instantiations)
                (= (node-depth current-node) depth))
-    (setq *debug* 5))))
+      (if (= count *counter*)
+        (ww-set *debug* 5)
+        (incf *counter*)))))
 
 
 ;;; Solution Processing Functions
@@ -723,24 +554,24 @@
 (defun summarize-search-results (condition)
   (declare (symbol condition))
   (format t "~2%In problem ~A, performed ~A search for ~A solution."
-            (ww-get 'problem) (ww-get 'tree-or-graph) (ww-get 'solution-type))
+            *problem* *tree-or-graph* *solution-type*)
   (ecase condition
     (first
       (when *solutions*
         (format t "~2%Search ended with first solution found." )))
     (exhausted
       (format t "~2%Search process completed normally.")
-      (ecase (ww-get 'solution-type)
+      (ecase *solution-type*
         (count
           (format t "~2%Found ~:D solutions." *solution-count*))
         (every
           (format t "~2%Examined every state up to the depth cutoff."))
         ((min-length min-time max-value min-value)
           (format t "~2%Examined only worthwhile states up to the depth cutoff.")))))
-  (format t "~2%Depth cutoff = ~:D" (ww-get 'depth-cutoff))
+  (format t "~2%Depth cutoff = ~:D" *depth-cutoff*)
   (format t "~2%Maximum depth explored = ~:D" *max-depth-explored*)
   (format t "~2%Total states processed = ~:D" *total-states-processed*)
-  (when (eql (ww-get 'tree-or-graph) 'graph)
+  (when (eql *tree-or-graph* 'graph)
     (format t "~2%Repeated states = ~:D, ie, ~F percent" *repeated-states* 
                                                          (* (/ *repeated-states* *total-states-processed*)
                                                             100)))
@@ -758,7 +589,7 @@
            (min-max-value (solution-value min-max-value-solution)))
       (format t "~2%Total solutions recorded = ~:D" (length *solutions*))
       (format t "~%(Check *solutions* for list of all solution records.)")
-      (case (ww-get 'solution-type)
+      (case *solution-type*
         (first
           (format t "~2%Number of steps in first solution found: = ~:D" shallowest-depth)
           (format t "~2%Duration of first solution found = ~:D" minimum-time)
@@ -789,12 +620,12 @@
             (progn (format t "~2%Duration of a minimum time solution = ~:D" minimum-time)
                    (format t "~2%A minimum time solution path from start state to goal state:~%")
                    (printout-solution minimum-time-solution))))))
-    (unless (eq (ww-get 'solution-type) 'count)
+    (unless (eq *solution-type* 'count)
       (format t "~2%No solutions found.~2%")))
-  (search-tree-debugging))
+  (print-search-tree))
 
 
-(defun search-tree-debugging ()
+(defun print-search-tree ()
   (when (and (not (> *num-parallel-threads* 0)) (or (= *debug* 1) (= *debug* 2)))
     (format t "~2%Search tree:~%")
     (loop for act in (reverse *search-tree*)
@@ -806,7 +637,10 @@
                  (2 (format t "~vT~d:~a ~a~%" 
                               (* 4 (second act)) (second act) (first act) (third act))
                     (format t "~vT  ~a~%"
-                              (* 4 (second act)) (fourth act)))))
+                              (* 4 (second act)) (fourth act))
+                    (when (fifth act)
+                      (format t "~vT  ~a~%"
+                                (* 4 (second act)) (fifth act))))))
           finally (terpri))))
 
  
@@ -831,22 +665,18 @@
     (if (> *num-parallel-threads* 0)
       (progn (when-debug>= 1
                (lprt))
-             (let ((soln-type (ww-get 'solution-type))
-                   (ctrl-str "~&New path to goal found at depth = ~:D~%"))
+             (let ((ctrl-str "~&New path to goal found at depth = ~:D~%"))
                (bt:with-lock-held (*lock*)
-                 (if (or (eql soln-type 'min-value) (eql soln-type 'max-value))
+                 (if (or (eql *solution-type* 'min-value) (eql *solution-type* 'max-value))
                    (format t (concatenate 'string ctrl-str "Objective value = ~:A~2%")
                              state-depth (solution-value solution))
                    (format t ctrl-str state-depth)))))
       (progn (format t "~%New path to goal found at depth = ~:D~%" state-depth)
-             (let ((soln-type (ww-get 'solution-type)))
-               (when (or (eql soln-type 'min-value) (eql soln-type 'max-value))
-                 (format t "Objective value = ~:A~%" (solution-value solution))))))
+             (when (or (eql *solution-type* 'min-value) (eql *solution-type* 'max-value))
+               (format t "Objective value = ~:A~%" (solution-value solution)))))
     (when-debug>= 3
       (format t "~%New solution found:~%  ~A~%" solution))
-    (unless (eql (ww-get 'solution-type) 'count)
-      (push-global solution *solutions*))
-    (update-search-tree goal-state state-depth "***goal***")))
+    (push-global solution *solutions*)))
 
 
 (defun printout-solution (soln)
@@ -855,13 +685,12 @@
     (write item :pretty t)
     (terpri))
   (format t "~%Final state:~%~A~2%"
-    ;(list-database (problem-state-db (solution-goal soln)))))
     (list-database (problem-state-idb (solution-goal soln)))))
 
 
 (defun print-search-progress-graph ()
   ;Printout # of nodes expanded so far during search modulo reporting interval.
-  (when (= 0 (mod *total-states-processed* (ww-get 'progress-reporting-interval)))
+  (when (= 0 (mod *total-states-processed* *progress-reporting-interval*))
     (format t "~%total states processed so far = ~:D"  ;, unique states encountered = ~:D"
       *total-states-processed*)  ; *unique-states-encountered-graph*)
     (format t "~%ht count: ~:D    ht size: ~:D" (hash-table-count *visited*) (hash-table-size *visited*))
@@ -870,7 +699,7 @@
 
 (defun print-search-progress-tree ()
   ;Printout # of nodes expanded so far during search modulo reporting interval.
-  (when (= 0 (mod *total-states-processed* (ww-get 'progress-reporting-interval)))
+  (when (= 0 (mod *total-states-processed* *progress-reporting-interval*))
     (format t "~%total states processed so far = ~:D" *total-states-processed*)
     (format t "~%average branching factor = ~F~%" *average-branching-factor*)))
 

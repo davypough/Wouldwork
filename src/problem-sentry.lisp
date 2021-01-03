@@ -7,13 +7,11 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'sentry)
+(ww-set *problem* sentry)
 
-(ww-set 'tree-or-graph 'tree)
+(ww-set *tree-or-graph* tree)
 
-(ww-set 'depth-cutoff 16)
-
-(ww-set 'solution-type 'first)  ;'min-length)
+(ww-set *depth-cutoff* 16)
 
 
 (define-types
@@ -71,6 +69,7 @@
 
 
 (define-happening sentry1
+  :inits ((loc sentry1 area6))
   :events
   ((1 (not (loc sentry1 area6)) (loc sentry1 area7))
    (2 (not (loc sentry1 area7)) (loc sentry1 area6))
@@ -182,7 +181,7 @@
   (loc me area1)
   (loc jammer1 area1)
   (loc switch1 area3)
-  (loc sentry1 area6)
+;  (loc sentry1 area6)
   (loc box1 area4)
   (red switch1)
   ;static

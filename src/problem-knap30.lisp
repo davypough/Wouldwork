@@ -5,13 +5,10 @@
 
 (in-package :ww)  ;required
 
-(ww-set 'problem 'knap30)
+(ww-set *problem* knap30)
 
-(ww-set 'depth-cutoff 0)
+(ww-set *solution-type* max-value)
 
-(ww-set 'solution-type 'max-value)
-
-(ww-set 'tree-or-graph 'tree)
 
 (defstruct item  ;an item template
   (name nil :type symbol)  ;item name--eg, ITEM14
