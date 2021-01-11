@@ -11,22 +11,23 @@
   (setf *actions* (delete-if (lambda (name)
                                (member name names))
                              *actions*
-                             :key #'action-name)))
+                             :key #'action.name)))
 
 
-(defun get-state-codes ()  ;user calls this after finding backwards *solutions*
+(defun get-state-codes ()
+  "User calls this after finding backwards *solutions*."
   (format t "~%Working ...~%")
   (clrhash *state-codes*)
   (iter (for soln in *solutions*)
-        (for path = (solution-path soln))
-        (for db-props = (list-database (problem-state-idb (solution-goal soln))))
+        (for path = (solution.path soln))
+        (for db-props = (list-database (problem-state.idb (solution.goal soln))))
         (setf (gethash (funcall 'encode-state db-props) *state-codes*) path))
   *state-codes*)
 
 
 (defun backward-path-exists (state)
   "Use in forward search goal to check existence of backward path."
-  (gethash (funcall 'encode-state (list-database (problem-state-idb state))) *state-codes*))
+  (gethash (funcall 'encode-state (list-database (problem-state.idb state))) *state-codes*))
 
 
 (defmacro when-debug>= (n &rest expressions)
@@ -36,9 +37,9 @@
 
 
 (defun add-prop (proposition db)
-  ;Effectively adds a literal proposition to the database.
+  "Effectively adds a literal proposition to the database."
   (declare (hash-table db))
-  (let ((int-db (eq (hash-table-test db) 'eql)))
+  (let ((int-db (eql (hash-table-test db) 'eql)))
     (if (get-prop-fluent-indices proposition)
       ;do if proposition has fluents
       (if int-db
@@ -58,8 +59,8 @@
   
 
 (defun del-prop (proposition db)
-  ;Effectively removes a literal proposition from the database.
-  (let ((int-db (eq (hash-table-test db) 'eql)))
+  "Effectively removes a literal proposition from the database."
+  (let ((int-db (eql (hash-table-test db) 'eql)))
     (if (get-prop-fluent-indices proposition)
       ;do if proposition has fluents
       (if int-db
@@ -77,7 +78,7 @@
   
 
 (defun add-proposition (proposition db)
-  ;Adds a proposition and all its symmetries to the database.
+  "Adds a proposition and all its symmetries to the database."
   (declare (hash-table db))
   (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
     (if (null symmetric-indexes)
@@ -112,14 +113,14 @@
 
 
 (defun generate-new-propositions (vars propositions idxs)
-  ;Collects new propositions for each prop in propositions.
+  "Collects new propositions for each prop in propositions."
   (loop for prop in propositions
         append (generate-proposition-permutations vars prop idxs)))
 
 
 (defun generate-proposition-permutations (vars proposition idxs)
-  ;Returns list of propositions generated from given proposition replacing
-  ;items at indices with vars, respectively.
+  "Returns list of propositions generated from given proposition replacing
+   items at indices with vars, respectively."
   (let (propositions)
     (alexandria:map-permutations
       (lambda (perm)
@@ -129,7 +130,7 @@
 
 
 (defun revise (db literals)
-  ;Use for simple list of literals.
+  "Updates a database given a simple list of literals."
   (declare (hash-table db))
   (loop for literal in literals
       do (update db literal)
@@ -137,22 +138,12 @@
 
 
 (defun update (db literal)
-  ;Single add or delete from db.
+  "Single add or delete from db."
   (declare (hash-table db))
-  (if (eq (car literal) 'not)
+  (if (eql (car literal) 'not)
     (delete-proposition (second literal) db)
     (add-proposition literal db)))
 
-#|
-(defun update2 (literal)
-  (if (eq (car literal) 'not)
-    (if (gethash (cadr literal) *relations*)
-      (delete-proposition (second literal) *db*)
-      (delete-proposition (second literal) *static-db*))
-    (if (gethash (car literal) *relations*)
-      (add-proposition literal *db*)
-      (add-proposition literal *static-db*))))
-|#
 
 (defun commit1 (db literal)
   (when-debug>= 4
@@ -160,29 +151,8 @@
   (update db literal))
 
 
-;(defun complement-literals (literals)
-;  (order-propositions
-;   (map 'list #'(lambda (lit)
-;                  (if (eq (car lit) 'not)
-;                      (cadr lit)
-;                    (list 'not lit)))
-;     literals)))
-
-
-;(defun assign-fluents (fluents fluent-accessor db)
-;  ;Assigns fluents to their current values.
-;  (loop for fluent in fluents
-;      for value in ;(or 
-;                   (gethash fluent-accessor db)
-;                   ;(make-list (length fluents) :initial-element 0))
-;      do (cond ((symbolp fluent) (set fluent value))
-;               ((realp fluent) (when (not (= fluent value)) (return nil)))
-;               (t (error "Given fluent not a $var or real number: ~A" fluent)))
-;      finally (return t)))
-
-
 (defun expand-into-plist (parameters)
-  ;Return alternating plist of variable/type from input parameter list.
+  "Return alternating plist of variable/type from input parameter list."
   (loop for (vars type) on parameters by #'cddr
       if (listp vars)
       append (ut::intersperse type vars) into plist
@@ -211,13 +181,13 @@
 
 
 (defun get-fluentless-prop (proposition)
-  ;Derives the fluentless proposition counterpart from a full proposition.
+  "Derives the fluentless proposition counterpart from a full proposition."
   (let ((indices (get-prop-fluent-indices proposition)))
     (ut::remove-at-indexes indices proposition)))
 
 
 (defun get-complement-prop (proposition)
-  ;Derives the complement proposition counterpart from a given proposition.
+  "Derives the complement proposition counterpart from a given proposition."
   (let* ((predicate (car proposition))
          (joint-patterns (gethash predicate *complements*))
          (prop-pattern (first joint-patterns))
@@ -232,7 +202,7 @@
 (defun consolidate-types (types)
   (loop for type in types
       if (and (listp type)
-              (eq (car type) 'either))
+              (eql (car type) 'either))
         collect (let* ((combo-instances (remove-duplicates 
                                           (loop for typ in (cdr type)
                                                 append (gethash typ *types*))))
@@ -244,8 +214,8 @@
 
 
 (defun type-instantiations (symbol-types restriction state)
-  ;Returns lists of possible variable instantiations for a list of (only) type symbols.
-  ;May restrict symbol types to combinations or dot-products.
+  "Returns lists of possible variable instantiations for a list of (only) type symbols.
+   May restrict symbol types to combinations or dot-products."
   (when symbol-types
     (let* ((nonfluent-types (remove 'fluent symbol-types))
            (instances (mapcar (lambda (item)
@@ -256,11 +226,11 @@
                               nonfluent-types)))
       (when (member nil instances)
         (return-from type-instantiations nil))
-      (if (eq restriction 'dot-products)
+      (if (eql restriction 'dot-products)
         (apply #'mapcar #'list instances)
         (let* ((product-instances (apply #'alexandria:map-product 'list instances))
                (set-instances (get-set-instances nonfluent-types product-instances)))
-          (if (eq restriction 'combinations)
+          (if (eql restriction 'combinations)
             (or (delete-duplicates set-instances :test #'alexandria:set-equal)
                 (make-list (length nonfluent-types) :initial-element nil))
             (or set-instances
@@ -268,33 +238,33 @@
 
 
 (defun get-set-instances (symbol-types product-instances)
-  ;Culls out duplicate instances of the same type from product-instances.
+  "Culls out duplicate instances of the same type from product-instances."
   (iter (for product-instance in product-instances)
         (unless (duplicate-product-instance symbol-types product-instance)
           (collect product-instance))))
 
 
 (defun duplicate-product-instance (symbol-types product-instance)
-  ;Tests whether a product-instance contains duplicate type assignments of constants.
+  "Tests whether a product-instance contains duplicate type assignments of constants."
   (iter (for common-values in (get-common-values symbol-types product-instance))
-        (when (not (alexandria:setp common-values))  ;duplicate values
+        (unless (alexandria:setp common-values)  ;duplicate values
           (return t))
         (finally (return nil))))
 
 
 (defun get-common-values (symbol-types product-instance)
-  ;Returns a set of product-instance values for equivalent types in symbol-types.
+  "Returns a set of product-instance values for equivalent types in symbol-types."
   (iter (with types-set = (remove-duplicates symbol-types))
         (for type in types-set)
         (collect (iter (for sym-type in symbol-types)
                        (for value in product-instance)
                        (for i from 0)
-                       (when (eq sym-type type)
+                       (when (eql sym-type type)
                          (collect value))))))
 
 
 (defun dissect-parameters (parameter-list)
-  ;Returns a list of primitive parameter variables and types.
+  "Returns a list of primitive parameter variables and types."
   (let ((restriction (case (car parameter-list)
                        (combinations 'combinations)
                        (dot-products 'dot-products))))

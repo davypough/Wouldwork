@@ -6,8 +6,8 @@
 (in-package :ww)
 
 
-(defstruct (problem-state (:print-function print-problem-state) (:copier nil))
-  ;A planning state including the current propositional database
+(defstruct (problem-state (:conc-name problem-state.) (:print-function print-problem-state) (:copier nil))
+  "A planning state including the current propositional database."
   (name nil :type symbol)  ;last action executed
   (instantiations nil :type list)  ;from last action effect
   (happenings nil :type list)  ;a list of (object (next-index next-time next-direction)) pairs
@@ -22,9 +22,9 @@
 
 
 (defun convert-to-proposition (integer)
-  ;Converts an integer code back to a proposition.
+  "Converts an integer code back to a proposition."
   (iter (with x = integer)
-        (for (int triple) = (multiple-value-list (truncate x 1000)))
+        (for (values int triple) = (truncate x 1000))
         (collecting triple into int-list)
         (until (zerop int))
         (setf x int)
@@ -37,20 +37,20 @@
   (gethash (car proposition) *fluent-relation-indices*))
 
 
-(defun convert-to-fluent-proposition (key values)
-  ;Converts an idb partial prop -> index values into literal prop.
+(defun convert-to-fluent-proposition (key vals)
+  "Converts an idb partial prop -> index values into literal prop."
   (loop with partial-prop = (convert-to-proposition key)
         for index in (get-prop-fluent-indices partial-prop)
-        for value in values
-          do (ut::ninsert-list value index partial-prop)
+        for val in vals
+          do (ut::ninsert-list val index partial-prop)
         finally (return partial-prop)))
 
 
 (defun list-database (db)
-  (let ((propositions (iter (for (key values) in-hashtable db)
-                            (if (eq values t)
+  (let ((propositions (iter (for (key val) in-hashtable db)
+                            (if (eql val t)
                                 (collecting (convert-to-proposition key))  ;non-fluent prop
-                                (collecting (convert-to-fluent-proposition key values))))))
+                                (collecting (convert-to-fluent-proposition key val))))))
     (sort propositions #'string< :key (lambda (prop) (format nil "~A" prop)))))
 ;    (loop for prop in propositions
 ;          sum (expt 2 (1- (read-from-string (subseq (format nil "~A" (second prop)) 5)))))))
@@ -59,35 +59,36 @@
 (defun print-problem-state (state stream depth)
   (declare (problem-state state) (ignore depth))
   (format stream "<~A ~A ~A ~A ~A ~A~%  ~A~%  ~A>"
-      (problem-state-name state)
-      (problem-state-instantiations state)
-      (problem-state-happenings state)
-      (problem-state-time state)
-      (problem-state-value state)
-      (problem-state-heuristic state)
-      (list-database (problem-state-idb state))
-      (list-database (problem-state-hidb state))))
+      (problem-state.name state)
+      (problem-state.instantiations state)
+      (problem-state.happenings state)
+      (problem-state.time state)
+      (problem-state.value state)
+      (problem-state.heuristic state)
+      (list-database (problem-state.idb state))
+      (list-database (problem-state.hidb state))))
 
 
 (defun copy-problem-state (state)
   (make-problem-state
-   :name (problem-state-name state)
-   :instantiations (copy-list (problem-state-instantiations state))
-   :happenings (copy-tree (problem-state-happenings state))
-   :time (problem-state-time state)
-   :value (problem-state-value state)
-   :heuristic (problem-state-heuristic state)
-   :idb (copy-db (problem-state-idb state))
-   :hidb (copy-db (problem-state-hidb state))))
+    :name (problem-state.name state)
+    :instantiations (copy-list (problem-state.instantiations state))
+    :happenings (copy-tree (problem-state.happenings state))
+    :time (problem-state.time state)
+    :value (problem-state.value state)
+    :heuristic (problem-state.heuristic state)
+    :idb (copy-db (problem-state.idb state))
+    :hidb (copy-db (problem-state.hidb state))))
 
 
 (defun copy-db (db)
+  "Copies a Wouldwork database."
   (declare (hash-table db))
   (alexandria:copy-hash-table db
-    :key (lambda (value)
-           (if (listp value)
-             (copy-list value)
-             value))))
+    :key (lambda (val)
+           (if (listp val)
+             (copy-list val)
+             val))))
 
 
 (defparameter *start-state* (make-problem-state)
@@ -95,7 +96,7 @@
 (declaim (problem-state *start-state*))
 
 
-(defstruct action
+(defstruct (action (:conc-name action.))
   (name nil :type symbol)
   (duration 0.0 :type real)
   (precondition-params nil :type list)
@@ -115,14 +116,16 @@
   (ieffect #'identity :type function))
 
 
-(defstruct update  ;db updates resulting from a successful action instantiation
+(defstruct (update (:conc-name update.))
+  "Db updates resulting from a successful action instantiation."
   (changes nil :type list)
   (value 0.0 :type real)
   (instantiations nil :type list)
   (followups nil :type list))  ;next & finally followup function calls
 
 
-(defstruct solution  ;the record of a solution
+(defstruct (solution (:conc-name solution.))
+  "The record of a solution."
   (depth 0 :type fixnum)
   (time 0.0 :type real)
   (value 0.0 :type real)

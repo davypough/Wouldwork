@@ -7,6 +7,7 @@
 
 (in-package :ww)  ;required
 
+
 (ww-set *problem* blocks3)
 
 (ww-set *solution-type* every)

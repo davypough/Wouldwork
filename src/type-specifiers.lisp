@@ -22,7 +22,7 @@
 
 (defun extract-type (value-symbol)
   (if ($varp value-symbol)
-      (intern (subseq (symbol-name value-symbol) 1))
+    (intern (subseq (symbol-name value-symbol) 1))
     value-symbol))
 
 
@@ -34,44 +34,41 @@
 (defun list-of-variables (lst)
   (and (listp lst)
        (every (lambda (arg)
-                (or (varp arg)
-                    (symbolp arg)
-                    (realp arg)))
-              lst)))
+                (or (varp arg) (symbolp arg) (realp arg)))
+         lst)))
 
 
 (defun type-description (descrip)
   (or (nth-value 1 (gethash descrip *types*))
-      (eq descrip 'fluent)
+      (eql descrip 'fluent)
       (and ($varp descrip)
            (or (nth-value 1 (gethash (extract-type descrip) *types*))
                (symbolp (extract-type descrip))))
       (and (consp descrip)
            (eql (car descrip) 'either)
-           (or (every (lambda (typ)
-                        (gethash (extract-type typ) *types*))
-                      (cdr descrip))))))
+           (every (lambda (typ)
+                    (gethash (extract-type typ) *types*))
+             (cdr descrip)))))
 
 
 (defun list-of-parameter-types (lst)
   (every (lambda (typ)
            (or (null typ)
-               (ut::hash-table-present typ *types*)
-               (eq typ 'fluent)
+               (ut::hash-table-present-p typ *types*)
+               (eql typ 'fluent)
                (and (listp typ)
                     (list-of-parameter-types typ))))
-         lst))
+    lst))
 
 
 (defun relation (rel)
   (and (listp rel)
        (iter (for rel-item in (cdr rel))
              (for rel-type in (gethash (car rel) *relations*))
-             (unless (or (eq rel-item rel-type)
+             (unless (or (eql rel-item rel-type)
                          (and (listp rel-type)
                               (member rel-item (cdr rel-type)))  ;either type
                          (subsetp (gethash rel-item *types*) (gethash rel-type *types*)))
-                         ;(alexandria:set-equal rel-item rel-type))
                (leave nil))
              (finally (return t)))))
 
@@ -84,10 +81,10 @@
 
 (defun key-list (lst)
   (and (consp lst)
-       (loop for (keyword *) on lst by #'cddr
-           when (not (member keyword '(:inits :events :repeat :rebound :interrupt)))
-           do (return nil)
-             finally (return t))))
+       (iter (for (keyword *) on lst by #'cddr)
+             (unless (member keyword '(:inits :events :repeat :rebound :interrupt))
+               (return nil))
+             (finally (return t)))))
 
 
 (defun proposition (prop)
@@ -101,9 +98,9 @@
                              (eql (car typ) 'either)
                              (member const
                                (reduce #'union 
-                                       (mapcar (lambda (typ)
-                                                 (gethash (extract-type typ) *types*))
-                                               (cdr typ)))))
+                                 (mapcar (lambda (typ)
+                                           (gethash (extract-type typ) *types*))
+                                   (cdr typ)))))
                         (typep const (extract-type typ))))
               (cdr prop) (or (gethash (car prop) *relations*)
                              (gethash (car prop) *static-relations*))))))
@@ -129,4 +126,4 @@
                 (or (varp arg)
                     (symbolp arg)
                     (realp arg)))
-              (cdr form))))
+         (cdr form))))

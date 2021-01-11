@@ -20,6 +20,12 @@
 ;Allows non-wrap printing of *search-tree* for deep trees.
 
 
+(fmakunbound 'heuristic?)
+(fmakunbound 'prune?)
+(fmakunbound 'get-best-relaxed-value?)
+;Reset user defined functions, when defined on previous load.
+
+
 (defparameter *problem* 'unspecified
   "Name of the current problem, assigned in problem.lisp by user.")
 (declaim (symbol *problem*))
@@ -69,70 +75,6 @@
     5 - display full nodes + break after each expansion cycle")
 (declaim (fixnum *debug*))
 
-
-(defmacro ww-set (parameter value)
-  ;Allows resetting of user parameters after loading.
-  (case parameter
-    ((*problem* *depth-cutoff* *max-states* *progress-reporting-interval* *randomize-search*)
-       `(setq ,parameter ',value))
-    (*solution-type* 
-       `(progn (setq *solution-type* ',value)
-               (setf (symbol-function 'process-successor-graph)
-                   (compile nil (function-lambda-expression #'process-successor-graph)))
-               (setf (symbol-function 'process-successor-tree)
-                   (compile nil (function-lambda-expression #'process-successor-tree)))
-               (setf (symbol-function 'detect-goals)
-                 (compile nil (function-lambda-expression #'detect-goals)))
-               ',value))
-    (*debug*
-       `(progn (setq *debug* ',value)
-               (setf (symbol-function 'df-bnb1)
-                 (compile nil (function-lambda-expression #'df-bnb1)))
-               (setf (symbol-function 'process-successor-graph)
-                 (compile nil (function-lambda-expression #'process-successor-graph)))
-               (setf (symbol-function 'process-successor-tree)
-                 (compile nil (function-lambda-expression #'process-successor-tree)))
-               (setf (symbol-function 'generate-new-node)
-                 (compile nil (function-lambda-expression #'generate-new-node)))
-               (setf (symbol-function 'close-barren-nodes)
-                 (compile nil (function-lambda-expression #'close-barren-nodes)))
-               (setf (symbol-function 'pop-discontinued-node)
-                 (compile nil (function-lambda-expression #'pop-discontinued-node)))
-               (setf (symbol-function 'register-solution)
-                 (compile nil (function-lambda-expression #'register-solution)))
-               (setf (symbol-function 'amend-happenings)
-                 (compile nil (function-lambda-expression #'amend-happenings)))
-               (setf (symbol-function 'generate-children)
-                 (compile nil (function-lambda-expression #'generate-children)))
-               (setf (symbol-function 'get-new-states)
-                 (compile nil (function-lambda-expression #'get-new-states)))
-               (setf (symbol-function 'update-search-tree)
-                 (compile nil (function-lambda-expression #'update-search-tree)))
-               (setf (symbol-function 'process-followup-updates)
-                 (compile nil (function-lambda-expression #'process-followup-updates)))
-               (setf (symbol-function 'commit1)
-                 (compile nil (function-lambda-expression #'commit1)))
-               ',value))
-    (*tree-or-graph*
-       `(progn (setq *tree-or-graph* ',value)
-               (setf (symbol-function 'process-nongoal-succ-states)
-                 (compile nil (function-lambda-expression #'process-nongoal-succ-states)))
-               ',value))
-    (*probe*
-       `(progn (setq *probe* ',value)
-               (ww-set *debug* 0)
-               (setq *counter* 1)
-               ',value))
-    (*num-parallel-threads*
-       `(progn (format t "~%*num-parallel-threads* cannot be changed with ww-set.")
-               (format t "~%Instead, set its value in the file settings.lisp, and then recompile.~2%")))
-    (otherwise
-       (format t "~%~A is not a valid parameter name in ww-set.~%" parameter))))
-
-
-(fmakunbound 'heuristic?)
-(fmakunbound 'prune?)
-(fmakunbound 'get-best-relaxed-value?)
 
 
 (defparameter *types* (make-hash-table :test #'eq)
@@ -228,7 +170,8 @@
 (declaim (hash-table *hap-idb*))
 
 (defparameter *goal* nil
-  "Holds the goal test function--value is a lambda expression, symbol-function is the function.")
+  "Holds the goal test function--value is a lambda expression,
+   symbol-function is the function.")
 (declaim (list *goal*))
 
 (defparameter *constraint* nil

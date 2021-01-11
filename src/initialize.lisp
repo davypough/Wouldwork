@@ -10,24 +10,24 @@
   (setf *update-names* (nreverse *update-names*))
   (setf *init-actions* (nreverse *init-actions*))
   (init-start-state)  ;finish start-state init later in converter.lisp
-  (when (> (length *happenings*) 1)
-    (setq *happenings* (sort *happenings* #'< :key (lambda (object)
-                                                     (first (aref (get object :events) 0))))))
+; (when (> (length *happenings*) 1)
+  (setq *happenings* (sort *happenings* #'< :key (lambda (object)
+                                                   (first (aref (get object :events) 0)))))
   (format t "Converting propositions to integers...~%")
   (do-integer-conversion)  ;allows integer hashtable db lookups, adds start-state idb
   (convert-ilambdas-to-fns) ;and compile
-  (if *actions*
-    (progn (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
-           (setf *min-action-duration* (reduce #'min *actions* :key #'action-duration)))
-    (format t "~%NOTE: There are no defined actions.~%"))
+  (cond (*actions*
+           (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
+           (setf *min-action-duration* (reduce #'min *actions* :key #'action.duration)))
+        (t (format t "~%NOTE: There are no defined actions.~%")))
   (iter (for action in *actions*)
-        (setf (action-precondition-instantiations action)  ;previous setting, nil or restriction
-              (or (type-instantiations (action-precondition-types action)
-                                       (action-precondition-instantiations action)
+        (setf (action.precondition-instantiations action)  ;previous setting, nil or restriction
+              (or (type-instantiations (action.precondition-types action)
+                                       (action.precondition-instantiations action)
                                        *start-state*)
                   '(nil))))
   (when (fboundp 'heuristic?)
-    (setf (problem-state-heuristic *start-state*) (funcall 'heuristic? *start-state*))
+    (setf (problem-state.heuristic *start-state*) (funcall 'heuristic? *start-state*))
     (when *randomize-search*
       (format t "~%NOTE: Defining a heuristic? search function is incompatible with randomize-search setting.")
       (format t "~%Ignoring randomization.~%")))
@@ -55,22 +55,21 @@
   (format t "~&Converting lambda expressions to functions...~%")
   (iter (for fname in (append *query-names* *update-names*))
         (format t "~&~A...~%" fname)
-        (when (fboundp `,fname)
-          (fmakunbound `,fname))
-        (eval `(defun ,fname ,@(cdr (eval fname))))
-        (compile `,fname))
+        (when (fboundp fname)
+          (fmakunbound fname))
+        (setf (symbol-function fname) (compile nil (symbol-value fname))))
   (when *constraint*
     (format t "~&~A...~%" '*constraint*)
     (setf (symbol-function '*constraint*)
       (compile nil *constraint*)))
   (iter (for object in *happenings*)
         (format t "~&~A...~%" object)
-        (setf (get object :interrupt-fn) (compile nil (eval object))))
+        (setf (get object :interrupt-fn) (compile nil (symbol-value object))))
   (format t "~&~A...~%" '*goal*)
   (setf (symbol-function '*goal*)
     (compile nil *goal*))
   (dolist (action *actions*)
-    (format t "~&~A...~%" (action-name action))
+    (format t "~&~A...~%" (action.name action))
     (with-slots (iprecondition-lambda iprecondition ieffect-lambda ieffect) action
       (setf iprecondition (compile nil iprecondition-lambda))
       (setf ieffect (compile nil ieffect-lambda)))))

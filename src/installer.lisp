@@ -17,35 +17,37 @@
 
 (defun install-types (types&constants)
   (format t "~%Installing object types...~%")
-  (loop for (type constants) on types&constants by #'cddr
-         do (check-type type symbol)
-            (check-type constants list)
-            (when (and (consp constants) (eql (car constants) 'either))
-              (setf constants (apply #'either (cdr constants))))
-            (when (eql (car constants) 'compute)
-              (setf constants (eval (second constants))))
-            (setf (gethash type *types*) constants)
-            (when (consp constants)
-              (dolist (constant constants)
-                (check-type constant (or symbol real list))
-                (setf (gethash (list 'something constant) *static-db*) t)
-                (setf (gethash (list type constant) *static-db*) t)))
-        when (consp constants)
-          append constants into everything
-      finally (setf (gethash 'something *types*)  ;every constant is a something
-                (remove-duplicates everything :test #'eql))))
+  (iter (for (type constants) on types&constants by #'cddr)
+    (check-type type symbol)
+    (check-type constants list)
+    (when (and (consp constants) (eql (car constants) 'either))
+      (setf constants (apply #'either (cdr constants))))
+    (when (eql (car constants) 'compute)
+      (setf constants (eval (second constants))))
+    (setf (gethash type *types*) constants)
+    (when (consp constants)
+      (dolist (constant constants)
+        (check-type constant (or symbol real list))
+        (setf (gethash (list 'something constant) *static-db*) t)
+        (setf (gethash (list type constant) *static-db*) t)))
+    (when (consp constants)
+      (appending constants into everything))
+    (finally (setf (gethash 'something *types*)  ;every constant is a something
+               (remove-duplicates everything :test #'eql)))))
 
 
 (defun symmetric-type-indexes (types)
   ;Returns the set of type indexes for the multi-types of a symmetric relation.
   (let ((dups (remove-duplicates types)))
-    (loop for dup in dups
-       collect (loop for type in types
-                     for i from 0
-                     when (eql type dup)
-                     collect i) into indices
-      finally (return (remove-if (lambda (elt) (= (length elt) 1))
-                                 indices)))))
+    (iter (for dup in dups)
+      (collect (iter (for type in types)
+                 (for i from 0)
+                 (when (eql type dup)
+                   (collect i)))
+               into indices)
+      (finally (return (remove-if (lambda (elt)
+                                    (alexandria:length= 1 (length elt)))
+                         indices))))))
 
 
 (defun sort-either-types (relation)
@@ -53,7 +55,7 @@
   (mapcar (lambda (item)  ;cannonically orders 'either' types
             (if (symbolp item)
               item
-              (cons 'either (sort (cdr item) #'string< 
+              (cons 'either (sort (cdr item) #'string<
                                   :key #'symbol-name))))
           relation))
             
@@ -70,31 +72,31 @@
 
 (defun install-dynamic-relations (relations)
   (format t "Installing dynamic relations...~%")
-  (loop for relation in relations
-     do (check-type relation cons)
-        (check-type (car relation) symbol)
-        (setf (gethash (car relation) *relations*)
-          (ut::if-it (cdr relation)
-            (sort-either-types ut::it)
-            nil))
-        (ut::if-it (loop for arg in (cdr relation)
-                        for i from 1
-                          do (check-type arg (satisfies type-description))
-                        when ($varp arg)
-                          collect i)
-          (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
-      finally (maphash #'(lambda (key value)  ;install implied unary relations
-                           (declare (ignore value))
-                           (setf (gethash key *static-relations*) '(something)))
-                       *types*)
-              (add-proposition '(always-true) *static-db*)
-              (setf (gethash 'always-true *static-relations*) '(always-true)))
-  (loop for key being the hash-keys of *relations*  ;install symmetric relations
-        using (hash-value value)
-      when (and (not (eq value t))
-                (not (alexandria:setp value))  ;multiple types
-                (not (final-charp #\> key)))   ;not explicitly directed
-        do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
+  (iter (for relation in relations)
+    (check-type relation cons)
+    (check-type (car relation) symbol)
+    (setf (gethash (car relation) *relations*)
+      (ut::if-it (cdr relation)
+        (sort-either-types ut::it)
+        nil))
+    (ut::if-it (iter (for arg in (cdr relation))
+                 (for i from 1)
+                 (check-type arg (satisfies type-description))
+                 (when ($varp arg)
+                   (collect i)))
+      (setf (gethash (car relation) *fluent-relation-indices*)
+        ut::it))
+    (finally (maphash #'(lambda (key val)  ;install implied unary relations
+                          (declare (ignore val))
+                          (setf (gethash key *static-relations*) '(something)))
+               *types*)
+      (add-proposition '(always-true) *static-db*)
+      (setf (gethash 'always-true *static-relations*) '(always-true))))
+  (iter (for (key val) in-hashtable *relations*)  ;install symmetric relations
+    (when (and (not (eql val t))
+               (not (alexandria:setp val))  ;multiple types
+               (not (final-charp #\> key)))   ;not explicitly directed
+      (setf (gethash key *symmetrics*) (symmetric-type-indexes val))))
   t)
 
 
@@ -104,29 +106,28 @@
 
 (defun install-static-relations (relations)
   (format t "Installing static relations...~%")
-  (loop for relation in relations
-     do (check-type relation cons)
-        (check-type (car relation) symbol)
-        (setf (gethash (car relation) *static-relations*)
-          (ut::if-it (cdr relation) 
-            (sort-either-types ut::it)
-            nil))
-         (ut::if-it (loop for arg in (cdr relation)
-                          for i from 1
-                          do (check-type arg (satisfies type-description))
-                          when ($varp arg)
-                          collect i)
-           (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
-      finally (maphash #'(lambda (key value)  ;install implied unary relations
-                           (declare (ignore value))
-                           (setf (gethash key *static-relations*) '(everything)))
-                       *types*))
-  (loop for key being the hash-keys of *static-relations*  ;install symmetric relations
-        using (hash-value value)
-      when (and (not (eq value t))
-                (not (alexandria:setp value))  ;multiple types
-                (not (final-charp #\> key)))   ;not explicitly directed
-      do (setf (gethash key *symmetrics*) (symmetric-type-indexes value)))
+  (iter (for relation in relations)
+    (check-type relation cons)
+    (check-type (car relation) symbol)
+    (setf (gethash (car relation) *static-relations*)
+      (ut::if-it (cdr relation) 
+        (sort-either-types ut::it)
+        nil))
+    (ut::if-it (iter (for arg in (cdr relation))
+                (for i from 1)
+                (check-type arg (satisfies type-description))
+                (when ($varp arg)
+                  (collect i)))
+      (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
+    (finally (maphash #'(lambda (key val)  ;install implied unary relations
+                          (declare (ignore val))
+                          (setf (gethash key *static-relations*) '(everything)))
+               *types*)))
+  (iter (for (key val) in-hashtable *static-relations*)  ;install symmetric relations
+    (when (and (not (eql val t))
+               (not (alexandria:setp val))  ;multiple types
+               (not (final-charp #\> key)))   ;not explicitly directed
+      (setf (gethash key *symmetrics*) (symmetric-type-indexes val))))
   (setf (gethash 'always-true *static-relations*) t)
   (setf (gethash 'waiting *static-relations*) t)
   t)
@@ -138,14 +139,13 @@
 
 (defun install-complementary-relations (positives->negatives)
   (format t "Installing complementary relations...~%")
-  (loop for (positive nil negative) on positives->negatives by #'cdddr
-     do 
-        (let ((ordered-pos (sort-either-types positive))
-              (ordered-neg (list 'not (sort-either-types (second negative)))))
-          (check-type ordered-pos (satisfies relation))
-          (check-type ordered-neg (satisfies negative-relation)) 
-          (setf (gethash (car positive) *complements*)
-            (list ordered-pos ordered-neg)))))
+  (iter (for (positive nil negative) on positives->negatives by #'cdddr)
+    (let ((ordered-pos (sort-either-types positive))
+          (ordered-neg (list 'not (sort-either-types (second negative)))))
+      (check-type ordered-pos (satisfies relation))
+      (check-type ordered-neg (satisfies negative-relation)) 
+      (setf (gethash (car positive) *complements*)
+        (list ordered-pos ordered-neg)))))
 
         
 (defmacro define-happening (object &rest plist)
@@ -158,16 +158,18 @@
   (check-type plist (satisfies key-list))
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
   (makunbound object)
-  (setf (the simple-vector (get object :events)) (coerce (getf plist :events) 'simple-vector))
+  (setf (the simple-vector (get object :events))
+    (coerce (getf plist :events) 'simple-vector))
   (when (getf plist :inits)
     (setf (get object :inits) (getf plist :inits)))
   (ut::if-it (getf plist :interrupt)
     (let (($vars (get-all-vars #'$varp ut::it)))
-      (setf (get object :interrupt) `(lambda (state)
-                                       (let ,$vars
-                                         ,(when $vars
-                                            `(declare (special @,$vars)))
-                                         ,(translate (getf plist :interrupt) 'pre))))))
+      (setf (get object :interrupt) 
+        `(lambda (state)
+           (let ,$vars
+             ,(when $vars
+                `(declare (special @,$vars)))
+                ,(translate (getf plist :interrupt) 'pre))))))
   (fix-if-ignore '(state) (get object :interrupt))
   (when (getf plist :repeat)
     (setf (get object :repeat) (getf plist :repeat)))
@@ -177,12 +179,12 @@
   ;  (setf (the function (get object :rebound-fn)) (compile nil (get object :rebound))))
   (dolist (literal (get object :inits))
     ;(check-type literal (satisfies literal))
-    (when (eq (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
+    (when (eql (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
       (setq literal (eval literal)))
-    (if (eq (car literal) 'not)
-      (if (gethash (caadr literal) *relations*)
+    (if (eql (car literal) 'not)
+      (when (gethash (caadr literal) *relations*)
         (delete-proposition (second literal) *hap-db*))
-      (if (gethash (car literal) *relations*)
+      (when (gethash (car literal) *relations*)
         (add-proposition literal *hap-db*))))
   (push object *happenings*))
            
@@ -197,11 +199,12 @@
   (push `,name *query-names*)
   (setf (get `,name 'formula) body)
   (let ((new-$vars (delete-duplicates (set-difference (get-all-vars #'$varp body) args))))
-    (setf (get `,name 'fn) `(lambda (state ,@args)
-                              (let ,new-$vars
-                                ,(when new-$vars
-                                   `(declare (special ,@new-$vars)))
-                                ,(translate body 'pre)))))
+    (setf (get `,name 'fn)
+      `(lambda (state ,@args)
+         (let ,new-$vars
+           ,(when new-$vars
+              `(declare (special ,@new-$vars)))
+              ,(translate body 'pre)))))
   (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
@@ -218,16 +221,18 @@
   (let (eff-args eff-param-vars)
     (declare (special eff-args eff-param-vars))
     (ut::if-it (delete-duplicates (set-difference (get-all-vars #'$varp body) args))
-      (setf (get `,name 'fn) `(lambda (state ,@args)
-                                (let (changes db-updates followups ,@ut::it)
-                                   ,(when ut::it
-                                      `(declare (special ,@ut::it db-updates followups)))
-                                   ,(translate body 'eff)
-                                   changes)))
-      (setf (get `,name 'fn) `(lambda (state ,@args)
-                                (let (changes)
-                                   ,(translate body 'eff)
-                                   changes)))))
+      (setf (get `,name 'fn)
+        `(lambda (state ,@args)
+           (let (changes db-updates followups ,@ut::it)
+             ,(when ut::it
+                `(declare (special ,@ut::it db-updates followups)))
+                ,(translate body 'eff)
+                changes)))
+      (setf (get `,name 'fn)
+        `(lambda (state ,@args)
+           (let (changes)
+             ,(translate body 'eff)
+             changes)))))
   (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
@@ -240,11 +245,12 @@
   (format t "Installing constraint...~%")
   (setf (get '*constraint* 'formula) form)
   (let (($vars (get-all-vars #'$varp form)))
-    (setf (get '*constraint* 'fn) `(lambda (state)
-                                     (let ,$vars
-                                       ,(when $vars
-                                          `(declare (special ,@$vars)))
-                                       ,(translate form 'pre)))))
+    (setf (get '*constraint* 'fn)
+      `(lambda (state)
+         (let ,$vars
+           ,(when $vars
+              `(declare (special ,@$vars)))
+              ,(translate form 'pre)))))
   (fix-if-ignore '(state) (get '*constraint* 'fn))
   (setf *constraint* (copy-tree (get '*constraint* 'fn))))
         
@@ -256,7 +262,7 @@
 (defun install-action (name duration pre-params precondition eff-params effect)
   (format t "Installing ~A action...~%" name)
   (push (create-action name duration pre-params precondition eff-params effect)
-        *actions*))
+    *actions*))
 
 
 (defmacro define-init-action (name duration pre-params precondition eff-params effect)
@@ -267,7 +273,7 @@
   (declare (ignore duration))
   (format t "Installing ~A init action...~%" name)
   (push (create-action name 0 pre-params precondition eff-params effect)
-        *init-actions*))
+    *init-actions*))
 
 
 (defun create-action (name duration pre-params precondition eff-params effect)
@@ -288,8 +294,7 @@
              (eff-free-?vars (ut::list-difference eff-?vars eff-bound-?vars))
              (eff-extra-$vars (ut::list-difference eff-$vars pre-$vars))
              (eff-extra-?vars (ut::if-it (ut::list-difference eff-free-?vars pre-param-?vars)
-                                (error "Extra effect ?vars in action ~A: ~A"
-                                       name ut::it)))
+                                (error "Extra effect ?vars in action ~A: ~A" name ut::it)))
              (eff-missing-vars (ut::list-difference eff-args (append eff-free-?vars eff-$vars)))
              (action (make-action
                        :name name
@@ -299,7 +304,7 @@
                        :precondition-types pre-types
                        :dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
                                                                             (gethash typ *types*))
-                                                                           pre-types))
+                                                                    pre-types))
                                               *query-names*)
                        :precondition-instantiations restriction
                        ;:precondition-lits nil
@@ -320,8 +325,8 @@
                                            db-updates))
                       :effect-adds nil)))
         (declare (special eff-args eff-param-vars))  ;used in translate in :effect-lambda above
-        (fix-if-ignore '(state) (action-precondition-lambda action))
-        (fix-if-ignore `(state ,@eff-missing-vars) (action-effect-lambda action))
+        (fix-if-ignore '(state) (action.precondition-lambda action))
+        (fix-if-ignore `(state ,@eff-missing-vars) (action.effect-lambda action))
         action))))
 
 
@@ -360,9 +365,9 @@
   (format t "Creating initial propositional database...~%")
   (dolist (literal literals)
     ;(check-type literal (satisfies literal))
-    (when (eq (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
+    (when (eql (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
       (setq literal (eval literal)))
-    (if (eq (car literal) 'not)
+    (if (eql (car literal) 'not)
       (if (gethash (caadr literal) *relations*)
         (delete-proposition (second literal) *db*)
         (delete-proposition (second literal) *static-db*))
@@ -379,11 +384,12 @@
   (format t "Installing goal...~%")
   (setf (get '*goal* 'formula) form)  ;save user's goal for summary printout
   (let (($vars (get-all-vars #'$varp form)))
-    (setf (get '*goal* 'fn) `(lambda (state)  ;save uncoded goal translation
-                               (let ,$vars
-                                 ,(when $vars
-                                    `(declare (special ,@$vars)))
-                                 ,(translate form 'pre)))))
+    (setf (get '*goal* 'fn)
+      `(lambda (state)  ;save uncoded goal translation
+         (let ,$vars
+           ,(when $vars
+              `(declare (special ,@$vars)))
+              ,(translate form 'pre)))))
   (fix-if-ignore '(state) (get '*goal* 'fn))
   (setq *goal* (copy-tree (get '*goal* 'fn))))  ;to be compiled
     

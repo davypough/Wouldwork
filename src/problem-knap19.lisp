@@ -72,8 +72,8 @@
                (setq $load (+ $load $weight)
                      $worth (+ $worth $value))
                (do (setq $fraction (/ (- *max-knapsack-weight* $load) $weight))
-                   (setq $worth (+ $worth (* $fraction $value)))
-                   (return-from get-best-relaxed-value? $worth)))))))
+                   (setq $worth (+ $worth (* $fraction $value)))))))
+      $worth))
 
 
 (define-action put

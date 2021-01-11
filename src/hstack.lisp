@@ -38,6 +38,7 @@
 
 
 (defun push-hstack (elt hstk)
+  "Pushes an element onto hstack's vector."
   (incf (gethash (funcall (hstack-keyfn hstk) elt) (hstack-table hstk) 0))
   (vector-push-extend elt (hstack-vector hstk)))
 
@@ -55,6 +56,7 @@
 
 
 (defun empty-hstack (hstk)
+  "Determine if a hash stack is empty."
   (zerop (fill-pointer (hstack-vector hstk))))
 
 
@@ -72,8 +74,9 @@
 
 (defun in-hstack (key hstk)
   (loop for element across (hstack-vector hstk)
-          thereis (funcall (hash-table-test (hstack-table hstk))
-                           key (funcall (hstack-keyfn hstk) element))))
+        thereis (funcall (hash-table-test (hstack-table hstk))
+                         key 
+                         (funcall (hstack-keyfn hstk) element))))
 
 
 (defun deletef-nth-hstack (n hstk)

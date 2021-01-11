@@ -21,7 +21,7 @@
 
 (defun process-solution (solution run-length)
   "Installs sequences of run-length in a solution into a hash table."
-  (iter (with path = (solution-path solution))
+  (iter (with path = (solution.path solution))
         (for steps on path)
         (for i from 0 to (- (length path) run-length))
         (for run = (subseq steps 0 run-length))
