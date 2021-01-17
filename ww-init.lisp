@@ -17,7 +17,7 @@
 
 ;(asdf:initialize-source-registry
 ;  `(:source-registry
-;     (:tree "D:\\Users Data\\Dave\\SW Library\\AI\\")  ;,*default-pathname-defaults*)
+;     (:tree ,*default-pathname-defaults*)
 ;     :inherit-configuration))
 
 
@@ -43,6 +43,9 @@
 ;(use-package :lisp-critic)
 
 
+(require :sb-cltl2)  ;enable access to declarations in .asd file
+
+
 (defpackage :utilities-pkg
   (:use :cl)
   (:nicknames :ut))
@@ -50,10 +53,6 @@
 (defpackage :hstack-pkg
   (:use :cl)
   (:nicknames :hs))
-
-;(when (find-package :wouldwork-pkg)
-;  (in-package :cl-user)
-;  (delete-package :wouldwork-pkg))
 
 (defpackage :wouldwork-pkg
   (:use :cl :iterate)
