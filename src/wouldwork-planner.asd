@@ -2,9 +2,10 @@
 
 
 (defun optimize-debug3 (next)
-  (proclaim '(optimize (debug 3)))
-  (unwind-protect (funcall next)
-    (proclaim '(optimize (debug 1)))))
+  (let ((incoming-debug (assoc 'debug (sb-cltl2:declaration-information 'optimize))))
+    (proclaim '(optimize (debug 3)))
+    (unwind-protect (funcall next)
+      (proclaim `(optimize ,incoming-debug)))))
          
 
 (asdf:defsystem "wouldwork-planner"
