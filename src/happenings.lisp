@@ -15,7 +15,7 @@
         (next-happenings (copy-tree (problem-state.happenings state))) ;old next happenings
         (action-completion-time (problem-state.time act-state))
         next-happening following-happenings)  ;collect next happenings for net-state
-    (when-debug>= 4
+    (when (>= *debug* 4)
        (ut::prt action-completion-time))
     (setf (problem-state.time hap-state) action-completion-time)
     (iter (while (setq next-happening (pop next-happenings)))
@@ -25,14 +25,14 @@
             (next-iteration))
           (for (ref-time . hap-updates) = (aref (get object :events) index))
           (for following-happening = (get-following-happening state object index time direction ref-time))
-          (when-debug>= 4
+          (when (>= *debug* 4)
              (ut::prt following-happening))
           (when (null following-happening)
             (next-iteration))
           (when (/= (first (second following-happening)) index)  ;happening is not interrupted
             (revise (problem-state.hidb act-state) hap-updates)
             (revise (problem-state.idb hap-state) hap-updates)  ;hap-state = state + updates
-            (when-debug>= 4
+            (when (>= *debug* 4)
                (ut::prt hap-updates)))
           (push following-happening next-happenings)) ;keep looking until past action-completion-time
     (let ((net-state (copy-problem-state act-state))) ;add happenings to hap-state & net-state
@@ -43,7 +43,7 @@
       (setf (problem-state.happenings act-state) following-happenings)
       (setf (problem-state.happenings hap-state) following-happenings)
       (setf (problem-state.happenings net-state) following-happenings)
-      (when-debug>= 4
+      (when (>= *debug* 4)
         (ut::prt act-state hap-state net-state))
       (if (and *constraint*
                (constraint-violated-in-act-hap-net act-state hap-state net-state))

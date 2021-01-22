@@ -146,7 +146,7 @@
 
 
 (defun commit1 (db literal)
-  (when-debug>= 4
+  (when (>= *debug* 4)
     (format t "~&    COMMIT => ~A" literal))
   (update db literal))
 

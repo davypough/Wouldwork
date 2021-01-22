@@ -28,46 +28,46 @@
   (iter
     (let ((open (lparallel.queue:pop-queue problems)))  ;open is local for this thread
       (increment-global-fixnum *num-idle-threads* -1)
-      ;(when-debug>= 1
+      ;(when (>= *debug* 1)
       ;  (lprt *-* 'entering)
       ;  (let ((*package* (find-package :hs)))
       ;    (lprt open)))
       (when (eql (hs::hstack-keyfn open) #'identity)  ;completion received from process-threads
-        ;(when-debug>= 1
+        ;(when (>= *debug* 1)
         ;  (lprt 'completion))
         (increment-global-fixnum *num-idle-threads*)
         (return-from search-parallel))  ;complete & exit this thread
       (iter 
         (when (lparallel.queue:peek-queue done)  ;interrupt this thread when done
-          ;(when-debug>= 1
+          ;(when (>= *debug* 1)
           ;  (lprt 'interrupted))
           (increment-global-fixnum *num-idle-threads*)
           (return-from search-parallel))  ;exit this thread
         (when (and (not (linear open))
                    (> *num-idle-threads* 0))  ;causes multiple splitting
           (let ((subopen (split-off open)))  ;split open
-            ;(when-debug>= 1
+            ;(when (>= *debug* 1)
             ;  (lprt 'splitting)
             ;  (let ((*package* (find-package :hs)))
             ;    (lprt subopen open)))
             (lparallel.queue:push-queue subopen problems)))
         (let ((succ-nodes (df-bnb1 open)))  ;work a little more on current problem
           (when (equal succ-nodes '(first))  ;first solution sufficient & found detected
-            ;(when-debug>= 1
+            ;(when (>= *debug* 1)
             ;  (lprt 'signal-first-done))
             (lparallel.queue:push-queue t done)  ;signal all done to process-threads
             (increment-global-fixnum *num-idle-threads*)
             (leave))  ;go back to top and wait for exit signal
           (when (hs::empty-hstack open)
-            ;(when-debug>= 1
+            ;(when (>= *debug* 1)
             ;  (lprt 'exhausted-open))
             (when (= *num-idle-threads* (1- *num-parallel-threads*))  ;all other threads idle
-              ;(when-debug>= 1
+              ;(when (>= *debug* 1)
               ;  (lprt 'signal-exhausted-done))
               (lparallel.queue:push-queue t done))  ;signal all done to process-threads
             (increment-global-fixnum *num-idle-threads*)
             (leave))  ;get next open
-          ;(when-debug>= 1
+          ;(when (>= *debug* 1)
           ;  (lprt 'expanding (length succ-nodes)))
           (when succ-nodes
             (if (fboundp 'heuristic?)

@@ -215,29 +215,29 @@
   "Performs expansion of one node from open. Returns
    new successor nodes, (first), or nil if no new nodes generated."
   (declare (hs::hstack open))
-  (when-debug>= 3
+  (when (>= *debug* 3)
      (format t "~&-----------------------------------------------------------~%"))
-  (when-debug>= 5
+  (when (>= *debug* 5)
      (break-here))
   (let ((current-node (get-next-node-for-expansion open)))
     (when *probe*
       (apply #'probe current-node *probe*))
-    (when-debug>= 3
+    (when (>= *debug* 3)
       (format t "~3%Current node selected:~%~S~2%" current-node))
     (when (null current-node)  ;open is empty
       (return-from df-bnb1 nil))
     (let ((succ-states (get-successors current-node)))
-      (when-debug>= 4
+      (when (>= *debug* 4)
         (format t "~%ALL SUCCESSORS~%  ~S" succ-states))
       (update-max-depth-explored (1+ (node.depth current-node)))
       (when (null succ-states)  ;no successors
-        (when-debug>= 3
+        (when (>= *debug* 3)
           (format t "~%No successor states"))
         (update-search-tree (node.state current-node) (node.depth current-node) "No successor states")
         (close-barren-nodes current-node open)
         (return-from df-bnb1 nil))
       (ut::mvb (goal-succ-states nongoal-succ-states) (detect-goals current-node succ-states)
-         (when-debug>= 3
+         (when (>= *debug* 3)
             (format t "~%GOAL SUCCESSOR STATES~%  ~S" goal-succ-states)
             (format t "~&NONGOAL SUCCESSOR STATES~%  ~S" nongoal-succ-states))
          (cond (goal-succ-states
@@ -312,7 +312,7 @@
   (let ((succ-node (make-node :state succ-state
                               :depth (1+ (node.depth current-node))
                               :parent current-node)))
-    (when-debug>= 3
+    (when (>= *debug* 3)
       (format t "~2%Installing new or updated successor:~%~S" succ-node))
     (when (eql *tree-or-graph* 'graph)
       (setf (gethash succ-state *visited*) (list nil  ;whether dead or not, initially live
@@ -332,7 +332,7 @@
       (setf (first (gethash (node.state node) *visited*)) t))  ;close dead node
     (setq parent (node.parent node))
     (setf (node.parent node) nil)
-    (when-debug>= 4
+    (when (>= *debug* 4)
       (format t "~2%Closing barren node:~%~S~%" node))
     (setq node parent)))
 
@@ -340,7 +340,7 @@
 (defun pop-discontinued-node (open)
   "Discontinue node if all successors are goals."
   (let ((node (hs::pop-hstack open)))
-     (when-debug>= 4
+     (when (>= *debug* 4)
                    (format t "~2%Popping discontinued node:~%~S~%" node))
      (when (= (hs::length-hstack open) 1)  ;last node on open = start node
         (close-barren-nodes (hs::pop-hstack open) open))))
@@ -508,7 +508,7 @@
                                                  *state-codes*)))))
              :goal goal-state)))
     (cond ((> *num-parallel-threads* 0)
-             (when-debug>= 1
+             (when (>= *debug* 1)
                (lprt))
              (let ((ctrl-str "~&New path to goal found at depth = ~:D~%"))
                (bt:with-lock-held (*lock*)
@@ -519,7 +519,7 @@
            (t (format t "~%New path to goal found at depth = ~:D~%" state-depth)
               (when (or (eql *solution-type* 'min-value) (eql *solution-type* 'max-value))
                 (format t "Objective value = ~:A~%" (solution.value solution)))))
-    (when-debug>= 3
+    (when (>= *debug* 3)
       (format t "~%New solution found:~%  ~A~%" solution))
     (push-global solution *solutions*)))
 

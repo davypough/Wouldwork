@@ -113,12 +113,12 @@
                                           state)
                      '(nil))))
           (let (pre-results db-updates)  ;process this action
-            (when-debug>= 4 (format t "~&~A" name))
+            (when (>= *debug* 4) (format t "~&~A" name))
             (setf pre-results
               (remove-if #'null (mapcar (lambda (pinsts)  ;nil = failed precondition
                                           (apply iprecondition state pinsts))
                                   precondition-instantiations)))
-            (when-debug>= 5
+            (when (>= *debug* 5)
               (let ((*package* (find-package :ww)))
                 (ut::prt precondition-types precondition-variables
                          precondition-instantiations pre-results)))
@@ -139,7 +139,7 @@
             (setf db-updates
               (iter (for db-update in db-updates)
                 (collect (order-propositions db-update))))
-            (when-debug>= 4
+            (when (>= *debug* 4)
               (let ((*package* (find-package :ww)))
                 (ut::prt db-updates)))
             (let ((child-states (get-new-states state action db-updates)))
@@ -163,7 +163,7 @@
                        (not (funcall (symbol-function '*constraint*) act-state))) ;violated
                 (setf new-state nil)
                 (setf new-state act-state)))
-            (when-debug>= 4
+            (when (>= *debug* 4)
               (if net-state
                 (when *constraint*
                   (format t "~&  ***NO CONSTRAINT VIOLATION"))
@@ -223,16 +223,16 @@
 (defun process-followup-updates (net-state db-update)
   "Triggering forms are saved previously during effect apply."
   (iter (for followup in (update.followups db-update))
-    (when-debug>= 4
+    (when (>= *debug* 4)
       (ut::prt followup))
     (for returns = (sort (apply (car followup) net-state (cdr followup))
                                 #'(lambda (x y) 
                                     (declare (ignore y))
                                     (and (listp x) (eql (car x) 'not)))))  ;get ordered updates
-      (when-debug>= 4
+      (when (>= *debug* 4)
         (ut::prt returns))
     (revise (problem-state.idb net-state) returns)
-    ;(when-debug>= 4 (ut::prt state))
+    ;(when (>= *debug* 4) (ut::prt state))
     (finally (return-from process-followup-updates net-state))))
 
 

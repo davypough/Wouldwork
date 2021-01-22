@@ -1,13 +1,6 @@
 ;;; Filename: wouldwork-planner.asd
 
 
-(defun optimize-debug3 (next)
-  (let ((incoming-debug (assoc 'debug (sb-cltl2:declaration-information 'optimize))))
-    (proclaim '(optimize (debug 3)))
-    (unwind-protect (funcall next)
-      (proclaim `(optimize ,incoming-debug)))))
-         
-
 (asdf:defsystem "wouldwork-planner"
   :components
     ((:file "utilities")
@@ -24,8 +17,7 @@
      (:file "planner"         :depends-on ("settings" "structures" "support" "happenings"))
      (:file "set"             :depends-on ("settings" "support"))
      (:file "searcher"        :depends-on ("hstack" "settings" "structures" "support"))
-     (:file "successors"      :depends-on ("settings" "structures" "searcher")
-                              :around-compile optimize-debug3)
+     (:file "successors"      :depends-on ("settings" "structures" "searcher"))
      (:file "parallel"        :depends-on ("hstack" "settings" "structures" "searcher"))
      (:file "problem"         :depends-on ("settings" "installer" "set"))
      (:file "initialize"      :depends-on ("set" "problem"))
