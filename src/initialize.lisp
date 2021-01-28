@@ -4,8 +4,16 @@
 
 (in-package :ww)
 
+
+(eval-when (:compile-toplevel)
+  (loop for qname in *query-names*
+        do (proclaim `(ftype function ,qname)))
+  (loop for uname in *update-names*
+        do (proclaim `(ftype function ,uname))))
+
+
 (defun init ()
-  (format t "~&Setting up...~%")
+  (format t "~&Initializing...~%")
   (setf *query-names* (nreverse *query-names*))
   (setf *update-names* (nreverse *update-names*))
   (setf *init-actions* (nreverse *init-actions*))
