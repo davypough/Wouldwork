@@ -5,7 +5,7 @@
 (in-package :ww)
 
 
-(eval-when (:compile-toplevel)
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (loop for qname in *query-names*
         do (proclaim `(ftype function ,qname)))
   (loop for uname in *update-names*
