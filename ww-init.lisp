@@ -21,8 +21,12 @@
 ;     :inherit-configuration))
 
 
-(pushnew #p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\" asdf:*central-registry* :test #'equal)
-(pushnew #p"D:\\Users Data\\Dave\\SW Library\\AI\\Lisp\\Common Lisp Libraries\\Lisp Critic\\" asdf:*central-registry* :test #'equal)
+(pushnew #p"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\"
+         asdf:*central-registry* :test #'equal)
+
+
+;(pushnew #p"D:\\Users Data\\Dave\\SW Library\\AI\\Lisp\\Common Lisp Libraries\\Lisp Critic\\"
+;         asdf:*central-registry* :test #'equal)
 
 
 #+:sbcl
@@ -43,7 +47,7 @@
 ;(use-package :lisp-critic)
 
 
-(require :sb-cltl2)  ;enable access to declarations in .asd file
+;(require :sb-cltl2)  ;enable access to declarations in .asd file
 
 
 (defpackage :utilities-pkg
@@ -66,14 +70,15 @@
 
 
 (defparameter *problem-files*
-  '("problem-blocks3.lisp" "problem-blocks4.lisp" "problem-boxes.lisp" "problem-jugs2.lisp" "problem-jugs4.lisp"
-    "problem-queens8.lisp" "problem-captjohn.lisp" "problem-crater.lisp" "problem-graveyard.lisp"
-    "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp"
-    "problem-triangle.lisp" "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
+  '("problem-blocks3.lisp" "problem-blocks4.lisp" "problem-boxes.lisp" "problem-jugs2.lisp"
+    "problem-jugs4.lisp" "problem-queens8.lisp" "problem-captjohn.lisp" "problem-crater.lisp"
+    "problem-graveyard.lisp"
+    "problem-knap19.lisp" "problem-sentry.lisp" "problem-smallspace.lisp" "problem-smallspace2.lisp"
+    "problem-triangle-xy.lisp" "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
     "problem-triangle-macros-one.lisp" "problem-tsp.lisp" "problem-u2.lisp"))
 
 
-(declaim (ftype (function () t) solve))
+(declaim (ftype (function () t) solve))  ;function solve located in searcher.lisp
 
 
 (defun test ()
