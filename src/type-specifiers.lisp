@@ -28,7 +28,7 @@
 
 (defun list-of-?variables (lst)
   (and (listp lst)
-       (every #'?varp lst)))
+       (every #'?varp lst)))  ;includes lst = nil
 
 
 (defun list-of-variables (lst)
@@ -56,8 +56,10 @@
            (or (null typ)
                (ut::hash-table-present-p typ *types*)
                (eql typ 'fluent)
-               (and (listp typ)
-                    (list-of-parameter-types typ))))
+               ($varp typ)
+               (and (listp typ) (member (car typ) *query-names*))
+               (listp typ)))
+               ;(list-of-parameter-types typ))))
     lst))
 
 

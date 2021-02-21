@@ -196,15 +196,17 @@
 (defun install-query (name args body)
   (format t "Installing ~A query...~%" name)
   (check-type args (satisfies list-of-variables))
+  (fmakunbound `,name)  ;avoids compiler warning if recursive fn
   (push `,name *query-names*)
   (setf (get `,name 'formula) body)
   (let ((new-$vars (delete-duplicates (set-difference (get-all-vars #'$varp body) args))))
     (setf (get `,name 'fn)
       `(lambda (state ,@args)
-         (let ,new-$vars
-           ,(when new-$vars
-              `(declare (special ,@new-$vars)))
-              ,(translate body 'pre)))))
+         (block ,name
+           (let ,new-$vars
+             ,(when new-$vars
+                `(declare (special ,@new-$vars)))
+                ,(translate body 'pre))))))
   (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
 
@@ -216,10 +218,11 @@
 (defun install-update (name args body)
   (format t "Installing ~A update...~%" name)
   (check-type args (satisfies list-of-variables))
+  (fmakunbound `,name)  ;avoids compiler warning if recursive fn
   (push `,name *update-names*)
   (setf (get `,name 'formula) body)
-  (let (eff-args eff-param-vars)
-    (declare (special eff-args eff-param-vars))
+  (let (eff-args eff-?vars)
+    (declare (special eff-args eff-?vars))
     (ut::if-it (delete-duplicates (set-difference (get-all-vars #'$varp body) args))
       (setf (get `,name 'fn)
         `(lambda (state ,@args)
@@ -279,13 +282,13 @@
 (defun create-action (name duration pre-params precondition eff-params effect)
   (check-type name symbol)
   (check-type duration real)
-  (destructuring-bind (pre-param-?vars pre-types restriction) (dissect-parameters pre-params)
+  (destructuring-bind (pre-param-?vars pre-user-types restriction) (dissect-parameters pre-params)
     (check-type pre-param-?vars (satisfies list-of-?variables))
-    (check-type pre-types (satisfies list-of-parameter-types))
-    (destructuring-bind (eff-param-vars eff-types *) (dissect-parameters eff-params)
+    (check-type pre-user-types (satisfies list-of-parameter-types))
+    (destructuring-bind (eff-param-vars eff-user-types *) (dissect-parameters eff-params)
       (declare (special eff-param-vars))
       (check-type eff-param-vars (satisfies list-of-variables))
-      (check-type eff-types (satisfies list-of-parameter-types))
+      (check-type eff-user-types (satisfies list-of-parameter-types))
       (let* ((pre-$vars (delete-duplicates (get-all-vars #'$varp precondition) :from-end t))
              (eff-$vars (delete-duplicates (get-all-vars #'$varp effect) :from-end t))
              (eff-args (append pre-param-?vars pre-$vars))
@@ -296,17 +299,18 @@
              (eff-extra-?vars (ut::if-it (ut::list-difference eff-free-?vars pre-param-?vars)
                                 (error "Extra effect ?vars in action ~A: ~A" name ut::it)))
              (eff-missing-vars (ut::list-difference eff-args (append eff-free-?vars eff-$vars)))
+             (pre-types (transform-types pre-user-types))
+             (queries (intersection (alexandria:flatten pre-types) *query-names*))
              (action (make-action
                        :name name
                        :duration duration
                        :precondition-params pre-params
                        :precondition-variables (append pre-param-?vars pre-$vars)
-                       :precondition-types pre-types
-                       :dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
-                                                                            (gethash typ *types*))
-                                                                    pre-types))
-                                              *query-names*)
-                       :precondition-instantiations restriction
+                       :precondition-types pre-user-types
+                       :restriction restriction
+                       :dynamic (when queries pre-types)
+                       :precondition-instantiations (unless queries
+                                                      (instantiate-types pre-types restriction))
                        ;:precondition-lits nil
                        :precondition-lambda `(lambda (state ,@pre-param-?vars)
                                                (let ,pre-$vars
@@ -317,7 +321,7 @@
                                                       `(list ,@eff-args)
                                                       `t))))
                        :effect-variables eff-param-vars  ;user listed parameter variables
-                       :effect-types eff-types
+                       :effect-types eff-user-types
                        :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
                                          (let (db-updates followups ,@eff-extra-$vars)
                                            (declare (special eff-param-vars ,@eff-extra-$vars db-updates followups))
@@ -330,6 +334,61 @@
         action))))
 
 
+#|
+(defun create-action (name duration pre-params precondition eff-params effect)
+  (check-type name symbol)
+  (check-type duration real)
+  (destructuring-bind (pre-?vars pre-user-types restriction) (dissect-parameters pre-params)
+    (check-type pre-?vars (satisfies list-of-?variables))
+    (check-type pre-user-types (satisfies list-of-parameter-types))
+    (destructuring-bind (eff-?vars eff-user-types *) (dissect-parameters eff-params)
+      (declare (special eff-?vars))
+      (check-type eff-?vars (satisfies list-of-variables))
+      (check-type eff-user-types (satisfies list-of-parameter-types))
+      (let* ((pre-$vars (delete-duplicates (get-all-vars #'$varp precondition) :from-end t))
+             (eff-$vars (delete-duplicates (get-all-vars #'$varp effect) :from-end t))
+             (eff-args (append pre-?vars pre-$vars))
+             (eff-??vars (delete-duplicates (get-all-vars #'?varp effect) :from-end t))
+             (eff-bound-?vars (delete-duplicates (get-bound-?vars (list effect)) :from-end t))
+             (eff-free-?vars (ut::list-difference eff-??vars eff-bound-?vars))
+             (eff-extra-$vars (ut::list-difference eff-$vars pre-$vars))
+             (eff-extra-?vars (ut::if-it (ut::list-difference eff-free-?vars pre-?vars)
+                                (error "Extra effect ?vars in action ~A: ~A" name ut::it)))
+             (eff-missing-vars (ut::list-difference eff-args (append eff-free-?vars eff-$vars)))
+             (pre-types (transform-types pre-user-types))
+             (queries (intersection (alexandria:flatten pre-types) *query-names*))
+             (action (make-action
+                       :name name
+                       :duration duration
+                       :precondition-params pre-params
+                       :precondition-variables (append pre-?vars pre-$vars)
+                       :precondition-types pre-user-types
+                       :restriction restriction
+                       :dynamic (when queries pre-types)
+                       :precondition-instantiations (unless queries
+                                                      (instantiate-types pre-types restriction))
+                       :precondition-lambda `(lambda (state ,@pre-?vars)
+                                               (let ,pre-$vars
+                                                 (declare (special ,@pre-$vars))
+                                                 (when ,(translate precondition 'pre)
+                                                   ;return satisfied pre values
+                                                   ,(if eff-args
+                                                      `(list ,@eff-args)
+                                                      `t))))
+                       :effect-variables eff-?vars  ;user listed parameter variables
+                       :effect-types eff-user-types
+                       :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
+                                         (let (db-updates followups ,@eff-extra-$vars)
+                                           (declare (special ,eff-??vars ,@eff-extra-$vars
+                                                             db-updates followups))
+                                           ,(translate effect 'eff)
+                                           db-updates))
+                      :effect-adds nil)))
+        (declare (special eff-args eff-?vars))  ;used in translate in :effect-lambda above
+        (fix-if-ignore '(state) (action.precondition-lambda action))
+        (fix-if-ignore `(state ,@eff-missing-vars) (action.effect-lambda action))
+        action))))
+|#
 
 (defun get-bound-?vars (tree)
   "Searches tree for an atom or cons satisfying the predicate, and returns

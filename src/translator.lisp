@@ -107,9 +107,9 @@
   (declare (ignore flag))
   (let* ((fluent-indices (get-prop-fluent-indices (second form)))
          (fluentless-atom (ut::remove-at-indexes fluent-indices (second form))))
-    `(let ((values ,(translate-simple-atom fluentless-atom)))
-       (when values
-         (mapc #'set ',(get-prop-fluents (second form)) values)))))
+    `(let ((vals ,(translate-simple-atom fluentless-atom)))
+       (when vals
+         (mapc #'set ',(get-prop-fluents (second form)) vals)))))
          
          
 (defun translate-followup (form flag)
@@ -131,6 +131,15 @@
                                   ,(translate-list item)))))))
 
 
+(defun generate-type-lists (state pre-types)
+  "Expands all query type functions in pre-types into lists."
+  (mapcar (lambda (item)
+            (if (member (car item) *query-names*)
+              (apply (car item) state (cdr item))
+              item))
+          pre-types))
+
+
 (defun translate-existential (form flag)
   "The existential is interpreted differently for pre vs eff.  
    In pre, (exists (vars) form) is true when form is true
@@ -138,31 +147,19 @@
    In eff, it asserts form for the first instantiation of the vars, and then exits."
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-?variables))
-      (check-type types (satisfies list-of-parameter-types))
-      (let* ((dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
-                                                                 (gethash typ *types*))
-                                                               types))
-                                   *query-names*))
-             (quoted-instances (unless dynamic
-                                 (ut::quote-elements (list (ut::regroup-by-index (type-instantiations types
-                                                                                                restriction
-                                                                                                nil)))))))
-        `(apply #'some
-                (lambda ,vars
-                 ,(translate body flag))
-                ,@(if dynamic
-                    `((or (ut::regroup-by-index (type-instantiations ',types
-                                                                     ,(case (car parameters)
-                                                                        (combinations 'combinations)
-                                                                        (dot-products 'dot-products))
-                                                                     state))
-                          '(nil)))
-                    (if (equal quoted-instances '('nil))
-                      (make-list (length types) :initial-element nil)
-                      quoted-instances)))))))
-      
+    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
+      (check-type ?vars (satisfies list-of-?variables))
+      (check-type user-types (satisfies list-of-parameter-types))
+      (let* ((pre-types (transform-types user-types))
+             (queries (intersection (alexandria:flatten pre-types) *query-names*))
+             (dynamic (when queries pre-types)))
+        `(apply #'some (lambda ,?vars
+                         ,(translate body flag))
+                ,(if dynamic
+                   `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
+                                                              ,restriction))
+                   `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction)))))))))
+
 
 (defun translate-universal (form flag)
   "The universal is interpreted differently for pre vs eff.  
@@ -170,30 +167,18 @@
    In eff, it asserts form for every instantiation of the vars."
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-?variables))
-      (check-type types (satisfies list-of-parameter-types))
-      (let* ((dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
-                                                                 (gethash typ *types*))
-                                                               types))
-                                   *query-names*))
-             (quoted-instances (unless dynamic
-                                 (ut::quote-elements (list (ut::regroup-by-index (type-instantiations types
-                                                                                                restriction
-                                                                                                nil)))))))
-        `(apply #'every
-                (lambda ,vars
-                 ,(translate body flag))
-                ,@(if dynamic
-                    `((or (ut::regroup-by-index (type-instantiations ',types
-                                                                     ,(case (car parameters)
-                                                                        (combinations 'combinations)
-                                                                        (dot-products 'dot-products))
-                                                                     state))
-                          '(nil)))
-                    (if (equal quoted-instances '('nil))
-                      (make-list (length types) :initial-element nil)
-                      quoted-instances)))))))
+    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
+      (check-type ?vars (satisfies list-of-?variables))
+      (check-type user-types (satisfies list-of-parameter-types))
+      (let* ((pre-types (transform-types user-types))
+             (queries (intersection (alexandria:flatten pre-types) *query-names*))
+             (dynamic (when queries pre-types)))
+        `(apply #'every (lambda ,?vars
+                          ,(translate body flag))
+                ,(if dynamic
+                    `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
+                                                               ,restriction))
+                    `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction)))))))))
 
 
 (defun translate-doall (form flag)
@@ -201,30 +186,18 @@
    It can be used to do something for all instances of its variables."
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (vars types restriction) (dissect-parameters parameters)
-      (check-type vars (satisfies list-of-?variables))
-      (check-type types (satisfies list-of-parameter-types))
-      (let* ((dynamic (intersection (alexandria:flatten (mapcar (lambda (typ)
-                                                                 (gethash typ *types*))
-                                                               types))
-                                   *query-names*))
-             (quoted-instances (unless dynamic
-                                 (ut::quote-elements (list (ut::regroup-by-index (type-instantiations types
-                                                                                                restriction
-                                                                                                nil)))))))
-        `(apply #'mapcar
-                (lambda ,vars
-                 ,(translate body flag))
-                ,@(if dynamic
-                    `((or (ut::regroup-by-index (type-instantiations ',types
-                                                                     ,(case (car parameters)
-                                                                        (combinations 'combinations)
-                                                                        (dot-products 'dot-products))
-                                                                     state))
-                          '(nil)))
-                    (if (equal quoted-instances '('nil))
-                      (make-list (length types) :initial-element nil)
-                      quoted-instances)))))))
+    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
+      (check-type ?vars (satisfies list-of-?variables))
+      (check-type user-types (satisfies list-of-parameter-types))
+      (let* ((pre-types (transform-types user-types))
+             (queries (intersection (alexandria:flatten pre-types) *query-names*))
+             (dynamic (when queries pre-types)))
+        `(apply #'mapcar (lambda ,?vars
+                           ,(translate body flag))
+                ,(if dynamic
+                     `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
+                                                                ,restriction))
+                     `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction)))))))))
 
 
 (defun translate-connective (form flag)
@@ -280,13 +253,6 @@
   "Translates a setq statement. Used to assign a variable the value of a function."
   `(progn (setq ,(second form) ,(translate (third form) flag)) t))
 
-#|
-(defun translate-msetq (form flag)
-  ;Translates a multi-setq statement.
-  `(progn ,@(loop for var in (second form)
-                for val in (translate (third form) flag)
-                  collect (list 'setq var val))))
-|#
 
 (defun translate-case (form flag)
   "Translates a case statement."

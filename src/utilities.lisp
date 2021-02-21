@@ -133,12 +133,25 @@
 
 (declaim (ftype (function (list) list) regroup-by-index))
 (defun regroup-by-index (list-of-lists)
-  "Regroups all first elements together, second elements together, etc into
-   a new list-of-lists."
-  (if list-of-lists
-    (apply #'mapcar #'list list-of-lists)
-    '(nil)))
+  "Regroups all first elements together, second elements together, etc into a new
+   list-of-lists. Changes instantiate-types into arg format for some, every, etc."
+  (if (every #'null list-of-lists)
+    (mapcar #'list list-of-lists)
+    (apply #'mapcar #'list list-of-lists)))
 
+#|
+(declaim (ftype (function (list) list) regroup-by-index))
+(defun regroup-by-index (list-of-lists)
+  "Regroups all first elements together, second elements together, etc into a new
+   list-of-lists. Changes instantiate-types into arg format for some, every, etc."
+  (let ((regrouping (apply #'mapcar #'list list-of-lists)))
+    (if regrouping
+      (mapcar (lambda (lst) `(quote ,lst)) regrouping)
+      (mapcar (lambda (lst)
+                (declare (ignore lst))
+                `(quote ,nil))
+              list-of-lists))))
+|#     
 
 (declaim (ftype (function (list) list) quote-elements))
 (defun quote-elements (lst)

@@ -206,11 +206,6 @@
           do (hs::push-hstack succ-node *open*))))  ;push lowest heuristic value last
 
 
-(defun break-here ()
-  "Inhibits debugger printing of the open stack on break in df-bnb1."
-  (break))
-
-
 (defun df-bnb1 (open)
   "Performs expansion of one node from open. Returns
    new successor nodes, (first), or nil if no new nodes generated."
@@ -218,7 +213,7 @@
   (when (>= *debug* 3)
      (format t "~&-----------------------------------------------------------~%"))
   (when (>= *debug* 5)
-     (break-here))
+     (break))
   (let ((current-node (get-next-node-for-expansion open)))
     (when *probe*
       (apply #'probe current-node *probe*))

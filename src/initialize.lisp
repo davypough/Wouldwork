@@ -28,12 +28,6 @@
            (setf *actions* (nreverse *actions*))  ;prioritize actions to problem spec
            (setf *min-action-duration* (reduce #'min *actions* :key #'action.duration)))
         (t (format t "~%NOTE: There are no defined actions.~%")))
-  (iter (for action in *actions*)
-        (setf (action.precondition-instantiations action)  ;previous setting, nil or restriction
-              (or (type-instantiations (action.precondition-types action)
-                                       (action.precondition-instantiations action)
-                                       *start-state*)
-                  '(nil))))
   (when (fboundp 'heuristic?)
     (setf (problem-state.heuristic *start-state*) (funcall 'heuristic? *start-state*))
     (when *randomize-search*

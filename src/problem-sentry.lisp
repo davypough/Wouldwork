@@ -181,7 +181,6 @@
   (loc me area1)
   (loc jammer1 area1)
   (loc switch1 area3)
-;  (loc sentry1 area6)
   (loc box1 area4)
   (red switch1)
   ;static

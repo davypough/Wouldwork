@@ -213,30 +213,6 @@
       else collect type))
 
 
-(defun type-instantiations (symbol-types restriction state)
-  "Returns lists of possible variable instantiations for a list of (only) type symbols.
-   May restrict symbol types to combinations or dot-products."
-  (when symbol-types
-    (let* ((nonfluent-types (remove 'fluent symbol-types))
-           (instances (mapcar (lambda (item)
-                                (let ((name (car (gethash item *types*))))
-                                  (if (member name *query-names*)
-                                    (funcall name state)
-                                    (gethash item *types*))))
-                              nonfluent-types)))
-      (when (member nil instances)
-        (return-from type-instantiations nil))
-      (if (eql restriction 'dot-products)
-        (apply #'mapcar #'list instances)
-        (let* ((product-instances (apply #'alexandria:map-product 'list instances))
-               (set-instances (get-set-instances nonfluent-types product-instances)))
-          (if (eql restriction 'combinations)
-            (or (delete-duplicates set-instances :test #'alexandria:set-equal)
-                (make-list (length nonfluent-types) :initial-element nil))
-            (or set-instances
-                (make-list (length nonfluent-types) :initial-element nil))))))))
-
-
 (defun get-set-instances (symbol-types product-instances)
   "Culls out duplicate instances of the same type from product-instances."
   (iter (for product-instance in product-instances)
@@ -273,6 +249,35 @@
                                                   (cdr parameter-list)
                                                   parameter-list)))
       (list variables (consolidate-types types) restriction))))
+
+
+(defun transform-types (user-types)
+  "Followup processing of user types returned from dissect-parameters.
+   Returns types for passing to a call to type-instantiations."
+  (iter (for user-type in user-types)
+    (for entry = (gethash user-type *types*))
+    (collect (etypecase user-type
+               (symbol (if ($varp user-type)
+                         user-type
+                         entry))
+               (list user-type)))))
+
+
+(defun instantiate-types (type-lists restriction)
+  "Returns list of possible variable instantiations, given a list of type-lists.
+   May restrict symbol types to combinations or dot-products."
+  (when type-lists
+  (if (eql restriction 'dot-products)
+    (apply #'mapcar #'list type-lists)
+    (let* ((product-instances (apply #'alexandria:map-product 'list type-lists))
+           (set-instances (delete-if-not #'alexandria:setp product-instances)))
+      (if (eql restriction 'combinations)
+        (or (delete-duplicates set-instances :test #'alexandria:set-equal)
+            (make-list (length type-lists) :initial-element nil))
+        (if (null restriction)
+          (or set-instances
+              (make-list (length type-lists) :initial-element nil))
+          (error "~2%Unknown restriction label in an action rule: ~A~%" restriction)))))))
 
 
 ;(defun duplicate-db-entry-test (predicate object db)

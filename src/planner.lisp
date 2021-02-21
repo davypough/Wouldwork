@@ -53,20 +53,30 @@
                  precondition-lambda effect-lambda)
         init-action
       (format t "~&~A...~%" name)
-      (setf precondition-instantiations
-            (or (type-instantiations precondition-types
-                                     (case (car precondition-params)
-                                       (combinations 'combinations)
-                                       (dot-products 'dot-products))
-                                     state)
-                '(nil)))
+
+;      (setf precondition-instantiations
+;        (instantiate-types (mapcar (lambda (inst)    ;precondition-types
+;                                     (if (member (car inst) *query-names*)
+;                                       (apply (car inst) state (cdr inst))
+;                                       inst))
+;                                   dynamic)
+;                           restriction)))
+
+;      (setf precondition-instantiations
+;            (or (type-instantiations precondition-types
+;                                     (case (car precondition-params)
+;                                       (combinations 'combinations)
+;                                       (dot-products 'dot-products))
+;                                     state)
+;                '(nil)))
+
       (let ((pre-fn (compile nil precondition-lambda))
             (eff-fn (compile nil effect-lambda))
             pre-results db-updates)
         (setf pre-results
              (remove-if #'null (mapcar (lambda (pinsts)
                                          (apply pre-fn state pinsts))
-                                 precondition-instantiations)))
+                                       precondition-instantiations)))
         (when (null pre-results)
           (next-iteration))
         (setf db-updates  ;returns list of update structures
@@ -102,51 +112,53 @@
   (let (children)
     (iter (for action in *actions*)
       (with-slots (name iprecondition precondition-params precondition-variables
-                   precondition-types dynamic precondition-instantiations ieffect)
-          action
-          (when dynamic
-            (setf precondition-instantiations
-                 (or (type-instantiations precondition-types
-                                          (case (car precondition-params)
-                                            (combinations 'combinations)
-                                            (dot-products 'dot-products))
-                                          state)
-                     '(nil))))
-          (let (pre-results db-updates)  ;process this action
-            (when (>= *debug* 4) (format t "~&~A" name))
-            (setf pre-results
-              (remove-if #'null (mapcar (lambda (pinsts)  ;nil = failed precondition
-                                          (apply iprecondition state pinsts))
-                                  precondition-instantiations)))
-            (when (>= *debug* 5)
-              (let ((*package* (find-package :ww)))
-                (ut::prt precondition-types precondition-variables
-                         precondition-instantiations pre-results)))
-            (when (null pre-results)
-              (next-iteration))
-            (setf db-updates  ;returns list of update structures
-              (mapcan (lambda (pre-result)
-                        (if (eql pre-result t)
-                          (funcall ieffect state)
-                          (apply ieffect state pre-result)))
-                pre-results))
-            ;(ut::prt db-updates)
-            (setf db-updates 
-              (delete-duplicates db-updates
-                :test (lambda (upd1 upd2)
-                        (alexandria:set-equal upd1 upd2 :test #'equal))
-                :key #'update.changes))
-            (setf db-updates
-              (iter (for db-update in db-updates)
-                (collect (order-propositions db-update))))
-            (when (>= *debug* 4)
-              (let ((*package* (find-package :ww)))
-                (ut::prt db-updates)))
-            (let ((child-states (get-new-states state action db-updates)))
-              (when (fboundp 'heuristic?)
-                (dolist (child-state child-states)
-                  (setf (problem-state.heuristic child-state) (funcall 'heuristic? child-state))))
-              (alexandria:appendf children child-states)))))
+                   precondition-types restriction dynamic precondition-instantiations ieffect)
+                  action
+        (when dynamic  ;holds the pre-types = lists + query calls
+          (setf precondition-instantiations
+            (instantiate-types (mapcar (lambda (inst)
+                                         (if (member (car inst) *query-names*)
+                                           (apply (car inst) state (cdr inst))
+                                           inst))
+                                       dynamic)
+                               restriction)))
+        (let (pre-results db-updates)  ;process this action
+          (when (>= *debug* 4) (format t "~&~A" name))
+          (setf pre-results
+            (remove-if #'null (mapcar (lambda (pinsts)  ;nil = failed precondition
+                                        (apply iprecondition state pinsts))
+                                precondition-instantiations)))
+          (when (>= *debug* 5)
+            (let ((*package* (find-package :ww)))
+              (ut::prt precondition-types precondition-variables
+                       precondition-instantiations pre-results)))
+          (when (null pre-results)
+            (next-iteration))
+          (setf db-updates  ;returns list of update structures
+            (mapcan (lambda (pre-result)
+                      (if (eql pre-result t)
+                        (funcall ieffect state)
+                        (apply ieffect state pre-result)))
+              pre-results))
+          ;(ut::prt db-updates)
+          (setf db-updates 
+            (delete-duplicates db-updates
+              :test (lambda (upd1 upd2)
+                      (alexandria:set-equal upd1 upd2 :test #'equal))
+              :key #'update.changes))
+          (setf db-updates
+            (iter (for db-update in db-updates)
+              (collect (order-propositions db-update))))
+          ;(ut::prt db-updates)  (break)
+          (when (>= *debug* 4)
+            (let ((*package* (find-package :ww)))
+              (ut::prt db-updates)))
+          (let ((child-states (get-new-states state action db-updates)))
+            (when (fboundp 'heuristic?)
+              (dolist (child-state child-states)
+                (setf (problem-state.heuristic child-state)
+                  (funcall 'heuristic? child-state))))
+            (alexandria:appendf children child-states)))))
     (nreverse children)))  ;put first action child states first
 
 
@@ -226,11 +238,12 @@
     (when (>= *debug* 4)
       (ut::prt followup))
     (for returns = (sort (apply (car followup) net-state (cdr followup))
-                                #'(lambda (x y) 
-                                    (declare (ignore y))
-                                    (and (listp x) (eql (car x) 'not)))))  ;get ordered updates
-      (when (>= *debug* 4)
-        (ut::prt returns))
+                         #'(lambda (x y) 
+                             (declare (ignore y))
+                             (and (listp x)
+                                  (eql (car x) 'not)))))  ;get ordered updates
+    (when (>= *debug* 4)
+      (ut::prt returns))
     (revise (problem-state.idb net-state) returns)
     ;(when (>= *debug* 4) (ut::prt state))
     (finally (return-from process-followup-updates net-state))))

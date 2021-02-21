@@ -102,6 +102,7 @@
   (precondition-params nil :type list)
   (precondition-variables nil :type list)
   (precondition-types nil :type list)
+  (restriction nil :type symbol)  ;eg, dot-products, combinations
   (dynamic nil :type (or nil t))  ;a dynamic rule requires recomputation of params on each execution
   (precondition-instantiations nil :type (or list symbol))
   (precondition-lambda nil :type list)

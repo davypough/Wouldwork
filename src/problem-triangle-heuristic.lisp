@@ -78,7 +78,7 @@
       (doall (?peg current-peg)
         (do (bind (loc ?peg $x $y $z))
             (if (< $x $x-min)
-              (setq $x-min $x))
+              (setq $x-min $x))   
             (if (< $y $y-min)
               (setq $y-min $y))
             (if (< $z $z-min)
