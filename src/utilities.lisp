@@ -178,12 +178,12 @@
 
 
 (defmethod show ((table hash-table) &key (sort-by 'key))
-  "Displays a hash table line-by-line, sorted either by key or value."
+  "Displays a hash table line-by-line, sorted either by key or val."
   (declare (hash-table table))
   (let (alist)
     (maphash
       (lambda (key val)
-        (push (cons (format nil "~A" key) (format nil "~A" val))
+        (push (cons (princ-to-string key) (princ-to-string val))
           alist))
       table)
     (setf alist 

@@ -14,9 +14,21 @@
   (equalp (problem-state.idb state1) (problem-state.idb state2)))
 
 
+;(defun state-equal-p-hash (state)
+;  (declare (problem-state state))
+;  ;can't use sxhash for a hash table object
+;  (sxhash (problem-state.idb state)))
+
+
 (defun state-equal-p-hash (state)
   (declare (problem-state state))
-  (sxhash (problem-state.idb state)))
+  (let ((sum 0))
+    (declare (fixnum sum))
+    (maphash (lambda (key value)
+               (declare (fixnum key) (ignore value))
+               (incf sum key))
+      (problem-state.idb state))
+    sum))
 
 
 (defun initialize ()
