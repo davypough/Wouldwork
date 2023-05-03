@@ -18,7 +18,7 @@
 
 
 (define-dynamic-relations
-  (loc queen $fixnum column)
+  (loc queen $row $col)
   (placed queen)
   (next-row $fixnum))
 
@@ -28,13 +28,13 @@
   (?queen queen ?column column)
   (and (not (placed ?queen))
        (bind (next-row $row))
-       (not (exists (?q queen ?c column)
+       (not (exists (?q queen)
               (and (placed ?q)
-                   (bind (loc ?q $r ?c))
-                   (or (= $r $row)
-                       (= ?c ?column)
-                       (= (- $r $row) (- ?c ?column))
-                       (= (- $r $row) (- ?column ?c)))))))
+                   (bind (loc ?q $r $c))
+                   (or ;(= $r $row)  superfluous, always considering next row
+                       (= $c ?column)
+                       (= (- $r $row) (- $c ?column))
+                       (= (- $r $row) (- ?column $c)))))))
   (?queen queen $row fluent ?column column)
   (assert (loc ?queen $row ?column)
           (placed ?queen)

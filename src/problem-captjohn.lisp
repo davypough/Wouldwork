@@ -32,7 +32,8 @@
 
 
 (define-query already-placed? (?object)
-  (bind (loc ?object $r $c)))
+  (and (bind (loc ?object $r $c))
+       $r))
 
 
 (define-query in-same-row? (?object1 ?object2)

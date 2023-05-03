@@ -82,7 +82,7 @@
   (assert (not (loc ?box ?area))
           (holding me ?box)
           (exists (?p plate)
-            (if (on ?box ?p)
+            (if (on ?box ?p)     ;(gethash (list 'on ?box ?p) idb)
               (not (on ?box ?p))))))
 
 
@@ -107,6 +107,7 @@
   (assert (loc ?box ?area)
           (not (holding me ?box))
           (on ?box ?plate)))
+
 
 (define-init
   ;dynamic

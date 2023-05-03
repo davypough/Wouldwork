@@ -8,112 +8,162 @@
 
 (ww-set *problem* knap19)
 
+
+(ww-set *tree-or-graph* graph)
+
+
 (ww-set *solution-type* max-value)
 
 
 (defstruct item  ;an item template
-  (name nil :type symbol)  ;item name--eg, ITEM14
-  (value 0 :type fixnum)  ;value of that item
-  (weight 0 :type fixnum)  ;weight of that item
-  (value/weight 0 :type ratio))  ;the ratio of the item's value/weight
+  (name nil :type symbol)  ;item name--eg, item3
+  (id -1 :type fixnum)  ;item# in sorted list
+  (value -1 :type fixnum)  ;value of that item
+  (weight -1 :type fixnum)  ;weight of that item
+  (value/weight -1 :type double-float))  ;the ratio of the item's value/weight
 
-(defparameter *items* nil)  ;the list of available items
-(defparameter *num-items* 0)  ;total number of items
-(defparameter *max-knapsack-weight* 0)  ;knapsack max weight
 
-(defun readin (knapsack-data-file)
-  ;Read in knapsack data from a file.
-  (with-open-file (ifile knapsack-data-file :direction :input :if-does-not-exist nil)
-    (when (not (streamp ifile)) (error "File does not exist!"))
-    (setq *num-items* (read ifile))
-    (setq *max-knapsack-weight* (read ifile))
-    (dotimes (i *num-items*)
-      (let ((value (read ifile))
-            (weight (read ifile)))
-        (push (make-item :name (intern (concatenate 'string "ITEM"
-                                         (write-to-string (1+ i))))
-                         :value value
-                         :weight weight
-                         :value/weight (/ value weight))
-               *items*)))
-    (setq *items* (sort *items* #'> :key #'item-value/weight))))
-        
+(defparameter *item-structures* nil)  ;the list of data item structures
+(defparameter *num-items* -1)  ;total number of items
+(defparameter *max-weight* -1)  ;max weight allowed
+
+
+(defun create-item-structures (data-file)
+  ;Read in data from a file.
+  (with-open-file (infile data-file :direction :input :if-does-not-exist nil)
+    (when (not (streamp infile)) (error "File does not exist!"))
+    (setf *num-items* (read infile))
+    (setf *max-weight* (read infile))
+    (loop for i from 1 upto *num-items* do
+      (let ((value (read infile))
+            (weight (read infile)))
+        (push (make-item :name (intern (format nil "ITEM~D" i) :ww)
+                           :value value
+                           :weight weight
+                           :value/weight (coerce (/ value weight)
+                                                 'double-float))
+               *item-structures*)))))
+
+
 (setq *default-pathname-defaults*  ;point to where knapsack data file is stored
    #P"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\")
 
-(readin "data-knap19.lisp")  ;name of the knapsack data file
+
+(create-item-structures "data-knap19.lisp")  ;name of the data file
+;(create-item-structures "data-knap30.lisp")  ;name of the data file
+
+
+(defparameter *sorted-item-structures*
+  (loop with sorted-item-structures = (sort (copy-list *item-structures*) #'>
+                                            :key #'item-value/weight)
+        for item-structure in sorted-item-structures
+        for index from 1
+        do (setf (item-id item-structure) index)
+        collect item-structure))
 
 
 (define-types
-  knapsack (knapsack1)
-  item (compute (loop for item in *items*
-                   collect (item-name item))))
+  item-id (compute (mapcar #'item-id *sorted-item-structures*)))  ;item IDs 
 
 
 (define-dynamic-relations
-  (in item knapsack)
-  (load knapsack $fixnum)
-  (worth knapsack $fixnum))
+  (in item-id)  ;an item-id in the knapsack
+  (contents $list)  ;the item-ids in the knapsack
+  (load $fixnum)  ;the net weight of the knapsack
+  (worth $fixnum))  ;the net worth of item-ids in the knapsack
 
 
 (define-static-relations
-  (value item $fixnum)
-  (weight item $fixnum))
+  (capacity $fixnum)  ;weight capacity of the knapsack
+  (value item-id $fixnum)  ;value of an item-id
+  (weight item-id $fixnum))  ;weight of an item-id
 
 
-(define-query get-best-relaxed-value? ()  ;for a succ state
-  (do (bind (load knapsack1 $load))
-      (bind (worth knapsack1 $worth))
-      (doall (?item item)  ;items previously ordered by value/weight ratio
-        (and (not (in ?item knapsack1))
-             (bind (weight ?item $weight))
-             (bind (value ?item $value))
-             (if (< (+ $load $weight) *max-knapsack-weight*)
-               (setq $load (+ $load $weight)
-                     $worth (+ $worth $value))
-               (do (setq $fraction (/ (- *max-knapsack-weight* $load) $weight))
-                   (setq $worth (+ $worth (* $fraction $value)))))))
-      $worth))
+(define-query compute-bounds? ($item-ids)
+  ;Computes cost and upper bounds for a state
+  (do (bind (capacity $capacity))   ;(ut::prt state)
+      (setf $max-item-id (or (car (last $item-ids)) 0))
+      (if (= (length $item-ids) $max-item-id)
+        (setf $missing-item-ids nil)
+        (do (setf $initial-item-ids (cdr (alexandria:iota (1+ $max-item-id))))
+            (setf $missing-item-ids (set-difference $initial-item-ids $item-ids))))  ;(ut::prt $all-item-ids $missing-item-ids)
+      (setf $all-item-ids (gethash 'item-id *types*))
+      (setf $wt 0 $cost 0 $upper 0)
+      (using $item-id in $all-item-ids do  ;run thru all item-ids until capacity exceeded
+        (if (and (not (member $item-id $missing-item-ids))  ;except those missing
+                 (bind (weight $item-id $item-weight))
+                 (bind (value $item-id $item-value))  ;(ut::prt $item-id $item-weight $item-value)
+                 (if (<= (+ $wt $item-weight) $capacity)
+                   (do (incf $wt $item-weight)  ;(ut::prt $wt)
+                       (incf $cost $item-value)
+                       (incf $upper $item-value))
+                   (do (setq $fraction (/ (- $capacity $wt) $item-weight))
+                       (incf $cost (* $fraction $item-value))  ;(ut::prt $fraction (- $cost) (- $upper))  (break)
+                       (return-from compute-bounds? (values (- $cost) (- $upper))))))))  ;(ut::prt (- $cost) (- $upper)) (break)
+      (return-from compute-bounds? (values (- $cost) (- $upper)))))
 
+
+(defun successors-p (lst)
+  "Tests for a succession of integers (ie, item-ids)."
+  (iter (for item-id in lst)
+        (for prev-item-id previous item-id)
+        (when prev-item-id
+          (always (= item-id (1+ prev-item-id))))))
+
+
+(define-query bounding-function? ()
+  (do (bind (contents $item-ids))
+      (if (successors-p $item-ids)
+        (if (= *cost* *upper* 0)
+          (do (multiple-value-setq (*cost* *upper*)
+                                   (compute-bounds? $item-ids))
+                 (values *cost* *upper*))
+          (values *cost* *upper*))
+        (do (setf *cost* 0 *upper* 0)
+            (compute-bounds? $item-ids)))))
+        
 
 (define-action put
     1
-  (?knapsack knapsack ?item item)
-  (and (not (in ?item ?knapsack))
-       (bind (weight ?item $item-weight))
-       (bind (load ?knapsack $knapsack-load))
-       (setq $new-knapsack-load (+ $knapsack-load $item-weight))
-       (<= $new-knapsack-load *max-knapsack-weight*)
-       (bind (worth ?knapsack $knapsack-worth))
-       (bind (value ?item $item-value))       
-       (setq $new-knapsack-worth (+ $knapsack-worth $item-value))
-       (setq $objective-value $new-knapsack-worth))
-  (?item item ?knapsack knapsack)
-  (assert (in ?item ?knapsack)
-          (load ?knapsack $new-knapsack-load)
-          (worth ?knapsack $new-knapsack-worth)))
-
-
-(define-init
-  `(capacity knapsack1 ,*max-knapsack-weight*)
-  (load knapsack1 0)
-  (worth knapsack1 0))
+  (?item-id item-id)
+  (and (not (in ?item-id))
+       (bind (weight ?item-id $item-weight))
+       (bind (load $load))
+       (setq $new-load (+ $load $item-weight))
+       (bind (capacity $capacity))
+       (<= $new-load $capacity))
+  (?item-id item-id)
+  (assert (in ?item-id)
+          (bind (contents $item-ids))
+          (setq $new-item-ids
+            (merge 'list (list ?item-id) (copy-list $item-ids) #'<))
+          (contents $new-item-ids)
+          (load $new-load)
+          (bind (worth $worth))
+          (bind (value ?item-id $item-value))
+          (setq $new-worth (+ $worth $item-value))
+          (worth $new-worth)
+          (setq $objective-value $new-worth)))
 
 
 (define-init-action init-item-weights&values
     0
-  (?item item)
-  (setq $item-structure (find ?item *items* :key #'item-name))
+  (?item-id item-id)
+  (always-true)
   ()
-  (assert (weight ?item (item-weight $item-structure))
-          (value ?item (item-value $item-structure))))
-    
+  (assert ;(ut::prt item-structure)
+          (weight ?item-id (item-weight (find ?item-id *sorted-item-structures*
+                                              :key #'item-id)))
+          (value ?item-id (item-value (find ?item-id *sorted-item-structures*
+                                            :key #'item-id)))))
 
-(define-goal  ;can't put any further item into the knapsack
-  (not (exists (?knapsack knapsack ?item item)
-         (and (not (in ?item ?knapsack))
-              (bind (weight ?item $item-weight))
-              (bind (load ?knapsack $knapsack-load))
-              (<= (+ $knapsack-load $item-weight) *max-knapsack-weight*)
-              (bind (worth ?knapsack $knapsack-worth))))))
-  
+
+(define-init
+  `(capacity ,*max-weight*)
+  (contents nil)
+  (load 0)
+  (worth 0))
+
+
+(define-goal  
+  nil)

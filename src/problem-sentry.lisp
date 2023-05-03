@@ -96,9 +96,8 @@
   (?target target ?area2 area ?jammer jammer ?area1 area)
   (and (holding me ?jammer)
        (loc me ?area1)
-       (or (los ?area1 ?target)
-           (and (loc ?target ?area2)
-                (visible ?area1 ?area2))))
+       (loc ?target ?area2)
+       (visible ?area1 ?area2))
   (?target target ?jammer jammer ?area1 area)
   (assert (not (holding me ?jammer))
           (loc ?jammer ?area1)
@@ -180,6 +179,7 @@
   ;dynamic
   (loc me area1)
   (loc jammer1 area1)
+  (loc gun1 area2)
   (loc switch1 area3)
   (loc box1 area4)
   (red switch1)
@@ -201,11 +201,17 @@
   (adjacent area2 area3)
   (adjacent area2 area4)
   (adjacent area4 area5)
-  
-
   (adjacent area5 area6)
   (adjacent area6 area7)
   (adjacent area7 area8))
+
+
+(define-init-action derived-visibility
+    0
+    ((?area1 ?area2) area)
+    (adjacent ?area1 ?area2)
+    ()
+    (assert (visible ?area1 ?area2)))
 
 
 (define-goal

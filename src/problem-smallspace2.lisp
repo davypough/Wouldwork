@@ -43,7 +43,7 @@
   (on (either myself cargo) $support)
   (attached fan gears)
   (jamming jammer $target)
-  (connecting terminus terminus)
+  (connecting connector terminus)
   (active (either connector receiver gate))
   (color terminus $hue))
 
@@ -53,7 +53,7 @@
   (locale fixture area)
   (separates divider area area)
   (climbable> ladder area area)
-  (height support $real)
+  ;(height support $real)
   (controls receiver $gate)
   (controls2 receiver receiver $gate)  ;gate controlled by two receivers together
   (los0 area (either gate fixture))  ;clear los from an area to a gate/fixture
@@ -68,21 +68,7 @@
   (holding myself $cargo) -> (not (free myself)))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;; QUERY FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
-(define-query elevation? (?support)
-  (do (bind (height ?support $h))
-      (bind (on ?support $s))
-      (if (not (support $s))
-        (return-from elevation? $h)
-        (return-from elevation? (+ $h (elevation? state $s))))))
-
-
-(define-query same-color? (?terminus1 ?terminus2)
-  (do (bind (color ?terminus1 $hue1))
-      (bind (color ?terminus2 $hue2))
-      (eql $hue1 $hue2)))
+;;;;;;;;;;;;;;;;;;;;;;;; QUERY FUNCTIONS ;;;;;
 
 
 (define-query source? (?terminus)
@@ -166,129 +152,81 @@
       (exists (?b (either barrier ladder))
         (and (separates ?b ?area1 ?area2)
              (free me)))  ;must drop cargo first
-             (exists (?g gate)
-               (and (separates ?g ?area1 ?area2)
-                    (not (active ?g))))))
+      (exists (?g gate)
+        (and (separates ?g ?area1 ?area2)
+             (not (active ?g))))))
 
 
-(define-query sourced? (?conn-or-rcvr $hue $visits)
-  (do (push ?conn-or-rcvr $visits)
-      (or (exists (?t transmitter)
-            (and (connecting ?t ?conn-or-rcvr)
-                 (color ?t $hue)))
-          (exists (?c connector)
-            (and (connecting ?c ?conn-or-rcvr)  
-                 (active ?c)
-                 (color ?c $hue)
-                 (not (member ?c $visits))
-                 (sourced? ?c $hue $visits))))))
+;;;;;;;;;;;;;;;;;;;;;;;; UPDATE FUNCTIONS ;;;;;
 
 
-;;;;;;;;;;;;;;;;;;;;;;;; UPDATE FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;
+(define-update activate-connector! (?connector ?hue)       
+  (do (active ?connector)
+      (color ?connector ?hue)))
 
 
-(define-update activate-connector! (?connector ?hue)
-  (if (not (active ?connector))
-    (commit (active ?connector)
-          (color ?connector ?hue))))
-
-
-(define-update deactivate-connector! (?connector)
-  (if (and (active ?connector)
-           (bind (color ?connector $hue)))
-    (commit (not (active ?connector))
-            (not (color ?connector $hue)))))
+(define-update deactivate-connector! (?connector ?hue)
+  (do (not (active ?connector))
+      (not (color ?connector ?hue))))
 
 
 (define-update activate-receiver! (?receiver)
-  (if (not (active ?receiver))
-    (do (active ?receiver)
-        (doall (?g gate)  
-          (if (controls ?receiver ?g)
-            (not (active ?g)))))))
+  (do (active ?receiver)
+      (doall (?g gate)
+        (if (and (controls ?receiver ?g)
+                 (active ?g))
+          (not (active ?g))))))
 
 
 (define-update deactivate-receiver! (?receiver)
-  (if (active ?receiver)
-    (do (commit (not (active ?receiver)))
-        (doall (?g gate)
-          (if (controls ?receiver ?g)
-            (commit (active ?g)))))))
+  (do (not (active ?receiver))
+      (doall (?g gate)
+        (if (controls ?receiver ?g)
+          (active ?g)))))
 
 
-(define-update disconnect-connector! (?connector)
-  (doall (?t terminus)
-    (if (connecting ?connector ?t)
-      (commit (not (connecting ?connector ?t))))))
-
-
-(define-update disengage-jammer! (?jammer ?target)
-  (do (not (jamming ?jammer ?target))
-      (if (not (exists (?j jammer)
-                 (and (different ?j ?jammer)
-                      (jamming ?j ?target))))
-        (active ?target))))
-
-
-(define-update chain-activate! (?connector)
-  (if (and (active ?connector)
-           (bind (color ?connector $hue)))
-    (doall (?cr (either connector receiver))
-      (if (connecting ?connector ?cr)
-        (if (connector ?cr)
-          (if (not (active ?cr))
-            (do (activate-connector! ?cr $hue)
-                (chain-activate! ?cr)))
-          (if (receiver ?cr)
-            (if (and (not (active ?cr))
-                     (same-color? ?cr ?connector))
-              (activate-receiver! ?cr))))))))
-
-
-(define-update activate-connector-if! (?connector)
-  (if (exists (?t transmitter)
-        (and (connecting ?t ?connector)
-             (bind (color ?t $hue))))
-    (if (not (exists ((?t1 ?t2) transmitter)
-               (and (connecting ?t1 ?connector)
-                    (connecting ?t2 ?connector)
-                    (bind (color ?t1 $hue1))
-                    (bind (color ?t2 $hue2))
-                    (not (eql $hue1 $hue2)))))
-      (activate-connector! ?connector $hue))
-    (if (exists (?c connector)
-          (and (connecting ?c ?connector)
-               (active ?c)
-               (bind (color ?c $hue))))
-      (if (not (exists ((?c1 ?c2) connector)
-                 (and (connecting ?c1 ?connector)
-                      (connecting ?c2 ?connector)
-                      (active ?c1)
-                      (active ?c2)
-                      (bind (color ?c1 $hue1))
-                      (bind (color ?c2 $hue2))
-                      (not (eql $hue1 $hue2)))))
-        (activate-connector! ?connector $hue)))))
-
-
-(define-update deactivate-any-orphans! ()
-  (do (doall (?c connector)
-        (if (and (active ?c)
-                 (bind (color ?c $hue))
-                 (not (sourced? ?c $hue nil)))
-          (deactivate-connector! ?c)))
+(define-update chain-activate! (?connector ?hue)
+  (do (activate-connector! ?connector ?hue)
       (doall (?r receiver)
-        (if (and (active ?r)
-                 (bind (color ?r $hue))
-                 (not (sourced? ?r $hue nil)))
-          (deactivate-receiver! ?r)))))
+        (if (and (connecting ?connector ?r)
+                 (not (active ?r))
+                 (bind (color ?r $rhue))
+                 (eql $rhue ?hue))
+          (activate-receiver! ?r)))
+      (doall (?c connector)
+        (if (and (different ?c ?connector)
+                 (connecting ?connector ?c)
+                 (not (active ?c)))
+          (chain-activate! ?c ?hue)))))
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define-update chain-deactivate! (?connector ?hue)
+  (do (deactivate-connector! ?connector ?hue)
+      (doall (?r receiver)
+        (if (and (connecting ?connector ?r)
+                 (not (exists (?c connector)
+                        (and (connecting ?c ?r)
+                             (bind (color ?c $hue1)
+                             (eql $hue1 ?hue))))))
+          (deactivate-receiver! ?r)))
+      (doall (?c connector)
+        (if (and (different ?c ?connector)
+                 (connecting ?connector ?c))
+          (do (not (connecting ?connector ?c))
+              (chain-deactivate! ?c ?hue))))
+      (doall (?t transmitter ?c connector)  ;reactivate connectors with a transmitter source
+        (if (and (not (eql ?c ?connector))
+                 (connecting ?c ?t)
+                 (not (active ?c))
+                 (bind (color ?t $thue)))
+          (chain-activate! ?c $thue)))))
 
 
-(define-action connect-to-1-terminus  ;using held connector
-    1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;; ACTIONS ;;;;;
+
+
+(define-action connect-to-1-terminus
+    2
   (?terminus terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
@@ -300,12 +238,11 @@
           (connecting $cargo ?terminus)
           (if (and (source? ?terminus)
                    (bind (color ?terminus $hue)))
-            (do (active $cargo)
-                (color $cargo $hue)))))
+            (activate-connector! $cargo $hue))))
 
 
-(define-action connect-to-2-terminus  ;using held connector
-    1
+(define-action connect-to-2-terminus
+    3
   (combinations (?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
@@ -317,12 +254,19 @@
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
           (connecting $cargo ?terminus2)
-          (next (activate-connector-if! $cargo))
-          (finally (chain-activate! $cargo))))
+          (bind (color ?terminus1 $hue1))
+          (bind (color ?terminus2 $hue2))
+          (if (or $hue1 $hue2)    ;at least one active
+            (if (eql $hue1 $hue2)  ;both active and the same color
+              (setq $hue $hue1)
+              (if (not (and $hue1 $hue2))  ;both are not active (with different colors)
+                (setq $hue (or $hue1 $hue2)))))
+          (if $hue
+                (chain-activate! $cargo $hue))))
 
 
-(define-action connect-to-3-terminus  ;using held connector
-    1
+(define-action connect-to-3-terminus
+    4
   (combinations (?terminus1 ?terminus2 ?terminus3) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
@@ -336,35 +280,21 @@
           (connecting $cargo ?terminus1)
           (connecting $cargo ?terminus2)
           (connecting $cargo ?terminus3)
-          (next (activate-connector-if! $cargo))
-          (finally (chain-activate! $cargo))))
-
-
-(define-action jam
-    1
-  (?target target)
-  (and (bind (holding me $cargo))
-       (jammer $cargo)
-       (bind (loc me $area))
-       (los? $area ?target))
-  (?target target $cargo fluent $area fluent)
-  (assert (not (holding me $cargo))
-          (loc $cargo $area)
-          (jamming $cargo ?target)
-          (not (active ?target))))
-
-
-(define-action pickup-jammer
-    1
-  (?jammer jammer)
-  (and (free me)
-       (bind (loc me $area))
-       (loc ?jammer $area))
-  (?jammer jammer ($area $target) fluent)
-  (assert (holding me ?jammer)
-          (not (loc ?jammer $area))
-          (if (bind (jamming ?jammer $target))
-            (disengage-jammer! ?jammer $target))))
+          (bind (color ?terminus1 $hue1))
+          (bind (color ?terminus2 $hue2))
+          (bind (color ?terminus3 $hue3))
+          (if (or $hue1 $hue2 $hue3)    ;at least one active
+            (if (eql* $hue1 $hue2 $hue3)  ;exactly three active and the same color
+              (setq $hue $hue1)
+              (if (or (eql $hue1 $hue2)  ;exactly two active and the same color
+                      (eql $hue1 $hue3))
+                (setq $hue $hue1)
+                (if (eql $hue2 $hue3)
+                  (setq $hue $hue2)
+                  (if (not (and $hue1 $hue2 $hue3))  ;all are not active (with different colors)
+                    (setq $hue (or $hue1 $hue2 $hue3)))))))
+          (if $hue
+            (chain-activate! $cargo $hue))))
 
 
 (define-action pickup-connector
@@ -376,27 +306,12 @@
   (?connector connector $area fluent)
   (assert (holding me ?connector)
           (not (loc ?connector $area))
-          (next (deactivate-connector! ?connector))
-          (next (disconnect-connector! ?connector))
-          (finally (deactivate-any-orphans!))))
+          (if (bind (color ?connector $hue))
+            (chain-deactivate! ?connector $hue))
+          (doall (?t terminus)
+            (if (connecting ?connector ?t)
+              (not (connecting ?connector ?t))))))
 
-
-#|
-(define-action put
-    1
-  (?support support)
-  (and (holding me $cargo)
-       (loc me $area)
-       (loc ?support $area)
-       (not (exists (?c cargo)  ;cleartop ?support
-              (on ?c ?support)))
-       (setq $elev (elevation? ?support))
-       (<= $elev 1))
-  ($cargo fluent ?support support ($elev $area) fluent)
-  (assert (on $cargo ?support)
-          (loc $cargo $area)
-          (not (holding me $cargo))))
-|#
 
 (define-action drop-cargo
     1
@@ -415,21 +330,21 @@
        (different $area1 ?area2)
        (passable? $area1 ?area2))
   ($area1 fluent ?area2 area)
-  (assert ;(not (loc me $area1))
-          (loc me ?area2)))
+  (assert (loc me ?area2)))
 
 
-;;;;;;;;;;;;;;;;;;;;;;; INITIALIZATION ;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;; INITIALIZATION ;;;;;
 
 
 (define-init
   ;dynamic
- (ACTIVE CONNECTOR1) (ACTIVE CONNECTOR2) (ACTIVE GATE1) (ACTIVE GATE3) (ACTIVE GATE4) (ACTIVE RECEIVER2) (COLOR CONNECTOR1 RED)
- (COLOR CONNECTOR2 RED) (COLOR RECEIVER1 BLUE) (COLOR RECEIVER2 RED) (COLOR RECEIVER3 BLUE) (COLOR RECEIVER4 RED) (COLOR TRANSMITTER1 BLUE)
- (COLOR TRANSMITTER2 RED) (CONNECTING CONNECTOR1 CONNECTOR2) (CONNECTING CONNECTOR1 RECEIVER1) (CONNECTING CONNECTOR1 RECEIVER2)
- (CONNECTING CONNECTOR2 CONNECTOR1) (CONNECTING CONNECTOR2 TRANSMITTER2) (CONNECTING RECEIVER1 CONNECTOR1)
- (CONNECTING RECEIVER2 CONNECTOR1) (CONNECTING TRANSMITTER2 CONNECTOR2) (FREE ME) (LOC CONNECTOR1 AREA5) (LOC CONNECTOR2 AREA6)
- (LOC CONNECTOR3 AREA8) (LOC ME AREA8)  
+ (LOC ME AREA8)
+(ACTIVE CONNECTOR1) (ACTIVE CONNECTOR2) (ACTIVE GATE1) (ACTIVE GATE3) (ACTIVE GATE4) (ACTIVE RECEIVER2)
+ (COLOR CONNECTOR1 RED) (COLOR CONNECTOR2 RED) 
+ (CONNECTING CONNECTOR1 CONNECTOR2) (CONNECTING CONNECTOR1 RECEIVER1)  ;(CONNECTING CONNECTOR2 CONNECTOR1) 
+ (CONNECTING CONNECTOR1 RECEIVER2) (CONNECTING CONNECTOR2 TRANSMITTER2)
+ (FREE ME)
+ (LOC CONNECTOR1 AREA5) (LOC CONNECTOR2 AREA6) (LOC CONNECTOR3 AREA8)  
   ;static
   (adjacent area1 area2)
   (adjacent area2 area3)
@@ -528,7 +443,7 @@
   (visible2 area8 gate3 gate4 area10)
 )
 
-;;;;;;;;;;;;;;;;;;; INITIALIZATION ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;; INITIALIZATION ACTIONS ;;;;
 
 
 ;init-actions save listing systematic facts
@@ -566,21 +481,8 @@
   (assert (visible1 ?area1 ?divider ?area2)))
 
 
-;;;;;;;;;;;;;;;;;;; GOAL ;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;; GOAL ;;;;
 
 
 (define-goal  ;always put this last
-  ;(and 
-       (loc me area9)
-       ;(loc connector2 area6)
-       ;(active connector2)
-       ;(loc connector1 area5)
-       ;(active connector1)
-       ;(connecting connector2 connector1)
-       ;(connecting connector2 transmitter2)
-       ;(connecting connector1 receiver1)
-       ;(connecting connector1 receiver2)
-       ;(not (connecting connector1 transmitter1))
-  ;)
-)
-
+  (loc me area9))

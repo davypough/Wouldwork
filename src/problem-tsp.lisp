@@ -8,6 +8,7 @@
 
 (ww-set *problem* tsp)
 
+
 (ww-set *solution-type* min-value)
 
 
@@ -24,8 +25,8 @@
   (distance city city $fixnum)
   (min-edges city $list))
 
-
-(define-query get-best-relaxed-value? ()
+#|
+(define-query bounding-function? ()
   (do (setq $value 0)
       (bind (path $path))
       (setq $last-city (first $path))
@@ -41,7 +42,7 @@
                 (setq $value (+ $value (reduce #'+ $min-edges))))
               (setq $value (+ $value (reduce #'+ $min-edges))))))
       (ceiling (/ $value 2))))
-
+|#
 
 (define-action move
     1

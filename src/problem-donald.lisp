@@ -60,7 +60,7 @@
 
 (define-action assign-column-1
     1
-  (?c1 remaining-c1 ?D remaining-D ?G remaining-G ?R remaining-R ?c0 remaining-c0)
+  (products ?c1 remaining-c1 ?D remaining-D ?G remaining-G ?R remaining-R ?c0 remaining-c0)
   (and (/= ?D ?G ?R)
        (= (+ ?c1 ?D ?G) (+ ?R (* 10 ?c0)))
        (consistent D ?D)
@@ -76,7 +76,7 @@
           
 (define-action assign-column-2
     1
-  (?c2 remaining-c2 ?O remaining-O ?E remaining-E ?c1 remaining-c1)
+  (products ?c2 remaining-c2 ?O remaining-O ?E remaining-E ?c1 remaining-c1)
   (and (/= ?O ?E)
        (= (+ ?c2 ?O ?E) (+ ?O (* 10 ?c1)))
        (consistent O ?O)
@@ -90,7 +90,7 @@
 
 (define-action assign-column-3
     1
-  (?c3 remaining-c3 ?N remaining-N ?R remaining-R ?B remaining-B ?c2 remaining-c2)
+  (products ?c3 remaining-c3 ?N remaining-N ?R remaining-R ?B remaining-B ?c2 remaining-c2)
   (and (/= ?N ?R ?B)
        (= (+ ?c3 ?N ?R) (+ ?B (* 10 ?c2)))
        (consistent N ?N)
@@ -106,7 +106,7 @@
 
 (define-action assign-column-4
     1
-  (?c4 remaining-c4 ?A remaining-A ?E remaining-E ?c3 remaining-c3)
+  (products ?c4 remaining-c4 ?A remaining-A ?E remaining-E ?c3 remaining-c3)
   (and (/= ?A ?E)
        (= (+ ?c4 ?A ?A) (+ ?E (* 10 ?c3)))
        (consistent A ?A)
@@ -120,7 +120,7 @@
 
 (define-action assign-column-5
     1
-  (?c5 remaining-c5 ?L remaining-L ?R remaining-R ?c4 remaining-c4)
+  (products ?c5 remaining-c5 ?L remaining-L ?R remaining-R ?c4 remaining-c4)
   (and (/= ?L ?R)
        (= (+ ?c5 ?L ?L) (+ ?R (* 10 ?c4)))
        (consistent L ?L)
@@ -134,7 +134,7 @@
 
 (define-action assign-column-6
     1
-  (?c6 remaining-c6 ?D remaining-D ?T remaining-T ?c5 remaining-c5)
+  (products ?c6 remaining-c6 ?D remaining-D ?T remaining-T ?c5 remaining-c5)
   (and (/= ?D ?T)
        (= (+ ?c6 ?D ?D) (+ ?T (* 10 ?c5)))
        (consistent D ?D)
