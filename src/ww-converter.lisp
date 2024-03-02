@@ -11,7 +11,7 @@
   (associate-objects-with-integers)
   (iter (for (type constants) in-hashtable *types*)
     (iter (for constant in constants)
-      (when (symbolp constant)
+      (when (or (symbolp constant) (realp constant) (characterp constant))
         (setf (gethash (convert-to-integer (list type constant)) *static-idb*) t))))
   (iter (for (proposition value) in-hashtable *db*)
         (for iproposition = (convert-to-integer proposition))
