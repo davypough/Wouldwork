@@ -273,9 +273,9 @@
   `(print ,(translate (second form) flag)))
 
 
-(defun translate-using (form flag)
-  "Translates a using (aka for) loop."
-  `(loop for ,(second form) ,@(loop for item in (cddr form) collect (translate item flag))))
+(defun translate-ww-loop (form flag)
+  "Translates a ww-loop into a lisp loop with interpreted ww forms."
+  `(loop ,@(loop for item in (cdr form) collect (translate item flag))))
 
 
 (defun translate (form flag)  ;test-then distinguishes between if stmt forms
@@ -290,7 +290,7 @@
         ((eql (car form) 'if) (translate-conditional form flag))
         ((eql (car form) 'do) (translate-do form flag))
         ((eql (car form) 'bind) (translate-bind form flag))
-        ((eql (car form) 'using) (translate-using form flag))
+        ((eql (car form) 'ww-loop) (translate-ww-loop form flag))
         ((eql (car form) 'setq) (translate-setq form flag))
         ((eql (car form) 'let) (translate-let form flag))
         ((eql (car form) 'case) (translate-case form flag))
