@@ -89,7 +89,7 @@
             (setf $missing-item-ids (set-difference $initial-item-ids $item-ids))))  ;(ut::prt $all-item-ids $missing-item-ids)
       (setf $all-item-ids (gethash 'item-id *types*))
       (setf $wt 0 $cost 0 $upper 0)
-      (using $item-id in $all-item-ids do  ;run thru all item-ids until capacity exceeded
+      (ww-loop for $item-id in $all-item-ids do  ;run thru all item-ids until capacity exceeded
         (if (and (not (member $item-id $missing-item-ids))  ;except those missing
                  (bind (weight $item-id $item-weight))
                  (bind (value $item-id $item-value))  ;(ut::prt $item-id $item-weight $item-value)

@@ -55,7 +55,7 @@
   (do (bind (capacity $knapsack-capacity))   ;(ut::prt state)
       (setf $max-item-id (or (car (last $knapsack-item-ids)) 0))
       (setf $wt 0 $cost 0 $upper 0)
-      (using $item-id in (append $knapsack-item-ids
+      (ww-loop for $item-id in (append $knapsack-item-ids
                                  (loop for id from (1+ $max-item-id) to *num-items*
                                        collect id))
         do (bind (id-weight $item-id $item-weight))
@@ -130,7 +130,7 @@
   ()
   (always-true)
   ()
-  (assert (using ($item $value $weight) in *sorted-items-values-weights*
+  (assert (ww-loop for ($item $value $weight) in *sorted-items-values-weights*
             for $id from 1
             do (value $item $value)
                (weight $item $weight)
@@ -144,7 +144,7 @@
   ()
   (always-true)
   ()
-  (assert (using $item in (gethash 'item *types*)
+  (assert (ww-loop for $item in (gethash 'item *types*)
             for $id from 1
             do (bind (weight $item $item-weight))
                (bind (value $item $item-value))

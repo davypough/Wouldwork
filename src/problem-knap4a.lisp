@@ -80,7 +80,7 @@
   ()
   (always-true)
   ()
-  (assert (using ($item $value $weight) in *sorted-items-values-weights*
+  (assert (ww-loop for ($item $value $weight) in *sorted-items-values-weights*
             do (value $item $value)
                (weight $item $weight))))
 
