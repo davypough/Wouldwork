@@ -120,9 +120,9 @@
 (let ((os (software-type)))
   (cond ((string= os "Linux")
          (encode-dictionary
-           "/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English words (455K).txt"))
+           "/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-455K.txt"))
         ((string= os "Win32")
-         (encode-dictionary "English words (455K).txt"))
+         (encode-dictionary "English-words-455K.txt"))
         (t (error "Unknown Operating System in problem.lisp"))))
 
 
@@ -254,7 +254,7 @@
                   (nreverse (set-difference $initial-field-ids $used-field-ids)))))
       (setf $all-field-ids +field-ids+)                                           ;(ut::prt $missing-field-ids $all-field-ids)
       (setf $wt 0 $cost 0 $upper 0)
-      (using $field-id in $all-field-ids do  ;run thru all field-ids until capacity exceeded
+      (ww-loop for $field-id in $all-field-ids do  ;run thru all field-ids until capacity exceeded
         (if (and (not (member $field-id $missing-field-ids))  ;except those missing
                  (bind (weight $field-id $field-weight))
                  (bind (value $field-id $field-value))                             ;(ut::prt "" $field-id $field-weight $field-value $wt)
@@ -319,7 +319,7 @@
   (let ()
     (declare (special $new-cross-fills))
     (and (bind (crosscuts $field $crosscuts))  ;(ut::prt $word $field)
-         (using ($cross-field $cross-index $word-index) on $crosscuts by #'cdddr
+         (ww-loop for ($cross-field $cross-index $word-index) on $crosscuts by #'cdddr
            always (do (bind (text $cross-field $cross-str))
                       (setf $new-cross-str  ;replace one letter from word-string into cross-str
                             (replace (copy-seq $cross-str) (string $word) 
@@ -353,7 +353,7 @@
             (setf (gethash ?field $new-used-fields) t)
             (bind (field-id ?field $field-id))
             (setf (gethash $field-id $new-used-field-ids-ht) t)
-            (using ($cross-field $new-cross-str) in $new-cross-fills
+            (ww-loop for ($cross-field $new-cross-str) in $new-cross-fills
               do (text $cross-field $new-cross-str)
                  (if (full-word $new-cross-str)
                    (do (setf $new-cross-word (intern $new-cross-str))
@@ -385,7 +385,7 @@
   ()
   (always-true)
   ()
-  (assert (using ($field $field-cuts) in *crosscuts*
+  (assert (ww-loop for ($field $field-cuts) in *crosscuts*
             do (crosscuts $field $field-cuts))))
 
 
@@ -395,7 +395,7 @@
     ()
     (always-true)
     ()
-    (assert (using ($field $field-length) in *sorted-fields*
+    (assert (ww-loop for ($field $field-length) in *sorted-fields*
               for $field-id from 1
                 do (text $field (make-string $field-length :initial-element #\?))
                    (field-id $field $field-id)
@@ -437,13 +437,13 @@
 
 
 (define-query collect-matches? ()
-  (using $field in *sorted-field-names*
+  (ww-loop for $field in *sorted-field-names*
     with $final-matches = nil
     do (bind (crosscuts $field $crosscuts))
        (bind (text $field $text))
        (if (full-word $text)
          (push (list $field (coerce $text 'list)) $final-matches)
-         (using $chr across $text
+         (ww-loop for $chr across $text
            with $corresponding = (dictionary-compatible-all $text)  ;progressively reduce list of field matches
            for ($cross-field $cross-index $index) on $crosscuts by #'cdddr
              when (char= $chr #\?)

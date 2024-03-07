@@ -15,6 +15,8 @@
 ;;; Generate pre-instantiations dynamically from get-remaining-fields? and get-remaining-word-strings?
 ;;; Fix crosscuts-compatible?
 ;;; Generate fill actions one field at a time
+;;; Tree search
+;;; Fields organized progressively maximizing across/down intersections
 
 #|
 file        #states     states/sec      time    best
@@ -45,28 +47,29 @@ file        #states     states/sec      time    best
 (ww-set *problem* crossword15-18)
 
 
-(ww-set *tree-or-graph* tree)  ;(ww-set *randomize-search* t)
+(ww-set *tree-or-graph* tree)
 
+
+(ww-set *randomize-search* t)
 
 
 (ww-set *solution-type* max-value)  ;maximize number of used words
 
 
-(ww-set *progress-reporting-interval* 1000000)
+(ww-set *progress-reporting-interval* 10000000)
 
 
 
 
 (defparameter *fields* '((1across 9) (1down 4) (15across 9) (2down 4) (3down 4)
- (4down 6) (5down 7) (6down 3) (7down 4) (8down 4) (9down 5) (17across 9) (19across 5)
- (20across 3) (22across 3) (26across 8) (32across 3) (33across 6) (37across 4) 
- (26down 4) (27down 10) (28down 10) (29down 4) (39across 5) (23down 7) (30down 5) 
- (41across 4) (42across 6) (34down 4) (45across 5) (38down 8) (49across 6) (52across 5)
- (60across 5) (52down 4) (46down 6) (63across 5) (65across 5) (47across 8) (25down 7)
- (24across 6) (31across 5) (10down 6) (11down 8) (12down 10) (10across 5) (16across 5)
- (18across 5) (21across 5) (14down 4) (13down 10) (35across 4) (40across 4) (44across 3)
- (36down 4) (51across 3) (56across 5) (50down 5) (53across 3) (43down 7) (61across 9) (64across 9)
- (48down 6) (54down 4) (55down 4) (57down 4) (58down 4) (59down 4) (66across 9) (62down 3)))
+ (17across 9) (4down 6) (19across 5) (5down 7) (6down 3) (7down 4) (8down 4) (9down 5) 
+ (20across 3) (22across 3) (26across 8) (23down 7) (33across 6) (29down 4) (30down 5) (39across 5) (42across 6) (25down 7) 
+ (34down 4) (47across 8) (43down 7) (24across 6) (51across 3) (48down 6) (56across 5) (61across 9) 
+ (64across 9) (57down 4) (58down 4) (66across 9) (59down 4) (50down 5) (54down 4) (55down 4) (62down 3) (53across 3) 
+ (49across 6) (27down 10) (28down 10) (32across 3) (37across 4) (26down 4) (41across 4) 
+ (45across 5) (38down 8) (52across 5) (60across 5) (46down 6) (63across 5) (65across 5) (52down 4) 
+ (10down 6) (31across 5) (11down 8) (12down 10) (13down 10) (10across 5) (16across 5) 
+ (18across 5) (21across 5) (14down 4) (35across 4) (40across 4) (44across 3) (36down 4) ))
 
 
 (defparameter *words* '(ADMIRAL ALAN ANN AQUABELLES AQUA ARCH ASA BELLES BILL BONNIE ATTIC ATTICFAN
@@ -74,7 +77,7 @@ file        #states     states/sec      time    best
  BRERBEAR BRERFOX BRERRABBIT BRISTOL BROWN BROWNS CANASTA CARDINALS CARL CAROL CAROLSUE CHRIS
  COOKIE COOKIES CROSS DAVE DEBBIE DEWART DOLLAR DUPLEX EDWARD ELAINE FALLS FAMILY FERGUSON FLORIDA FOOTE
  FOOTEAVE FOREST FORESTPARK FOX FRANK FRED FREDDIE GARDENS GEORGE GEORGIE GRACE GRACEAVE GRAMMY GROVES ICERINK INDIANA JAMIE
- JANSENS JEWELBOX JUNGLE KATHARINE KATHY KEY KIRKHAM LIZ LOCKWOOD LOUISE MAMA MAMAMARY MARCHILDEN
+ JANSENS JEWELBOX JUNGLE KATHARINE KATHY KEY KIRKHAM LIZ LOCKWOOD LOUISE MAMA MAMAMARY MARCHILDEN MARY
  MARYPAYNE MEMA MISSREP MUM ORANGE
  PAMLICO PAT PAPAW PARK PERSIMMON PERSIMMONS PIANO PENOCHLE POLLY QUEENIE RABBIT RED REDCROSS
  REMUS REP RICHARD ROCKHILL SAINTLOUIS SCHOOL SCRABBLE SCRUGGS
@@ -101,7 +104,7 @@ file        #states     states/sec      time    best
     (35across (11down 6 0 12down 6 1 13down 6 2 36down 0 3))
     (37across (26down 2 0 27down 2 1 28down 2 2 38down 0 3))
     (39across (23down 3 0 29down 2 1 30down 2 2 34down 1 3 25down 3 4))
-    (40across (11down 7 0 12down 7 1 13down 7 2 36down 0 3))
+    (40across (11down 7 0 12down 7 1 13down 7 2 36down 1 3))
     (41across (26down 3 0 27down 3 1 28down 3 2 38down 1 3))
     (42across (23down 4 0 29down 3 1 30down 3 2 34down 2 3 25down 4 4 43down 0 5))
     (44across (12down 8 0 13down 8 1 36down 2 2))
@@ -174,8 +177,9 @@ file        #states     states/sec      time    best
     ht))
 
 
-(defparameter *sorted-fields*  ;longer fields first
-  (sort (copy-list *fields*) #'> :key #'second))
+(defparameter *sorted-fields*
+  ;(sort (copy-list *fields*) #'> :key #'second))  ;longer fields first
+  (copy-list *fields*))
 
 
 (defparameter *sorted-field-names*
@@ -236,9 +240,10 @@ file        #states     states/sec      time    best
 (let ((os (software-type)))
   (cond ((string= os "Linux")
          (encode-dictionary
-           "/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English words (455K).txt"))
+           ;"/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-58K.txt"))
+           "/mnt/d/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-455K.txt"))
         ((string= os "Win32")
-         (encode-dictionary "English words (455K).txt"))
+         (encode-dictionary "English-words-100K.txt"))
         (t (error "Unknown Operating System detected in problem.lisp"))))
 
 
@@ -343,11 +348,6 @@ file        #states     states/sec      time    best
       (set-difference $all-next-field-word-strings $used-word-strings)))
 
 
-;(define-query get-remaining-word-strings? ()
-;  (do (bind (used-word-strings-ht $used-word-strings-ht))
-;      (ut::ht-set-difference *word-strings-ht* $used-word-strings-ht)))
-
-
 ;------------------------- action rule -----------------------
 
 
@@ -370,7 +370,7 @@ file        #states     states/sec      time    best
   (let ()
     (declare (special $new-cross-fills))
     (and (bind (crosscuts $field $crosscuts))  ;(ut::prt $word $field)
-         (using ($cross-field $cross-index $word-string-index) on $crosscuts by #'cdddr
+         (ww-loop for ($cross-field $cross-index $word-string-index) on $crosscuts by #'cdddr
            always (do (bind (text $cross-field $cross-str))
                       (setf $cross-char (char $cross-str $cross-index))
                       (if (char= $cross-char #\?)
@@ -383,7 +383,7 @@ file        #states     states/sec      time    best
 
 (define-update update-crosscuts! ($field $word-string)
   (do (bind (crosscuts $field $crosscuts))  
-      (using ($cross-field $cross-index $word-string-index) on $crosscuts by #'cdddr
+      (ww-loop for ($cross-field $cross-index $word-string-index) on $crosscuts by #'cdddr
         do (bind (text $cross-field $cross-str))
            (setf $cross-char (char $cross-str $cross-index))
            (if (char= $cross-char #\?)
@@ -396,17 +396,19 @@ file        #states     states/sec      time    best
 (define-action fill
     1
     (?field (get-next-field?) ?word-string (get-next-field-word-strings?))
-    (word-compatible? ?word-string ?field)
+    (always-true)  ;(word-compatible? ?word-string ?field)
     (?field nil ?word-string nil)
     (assert (bind (used-word-strings-ht $used-word-strings-ht))
             (setf $new-used-word-strings-ht (alexandria:copy-hash-table $used-word-strings-ht))
-            ;(if (word-compatible? ?word-string ?field)
-            ;  (do 
-            (text ?field ?word-string)  ;fills in a word given cross letters compatible
-            (update-crosscuts! ?field ?word-string)  ;update ? in cross fields
-            (setf (gethash ?word-string $new-used-word-strings-ht) t)
+            (if (word-compatible? ?word-string ?field)
+              (do 
+                 (text ?field ?word-string)  ;fills in a word given cross letters compatible
+                 (update-crosscuts! ?field ?word-string)  ;update ? in cross fields
+                 (setf (gethash ?word-string $new-used-word-strings-ht) t)))
             (used-word-strings-ht $new-used-word-strings-ht)
             (current-field ?field)
+            ;(setf $objective-value (iter (for (word nil) in-hashtable $new-used-word-strings-ht)
+            ;                             (sum (length word))))))
             (setf $objective-value (hash-table-count $new-used-word-strings-ht))))
 
      
@@ -423,9 +425,9 @@ file        #states     states/sec      time    best
   ()
   (always-true)
   ()
-  (assert (using ($field $field-cuts) in *crosscuts*
+  (assert (ww-loop for ($field $field-cuts) in *crosscuts*
             do (crosscuts $field $field-cuts))
-          (using ($field $field-length) in *sorted-fields*
+          (ww-loop for ($field $field-length) in *sorted-fields*
             do (text $field (make-string $field-length :initial-element #\?)))))
 
 
@@ -457,9 +459,9 @@ file        #states     states/sec      time    best
 
 
 (define-query get-num-dictionary-words? ()  ;for a state
-  (using $field in (cdr *sorted-field-names*)
+  (ww-loop for $field in (cdr *sorted-field-names*)
     do (bind (text $field $word-string))
-    count (dictionary-compatible $word-string)))    
+    count (dictionary-compatible $word-string)))  
 
 
 (defun cull-best-states ()
@@ -467,14 +469,18 @@ file        #states     states/sec      time    best
          (top-value (problem-state.value top-state))
          (top-states (remove-if (lambda (state) (< (problem-state.value state) top-value))
                                 *best-states*))
+         ;(x (ut::prt (length top-states)))
          (unique-top-states (remove-duplicates top-states :key #'get-used-word-strings-ht? :test #'equalp))
+         ;(y (ut::prt (length unique-top-states)))
          (states&word-counts (loop for state in unique-top-states
                                    for word-count = (get-num-dictionary-words? state)
                                    collect (list word-count state)))
          (max-count (apply #'max (mapcar #'first states&word-counts)))
          (max-word-count-states (remove-if (lambda (pair) (< (first pair) max-count)) 
                                            states&word-counts)))
-    max-word-count-states))
+    (iter (for item in max-word-count-states)
+          (print item))
+    nil))
    
 
 #|
@@ -485,13 +491,13 @@ file        #states     states/sec      time    best
 
 
 (define-query collect-matches? ()
-  (using $field in *sorted-field-names*
+  (ww-loop for $field in *sorted-field-names*
     with $final-matches = nil
     do (bind (crosscuts $field $crosscuts))
        (bind (text $field $text))
        (if (full-word $text)
          (push (list $field (coerce $text 'list)) $final-matches)
-         (using $chr across $text
+         (ww-loop for $chr across $text
            with $corresponding = (dictionary-compatible-all $text)  ;progressively reduce list of field matches
            for ($cross-field $cross-index $index) on $crosscuts by #'cdddr
              when (char= $chr #\?)

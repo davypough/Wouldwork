@@ -68,7 +68,7 @@
        (filled ?field)
        (incf $counter)
        (bind (crosscuts ?field $crosscuts))
-       (for ($cross-fld $cross-idx $wrd-idx) on $crosscuts by #'cdddr
+       (ww-loop for ($cross-fld $cross-idx $wrd-idx) on $crosscuts by #'cdddr
           do (update-crosscut! $cross-fld $cross-idx $wrd-idx $word-string))
        (bind (word-count $word-count))
        (word-count (+ $word-count $counter))))
