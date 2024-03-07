@@ -70,7 +70,7 @@
     "problem-jugs2.lisp" "problem-jugs4.lisp" "problem-queens4.lisp"
     "problem-queens8.lisp" "problem-captjohn.lisp" "problem-quern.lisp" 
     "problem-graveyard.lisp" "problem-sentry.lisp" "problem-crossword5-11.lisp"
-    "problem-triangle-xy.lisp"
+    "problem-array-path.lisp" "problem-triangle-xy.lisp"
     "problem-triangle-xyz.lisp" "problem-triangle-heuristic.lisp"
     "problem-triangle-macros.lisp" "problem-triangle-macros-one.lisp"
     "problem-tsp.lisp" "problem-u2.lisp" "problem-donald.lisp"
