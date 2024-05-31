@@ -1,4 +1,4 @@
-;;; Filename: installer.lisp
+;;; Filename: ww-installer.lisp
 
 ;;; Installs a user domain file.
 
@@ -11,89 +11,82 @@
       append (gethash type *types*)))
 
 
-(defmacro define-types (&rest types&constants)
-  `(install-types ',types&constants))
+(defun final-charp (final-char sym)
+  "Determines if a symbol has a given final character in its name."
+  (let ((str (symbol-name sym)))
+    (char= (elt str (1- (length str))) final-char)))
 
 
-(defun install-types (types&constants)
-  (format t "~%Installing object types...~%")
-  (iter (for (type constants) on types&constants by #'cddr)
-    (check-type type symbol)
-    (check-type constants list)
-    (when (and (consp constants) (eql (car constants) 'either))
-      (setf constants (apply #'either (cdr constants))))
-    (when (eql (car constants) 'compute)
-      (setf constants (eval (second constants))))
-    (setf (gethash type *types*) constants)
-    (when (consp constants)
-      (dolist (constant constants)
-        (check-type constant (or symbol real list))
-        (when (symbolp constant)
-          (setf (gethash (list 'something constant) *static-db*) t)
-          (setf (gethash (list type constant) *static-db*) t))))))
+(defmacro define-types (&rest types&values)
+  `(install-types ',types&values))
 
-;    (when (consp constants)
-;      (appending constants into everything))
-;    (finally (setf (gethash 'something *types*)  ;every constant is a something
-;               (remove-duplicates everything :test #'eql)))))
+
+(defun install-types (types&instances)
+  (format t "~&Installing object types...")
+  (check-type types&instances cons)
+  (iter (for (type instances) on types&instances by #'cddr)
+        (check-type type symbol)
+        (check-type instances list)
+        (when (eql (car instances) 'either)
+          (setf instances (remove-if #'null (apply #'either (cdr instances)))))
+        (when (eql (car instances) 'compute)
+          (setf instances (eval (second instances))))
+        (setf (gethash type *types*) instances)
+        (dolist (instance instances)
+          (check-type instance (or symbol real list))
+          (when (symbolp instance)
+            (setf (gethash (list 'something instance) *static-db*) t)
+            (setf (gethash (list type instance) *static-db*) t)))))
 
 
 (defun symmetric-type-indexes (types)
-  ;Returns the set of type indexes for the multi-types of a symmetric relation.
+  "Returns the set of type indexes for the multi-types of a symmetric relation."
   (let ((dups (remove-duplicates types)))
     (iter (for dup in dups)
-      (collect (iter (for type in types)
-                 (for i from 0)
-                 (when (eql type dup)
-                   (collect i)))
-               into indices)
-      (finally (return (remove-if (lambda (elt)
-                                    (alexandria:length= 1 (length elt)))
-                         indices))))))
+          (collect (iter (for type in types)
+                         (for i from 0)
+                         (when (eql type dup)
+                           (collect i)))
+                   into indices)
+          (finally (return (remove-if (lambda (elt)
+                                        (alexandria:length= 1 (length elt)))
+                                      indices))))))
 
 
 (defun sort-either-types (relation)
-  ;Alphabetically sorts the 'either' types in a relation.
+  "Alphabetically sorts the 'either' types in a relation."
   (mapcar (lambda (item)  ;cannonically orders 'either' types
             (if (symbolp item)
               item
-              (cons 'either (sort (cdr item) #'string<
+              (cons 'either (sort (copy-list (cdr item)) #'string<
                                   :key #'symbol-name))))
           relation))
             
             
-(defun final-charp (final-char var)
-  (and (symbolp var)
-       (let ((str (symbol-name var)))
-         (char= (elt str (1- (length str))) final-char))))
-
-
 (defmacro define-dynamic-relations (&rest relations)
   `(install-dynamic-relations ',relations))
 
 
 (defun install-dynamic-relations (relations)
-  (format t "Installing dynamic relations...~%")
+  (format t "~&Installing dynamic relations...")
   (iter (for relation in relations)
-    (check-type relation cons)
-    (check-type (car relation) symbol)
-    (setf (gethash (car relation) *relations*)
-      (ut::if-it (cdr relation)
-        (sort-either-types ut::it)
-        t))
-    (ut::if-it (iter (for arg in (cdr relation))
-                 (for i from 1)
-                 (check-type arg (satisfies type-description))
-                 (when ($varp arg)
-                   (collect i)))
-      (setf (gethash (car relation) *fluent-relation-indices*)
-        ut::it))
-    (finally (maphash #'(lambda (key val)  ;install implied unary relations
-                          (declare (ignore val))
-                          (setf (gethash key *static-relations*) '(something)))
-               *types*)
-      (add-proposition '(always-true) *static-db*)
-      (setf (gethash 'always-true *static-relations*) '(always-true))))
+        (check-relation relation)
+        (setf (gethash (car relation) *relations*)
+              (ut::if-it (cdr relation)
+                (sort-either-types ut::it)
+                t))
+        (ut::if-it (iter (for arg in (cdr relation))
+                         (for i from 1)
+                         (when ($varp arg)
+                           (collect i)))
+          (setf (gethash (car relation) *fluent-relation-indices*)
+                ut::it))
+        (finally (maphash (lambda (key val)  ;install implied unary relations
+                            (declare (ignore val))
+                            (setf (gethash key *static-relations*) '(something)))
+                          *types*)
+                 (add-proposition '(always-true) *static-db*)
+                 (setf (gethash 'always-true *static-relations*) '(always-true))))
   (iter (for (key val) in-hashtable *relations*)  ;install symmetric relations
     (when (and (not (eql val t))
                (not (alexandria:setp val))  ;multiple types
@@ -107,24 +100,22 @@
 
 
 (defun install-static-relations (relations)
-  (format t "Installing static relations...~%")
+  (format t "~&Installing static relations...")
   (iter (for relation in relations)
-    (check-type relation cons)
-    (check-type (car relation) symbol)
-    (setf (gethash (car relation) *static-relations*)
-      (ut::if-it (cdr relation) 
-        (sort-either-types ut::it)
-        nil))
-    (ut::if-it (iter (for arg in (cdr relation))
-                (for i from 1)
-                (check-type arg (satisfies type-description))
-                (when ($varp arg)
-                  (collect i)))
-      (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
-    (finally (maphash #'(lambda (key val)  ;install implied unary relations
-                          (declare (ignore val))
-                          (setf (gethash key *static-relations*) '(everything)))
-               *types*)))
+        (check-relation relation)
+        (setf (gethash (car relation) *static-relations*)
+              (ut::if-it (cdr relation) 
+                (sort-either-types ut::it)
+                nil))
+        (ut::if-it (iter (for arg in (cdr relation))
+                         (for i from 1)
+                         (when ($varp arg)
+                           (collect i)))
+          (setf (gethash (car relation) *fluent-relation-indices*) ut::it))
+        (finally (maphash #'(lambda (key val)  ;install implied unary relations
+                              (declare (ignore val))
+                              (setf (gethash key *static-relations*) '(everything)))
+                          *types*)))
   (iter (for (key val) in-hashtable *static-relations*)  ;install symmetric relations
     (when (and (not (eql val t))
                (not (alexandria:setp val))  ;multiple types
@@ -140,14 +131,14 @@
 
 
 (defun install-complementary-relations (positives->negatives)
-  (format t "Installing complementary relations...~%")
+  (format t "~&Installing complementary relations...")
   (iter (for (positive nil negative) on positives->negatives by #'cdddr)
-    (let ((ordered-pos (sort-either-types positive))
-          (ordered-neg (list 'not (sort-either-types (second negative)))))
-      (check-type ordered-pos (satisfies relation))
-      (check-type ordered-neg (satisfies negative-relation)) 
-      (setf (gethash (car positive) *complements*)
-        (list ordered-pos ordered-neg)))))
+        (check-relation positive)
+        (check-relation (second negative))
+        (let ((ordered-pos (sort-either-types positive))
+              (ordered-neg (list 'not (sort-either-types (second negative)))))
+          (setf (gethash (car positive) *complements*)
+          (list ordered-pos ordered-neg)))))
 
         
 (defmacro define-happening (object &rest plist)
@@ -155,9 +146,8 @@
 
 
 (defun install-happening (object plist)
-  (format t "Installing happening for ~A~%" object)
-  (check-type object symbol)
-  (check-type plist (satisfies key-list))
+  (format t "~&Installing happening for ~A ..." object)
+  (check-happening object plist)
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
   (makunbound object)
   (setf (the simple-vector (get object :events))
@@ -180,7 +170,6 @@
   ;                                 ,(translate (get object :rebound) 'pre)))
   ;  (setf (the function (get object :rebound-fn)) (compile nil (get object :rebound))))
   (dolist (literal (get object :inits))
-    ;(check-type literal (satisfies literal))
     (when (eql (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
       (setq literal (eval literal)))
     (if (eql (car literal) 'not)
@@ -196,8 +185,8 @@
 
 
 (defun install-query (name args body)
-  (format t "Installing ~A query...~%" name)
-  (check-type args (satisfies list-of-variables))
+  (format t "~&Installing ~A query..." name)
+  (check-query/update-function name args body)
   (fmakunbound `,name)  ;avoids compiler warning if recursive fn
   (push `,name *query-names*)
   (setf (get `,name 'formula) body)
@@ -210,9 +199,12 @@
            (let ,new-$vars
              (declare (ignorable ,@new-$vars))
              ,(if (eql (car body) 'let)
-                `(let ,(second body)
-                   ,(third body)  ;should be a declare statement
-                   ,(translate (fourth body) 'pre))
+                (let ((declaration (third body)))
+                  (when (not (eql (car declaration) 'declare))
+                    (error "Declare statement required before body of let statement in ~A" name))
+                  `(let ,(second body)
+                     ,(third body)  ;should be a declare statement
+                     ,(translate (fourth body) 'pre)))
                 (translate body 'pre)))))))
   (fix-if-ignore '(state) (get `,name 'fn))
   (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
@@ -223,12 +215,11 @@
 
 
 (defun install-update (name args body)
-  (format t "Installing ~A update...~%" name)
-  (check-type args (satisfies list-of-variables))
+  (format t "~&Installing ~A update..." name)
+  (check-query/update-function name args body)
   (fmakunbound `,name)  ;avoids compiler warning if recursive fn
   (push `,name *update-names*)
   (setf (get `,name 'formula) body)
-;  (let (eff-args eff-?vars)
   (ut::if-it (delete-duplicates
                  (set-difference
                    (get-all-nonspecial-vars #'$varp body) args))  ;get $vars for let
@@ -256,7 +247,8 @@
 
 
 (defun install-constraint (form)
-  (format t "Installing constraint...~%")
+  (format t "~&Installing constraint...")
+  (check-type form list)
   (setf (get '*constraint* 'formula) form)
   (let (($vars (get-all-nonspecial-vars #'$varp form)))
     (setf (get '*constraint* 'fn)
@@ -274,7 +266,7 @@
 
 
 (defun install-action (name duration pre-params precondition eff-params effect)
-  (format t "Installing ~A action...~%" name)
+  (format t "~&Installing ~A action..." name)
   (push (create-action name duration pre-params precondition eff-params effect nil)
     *actions*))
 
@@ -285,41 +277,42 @@
 
 (defun install-init-action (name duration pre-params precondition eff-params effect)
   (declare (ignore duration))
-  (format t "Installing ~A init action...~%" name)
+  (format t "~&Installing ~A init action..." name)
   (push (create-action name 0 pre-params precondition eff-params effect t)
     *init-actions*))
 
 
 (defun create-action (name duration pre-params precondition eff-params effect init-action)
   (check-type name symbol)
-  (check-type duration real)
-  (destructuring-bind (pre-param-?vars pre-user-types restriction) (dissect-parameters pre-params)
-    (check-type pre-param-?vars (satisfies list-of-?variables))
-    (check-type pre-user-types (satisfies list-of-parameter-types))
-    (destructuring-bind (eff-param-vars eff-user-types *) (dissect-parameters eff-params)
-      (check-type eff-param-vars (satisfies list-of-variables))
-      (check-type eff-user-types (satisfies list-of-parameter-types))
-      (let* ((pre-$vars (delete-duplicates (get-all-nonspecial-vars #'$varp precondition) :from-end t))
+  (check-type duration (real 0 *) "zero or a positive number")
+  (check-precondition-parameters pre-params)
+  (check-effect-parameters eff-params)
+  (unless (member (first pre-params) *parameter-headers*)
+    (push 'standard pre-params))
+  (multiple-value-bind (pre-param-?vars pre-param-types) (dissect-pre-params pre-params)
+    (let ((eff-param-vars eff-params))   ;eff-param-types) (dissect-eff-params eff-params)
+      (let* ((flat-pre-param-?vars (alexandria:flatten pre-param-?vars))
+             (pre-$vars (delete-duplicates (get-all-nonspecial-vars #'$varp precondition) :from-end t))
              (pre-special-$vars (get-special-vars precondition))
+             (pre-type-inst (instantiate-type-spec pre-param-types))
              (eff-$vars (delete-duplicates (get-all-nonspecial-vars #'$varp effect) :from-end t))
-             (eff-args (append pre-param-?vars pre-$vars pre-special-$vars))
+             (eff-args (append flat-pre-param-?vars pre-$vars pre-special-$vars))
              (eff-?vars (delete-duplicates (get-all-nonspecial-vars #'?varp effect) :from-end t))
-             (eff-bound-?vars (delete-duplicates (get-bound-?vars (list effect)) :from-end t))
-             (eff-free-?vars (ut::list-difference eff-?vars eff-bound-?vars))
-             (eff-extra-$vars (ut::list-difference (ut::list-difference eff-$vars pre-$vars)
+             (eff-bound-?vars (get-bound-?vars effect))
+             (eff-free-?vars (set-difference eff-?vars eff-bound-?vars))
+             (eff-extra-$vars (set-difference (set-difference eff-$vars pre-$vars)
                                                    pre-special-$vars))
-             (eff-extra-?vars (ut::if-it (ut::list-difference eff-free-?vars pre-param-?vars )
+             (eff-extra-?vars (ut::if-it (set-difference eff-free-?vars flat-pre-param-?vars)
                                 (error "Extra effect ?vars in action ~A: ~A" name ut::it)))
-             (eff-missing-vars (ut::list-difference eff-args (append eff-free-?vars eff-$vars)))
-             (pre-types (transform-types pre-user-types))
-             (queries (intersection (alexandria:flatten pre-types) *query-names*))
+             (eff-missing-vars (set-difference eff-args (append eff-free-?vars eff-$vars)))
+             (queries (intersection (alexandria:flatten pre-param-types) *query-names*))
              (action nil))
 ;        (ut::prt pre-$vars pre-special-$vars eff-$vars eff-args eff-?vars eff-bound-?vars eff-free-?vars
 ;                 eff-extra-$vars eff-extra-?vars eff-missing-vars)
         (cond (init-action
                  (setq *objective-value-p* nil))  ;this is an init-action, disable $objective-value
               ((or (member '$objective-value pre-$vars)  ;used in translate-assert
-                  (member '$objective-value eff-extra-$vars))
+                   (member '$objective-value eff-extra-$vars))
                  (setq *objective-value-p* t))  ;this is a normal action rule with optimization
               (t (setq *objective-value-p* nil)))  ;normal rule, but no optimization
         (setq *eff-param-vars* eff-param-vars)  ;used in translate-assert
@@ -327,30 +320,34 @@
                        :name name
                        :duration duration
                        :precondition-params pre-params
-                       :precondition-variables (append pre-param-?vars pre-$vars)
-                       :precondition-types pre-user-types
-                       :restriction restriction
-                       :dynamic (when queries pre-types)
-                       :precondition-instantiations (or (unless queries
-                                                      (instantiate-types pre-types restriction)) '(nil))
-                       ;:precondition-lits nil
-                       :precondition-lambda `(lambda (state ,@pre-param-?vars)
+                       :precondition-variables (append flat-pre-param-?vars pre-$vars)
+                       :precondition-types pre-param-types
+                       :precondition-type-inst pre-type-inst
+                       :dynamic (when queries pre-type-inst)
+                       :precondition-args (if queries
+                                            '(nil)
+                                            (let ((evaluation (eval-instantiated-spec pre-type-inst)))
+                                              (if (equal evaluation '((nil)))
+                                                '(nil)
+                                                evaluation)))
+                       :precondition-lambda `(lambda (state &rest args)  ;,@pre-param-?vars)
                                                ,(format nil "~A precondition" name)
-                                               (let ,pre-$vars
-                                                 (declare (ignorable ,@pre-$vars))
-                                                 ,(if (eql (car precondition) 'let)
-                                                    `(let ,(second precondition)
-                                                       ,(third precondition)
-                                                       (when ,(translate (fourth precondition) 'pre)
+                                               (destructuring-bind ,pre-param-?vars args
+                                                 (let ,pre-$vars
+                                                   (declare (ignorable ,@pre-$vars))
+                                                   ,(if (eql (car precondition) 'let)
+                                                      `(let ,(second precondition)
+                                                         ,(third precondition)
+                                                         (when ,(translate (fourth precondition) 'pre)
+                                                           ,(if eff-args
+                                                              `(list ,@eff-args)
+                                                              `t)))
+                                                      `(when ,(translate precondition 'pre)
                                                          ,(if eff-args
                                                             `(list ,@eff-args)
-                                                            `t)))
-                                                    `(when ,(translate precondition 'pre)
-                                                       ,(if eff-args
-                                                          `(list ,@eff-args)
-                                                          `t)))))
+                                                            `t))))))
                        :effect-variables eff-param-vars  ;user listed parameter variables
-                       :effect-types eff-user-types
+                       :effect-types nil  ;eff-param-types
                        :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
                                          ,(format nil "~A effect" name)
                                          (let (updated-dbs ,@(set-difference (set-difference eff-extra-$vars eff-args)
@@ -363,15 +360,27 @@
         (fix-if-ignore `(state ,@eff-missing-vars) (action.effect-lambda action))
         action))))
 
-
+#|
 (defun get-bound-?vars (tree)
-  "Searches tree for an atom or cons satisfying the predicate, and returns
+  "Searches tree for an atom or cons, and returns
    list of all such items. To include tree itself, pass in (list tree)."
-  (iter (for item in tree)
-        (when (consp item)
+  (iter (for item in tree)  (ut::prt item)
+        (when (and (listp item) (not (consp item)))
           (if (member (car item) '(exists exist forsome forall forevery doall))
             (nconcing (delete-if-not #'?varp (alexandria:flatten (second item))))
-            (nconcing (get-bound-?vars item))))))
+            (nconcing (when (listp item) (get-bound-?vars item)))))))
+|#
+(defun get-bound-?vars (tree)
+  "Retrieves the bound ?vars from a code tree."
+  (let (?var-list)
+    (ut::walk-tree (lambda (x)
+                     (when (and (listp x)
+                                (member (first x) '(exists exist forsome forall forevery doall)))
+                       (setf ?var-list
+                             (append ?var-list
+                                     (remove-if-not #'?varp (alexandria:flatten (second x)))))))
+                   tree)
+    (remove-duplicates ?var-list)))
 
 
 (defun get-special-vars (tree)
@@ -398,7 +407,7 @@
 
 (defun fix-if-ignore (symbols lambda-expr)
   "Ignores variable symbols that are not in the lambda-body."
-  (let ((ignores (ut::list-difference
+  (let ((ignores (set-difference
                     symbols (get-all-nonspecial-vars (lambda (x)
                                             (member x symbols))
                                           (cddr lambda-expr)))))
@@ -411,12 +420,15 @@
 
 
 (defun install-init (literals)
-  (declare (hash-table *relations* *db* *static-db*))
-  (format t "Creating initial propositional database...~%")
+  (declare (type hash-table *relations* *db* *static-db*))
+  (format t "~&Creating initial propositional database...")
+  (check-type literals cons)
   (dolist (literal literals)
-    ;(check-type literal (satisfies literal))
-    (when (eql (car literal) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote)
+    (when (eql (car literal) 'sb-int:quasiquote)
       (setq literal (eval literal)))
+    (if (eql (car literal) 'not)
+      (check-proposition (second literal))
+      (check-proposition literal))
     (if (eql (car literal) 'not)
       (if (gethash (caadr literal) *relations*)
         (delete-proposition (second literal) *db*)
@@ -431,7 +443,8 @@
 
 
 (defun install-goal (form)
-  (format t "Installing goal...~%")
+  (format t "~&Installing goal...")
+  (check-type form list)
   (when (and (null form)
              (not (eql *solution-type* 'min-value))
              (not (eql *solution-type* 'max-value)))
@@ -446,4 +459,3 @@
            ,(translate form 'pre)))))
   (fix-if-ignore '(state) (get '*goal* 'fn))
   (setq *goal* (copy-tree (get '*goal* 'fn))))  ;to be compiled
-    

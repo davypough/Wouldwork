@@ -37,7 +37,7 @@
     1
   (?grave grave)
   (always-true)
-  (?grave grave)
+  (?grave)
   (assert (case ?grave
             (grave1 (toggle! 'grave1 'grave3 'grave10))
             (grave2 (toggle! 'grave2 'grave5 'grave7))

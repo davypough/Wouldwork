@@ -1,4 +1,4 @@
-;;;; Filename: problem-crossword15-18.lisp
+;;; Filename: problem-crossword15-19.lisp
 
 ;;; Problem specification for 15x15 crossword, best filling
 
@@ -7,7 +7,7 @@
 ;;; *Adds bounding function.
 ;;; Adds post-processing fill options with dictionary words
 ;;; Adds post-processing select only compatible across/down dictionary words
-;;; Skip over words for *trie-ht* that are too short or too long + reverse words OK
+;;; Skip over words for *dictionary-trie-ht* that are too short or too long + reverse words OK
 ;;; *Adds heuristic more filled is closer to goal
 ;;; *Pre-instantiation of equal length field & word
 ;;; Representing words initially as strings rather than symbols, "LIZ" vs LIZ
@@ -17,6 +17,9 @@
 ;;; Generate fill actions one field at a time
 ;;; Tree search
 ;;; Fields organized progressively maximizing across/down intersections
+;;; Corrected 2 crossfield indices
+;;; Adds new bounding function for upper & lower bound estimates (ineffective!)
+
 
 #|
 file        #states     states/sec      time    best
@@ -44,13 +47,13 @@ file        #states     states/sec      time    best
 (in-package :ww)
 
 
-(ww-set *problem* crossword15-18)
+(ww-set *problem* crossword15-19)
 
 
 (ww-set *tree-or-graph* tree)
 
 
-(ww-set *randomize-search* t)
+;(ww-set *randomize-search* t)
 
 
 (ww-set *solution-type* max-value)  ;maximize number of used words
@@ -177,13 +180,8 @@ file        #states     states/sec      time    best
     ht))
 
 
-(defparameter *sorted-fields*
-  ;(sort (copy-list *fields*) #'> :key #'second))  ;longer fields first
-  (copy-list *fields*))
-
-
 (defparameter *sorted-field-names*
-  (cons 'start (iter (for (field nil) in *sorted-fields*)
+  (cons 'start (iter (for (field nil) in *fields*)
                      (collect field))))
 
 
@@ -207,10 +205,28 @@ file        #states     states/sec      time    best
           (setf (gethash field ht) t))
     ht))
 
-;-------------- dictionary -----------------------
+
+(defparameter *across-fields* nil)
 
 
-(defparameter *trie-ht* (make-hash-table))
+(defparameter *down-fields* nil)
+
+
+(multiple-value-setq (*across-fields* *down-fields*)
+  (iter (for field in (cdr *sorted-field-names*))
+        (if (position #\A (string field))
+          (collect field into across)
+          (collect field into down))
+        (finally (return (values across down)))))
+
+
+;-------------- tries -----------------------
+
+
+(defparameter *dictionary-trie-ht* (make-hash-table))  ;keys are chars
+
+
+(defparameter *word-trie-ht* (make-hash-table))
 
 
 (defun trie-insert (trie word-string)
@@ -223,8 +239,8 @@ file        #states     states/sec      time    best
     (setf (gethash :word-string node) t)))
 
 
-(defun encode-dictionary (dictionary-file)
-  ;Read in dictionary word strings from a file and store codes in *trie-ht*.
+(defun encode-dictionary-trie (dictionary-file)
+  ;Read in dictionary word strings from a file and store codes in *dictionary-trie-ht*.
   (with-open-file (infile dictionary-file :direction :input :if-does-not-exist nil)
     (when (not (streamp infile)) (error "File does not exist!"))
     (let* ((word-strings (uiop:read-file-lines infile))
@@ -233,18 +249,32 @@ file        #states     states/sec      time    best
            (min-field-length (reduce #'min field-lengths)))
       (iter (for word-string in word-strings)
             (when (<= min-field-length (length word-string) max-field-length)
-              (trie-insert *trie-ht* (reverse word-string))
-              (trie-insert *trie-ht* word-string))))))
+              (trie-insert *dictionary-trie-ht* (reverse word-string))
+              (trie-insert *dictionary-trie-ht* word-string))))))
 
 
 (let ((os (software-type)))
   (cond ((string= os "Linux")
-         (encode-dictionary
-           ;"/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-58K.txt"))
+         (encode-dictionary-trie
            "/mnt/d/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-455K.txt"))
         ((string= os "Win32")
-         (encode-dictionary "English-words-100K.txt"))
+         (encode-dictionary-trie "English-words-100K.txt"))
         (t (error "Unknown Operating System detected in problem.lisp"))))
+
+
+(defun encode-word-trie (words)
+  ;Read in permissible words and store codes in *word-trie-ht*.
+    (let* ((word-strings (mapcar #'string words))
+           (field-lengths (mapcar #'second *fields*))
+           (max-field-length (reduce #'max field-lengths))
+           (min-field-length (reduce #'min field-lengths)))
+      (iter (for word-string in word-strings)
+            (when (<= min-field-length (length word-string) max-field-length)
+              (trie-insert *word-trie-ht* (reverse word-string))
+              (trie-insert *word-trie-ht* word-string)))))
+
+
+(encode-word-trie *words*)
 
 
 (defun trie-search (trie pattern)
@@ -299,16 +329,16 @@ file        #states     states/sec      time    best
     (search-node trie pattern "" 0)))
 
 
-(defun dictionary-compatible ($new-cross-str)  ;eg, "A?R??" of length 5
+(defun trie-compatible (trie $new-cross-str)  ;eg, "A?R??" of length 5
   "Tests if a string (with uppercase alphabetic and ? characters)
-   is compatible with any dictionary word-string in a hash-table."
-  (trie-search *trie-ht* $new-cross-str))
+   is compatible with any dictionary word-string in a trie."
+  (trie-search trie $new-cross-str))
 
 
-(defun dictionary-compatible-all ($new-cross-str)  ;eg, "A?R??" of length 5
+(defun trie-compatible-all (trie $new-cross-str)  ;eg, "A?R??" of length 5
   "For a pattern string (with uppercase alphabetic and ? characters)
-   returns all compatible dictionary word-strings in a hash-table."
-  (trie-search-all *trie-ht* $new-cross-str))
+   returns all compatible dictionary word-strings in a trie."
+  (trie-search-all trie $new-cross-str))
 
 
 ;---------------- types ---------------------
@@ -319,6 +349,7 @@ file        #states     states/sec      time    best
 
 
 (define-dynamic-relations
+  ;(used-fields-ht $hash-table)
   (current-field $field)
   (used-word-strings-ht $hash-table)
   (text field $string))
@@ -326,6 +357,11 @@ file        #states     states/sec      time    best
 
 (define-static-relations
   (crosscuts field $list))
+
+
+;(define-query get-remaining-fields? ()
+;  (do (bind (used-fields-ht $used-fields-ht))
+;      (ut::ht-set-difference *fields-ht* $used-fields-ht)))
 
 
 (define-query get-next-field? ()
@@ -342,7 +378,61 @@ file        #states     states/sec      time    best
       (set-difference $all-next-field-word-strings $used-word-strings)))
 
 
+;-------------- bounding ----------------------
+
+
+(define-query bounding-function? ()
+  ;Computes lower and upper bounds for a state
+  (let ((across-count 0) (down-count 0))
+    (declare (fixnum across-count down-count))
+    (do (ww-loop for $field in *across-fields*
+          do (bind (text $field $field-string))
+             (if (trie-compatible *word-trie-ht* $field-string)
+               (incf across-count)))
+        (ww-loop for $field in *down-fields*
+          do (bind (text $field $field-string))
+             (if (trie-compatible *word-trie-ht* $field-string)
+               (incf down-count)))
+        (return-from bounding-function? (values (max across-count down-count)  ;lower bound
+                                                (+ across-count down-count))))))  ;upper bound
+
+
+#|
+(defun successors-p ($used-field-ids)
+  ;Tests for a succession of integers (ie, field-ids).
+  (iter (for field-id in $used-field-ids)
+        (for prev-field-id previous field-id)
+        (when prev-field-id
+          (always (= field-id (1+ prev-field-id))))))
+
+
+(defun sort-field-ids ($used-field-ids-ht)
+  (when (and $used-field-ids-ht (/= (hash-table-count $used-field-ids-ht) 0))
+    (sort (iter (for (field-id *) in-hashtable $used-field-ids-ht)
+                (collect field-id at beginning))
+          #'<)))
+
+
+(define-query bounding-function? ()
+  (do (bind (used-field-ids-ht $used-field-ids-ht))
+      (setf $used-field-ids (sort-field-ids $used-field-ids-ht))  ;(ut::prt $used-field-ids)
+      (if (successors-p $used-field-ids)
+        (if (= *cost* *upper* 0)
+          (do (multiple-value-setq (*cost* *upper*)
+                                   (compute-bounds? $used-field-ids))
+                 (values *cost* *upper*))
+          (values *cost* *upper*))
+        (do (setf *cost* 0 *upper* 0)
+            (compute-bounds? $used-field-ids)))))
+|#
+
 ;------------------------- action rule -----------------------
+
+
+;(defun full-word ($word-string)
+;  (notany (lambda (char)
+;            (char= char #\?))
+;          $word-string))
 
 
 (define-query word-compatible? ($word-string $field)
@@ -353,6 +443,21 @@ file        #states     states/sec      time    best
                       (char= char2 #\?)))
                $word-string $field-string)))
 
+#|
+(define-query crosscuts-compatible? ($word-string $field)  
+  (let ()
+    (declare (special $new-cross-fills))
+    (and (bind (crosscuts $field $crosscuts))  ;(ut::prt $word $field)
+         (ww-loop for ($cross-field $cross-index $word-string-index) on $crosscuts by #'cdddr
+           always (do (bind (text $cross-field $cross-str))
+                      (setf $cross-char (char $cross-str $cross-index))
+                      (if (char= $cross-char #\?)
+                        (do (setf $new-cross-str  ;replace one letter from word-string into cross-str
+                                  (replace (copy-seq $cross-str) $word-string 
+                                           :start1 $cross-index :start2 $word-string-index :end2 (1+ $word-string-index)))  ;(ut::prt $cross-str $new-cross-str)
+                            (trie-compatible *dictionary-trie-ht* $new-cross-str))
+                        (char= $cross-char (char $word-string $word-string-index))))))))  ;$cross-field already filled in
+|#
 
 (define-update update-crosscuts! ($field $word-string)
   (do (bind (crosscuts $field $crosscuts))  
@@ -370,14 +475,13 @@ file        #states     states/sec      time    best
     1
     (?field (get-next-field?) ?word-string (get-next-field-word-strings?))
     (always-true)  ;(word-compatible? ?word-string ?field)
-    (?field ?word-string)
+    (?field nil ?word-string nil)
     (assert (bind (used-word-strings-ht $used-word-strings-ht))
             (setf $new-used-word-strings-ht (alexandria:copy-hash-table $used-word-strings-ht))
             (if (word-compatible? ?word-string ?field)
-              (do 
-                 (text ?field ?word-string)  ;fills in a word given cross letters compatible
-                 (update-crosscuts! ?field ?word-string)  ;update ? in cross fields
-                 (setf (gethash ?word-string $new-used-word-strings-ht) t)))
+              (do (text ?field ?word-string)  ;fills in a word given cross letters compatible
+                  (update-crosscuts! ?field ?word-string)  ;update ? in cross fields
+                  (setf (gethash ?word-string $new-used-word-strings-ht) t)))
             (used-word-strings-ht $new-used-word-strings-ht)
             (current-field ?field)
             ;(setf $objective-value (iter (for (word nil) in-hashtable $new-used-word-strings-ht)
@@ -400,7 +504,7 @@ file        #states     states/sec      time    best
   ()
   (assert (ww-loop for ($field $field-cuts) in *crosscuts*
             do (crosscuts $field $field-cuts))
-          (ww-loop for ($field $field-length) in *sorted-fields*
+          (ww-loop for ($field $field-length) in *fields*
             do (text $field (make-string $field-length :initial-element #\?)))))
 
 
@@ -434,7 +538,7 @@ file        #states     states/sec      time    best
 (define-query get-num-dictionary-words? ()  ;for a state
   (ww-loop for $field in (cdr *sorted-field-names*)
     do (bind (text $field $word-string))
-    count (dictionary-compatible $word-string)))  
+    count (trie-compatible *dictionary-trie-ht* $word-string)))  
 
 
 (defun cull-best-states ()
@@ -442,7 +546,9 @@ file        #states     states/sec      time    best
          (top-value (problem-state.value top-state))
          (top-states (remove-if (lambda (state) (< (problem-state.value state) top-value))
                                 *best-states*))
+         ;(x (ut::prt (length top-states)))
          (unique-top-states (remove-duplicates top-states :key #'get-used-word-strings-ht? :test #'equalp))
+         ;(y (ut::prt (length unique-top-states)))
          (states&word-counts (loop for state in unique-top-states
                                    for word-count = (get-num-dictionary-words? state)
                                    collect (list word-count state)))
@@ -469,11 +575,11 @@ file        #states     states/sec      time    best
        (if (full-word $text)
          (push (list $field (coerce $text 'list)) $final-matches)
          (ww-loop for $chr across $text
-           with $corresponding = (dictionary-compatible-all $text)  ;progressively reduce list of field matches
+           with $corresponding = (trie-compatible-all *dictionary-trie-ht* $text)  ;progressively reduce list of field matches
            for ($cross-field $cross-index $index) on $crosscuts by #'cdddr
              when (char= $chr #\?)
                do (bind (text $cross-field $cross-text))
-                  (setf $cross-matches (dictionary-compatible-all $cross-text))
+                  (setf $cross-matches (trie-compatible-all *dictionary-trie-ht* $cross-text))
                   (setf $corresponding (corresponding-char-lists $corresponding $index $cross-matches $cross-index))
            finally (push (cons $field $corresponding) $final-matches)))
     finally (return $final-matches)))

@@ -1,4 +1,4 @@
-;;;; Filename: problem-queens8.lisp
+;;; Filename: problem-queens8.lisp
 
 ;;; Problem specification for 8-queens.
 
@@ -6,8 +6,6 @@
 (in-package :ww)  ;required
 
 (ww-set *problem* queens8)
-
-(ww-set *depth-cutoff* 8)
 
 (ww-set *tree-or-graph* tree)
 
@@ -18,7 +16,7 @@
 
 
 (define-dynamic-relations
-  (loc queen $row $col)
+  (loc queen $fixnum $fixnum)
   (placed queen)
   (next-row $fixnum))
 
@@ -35,7 +33,7 @@
                        (= $c ?column)
                        (= (- $r $row) (- $c ?column))
                        (= (- $r $row) (- ?column $c)))))))
-  (?queen queen $row fluent ?column column)
+  (?queen $row ?column)
   (assert (loc ?queen $row ?column)
           (placed ?queen)
           (next-row (1+ $row))))

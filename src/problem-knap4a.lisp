@@ -1,4 +1,4 @@
-;;;; Filename: problem-knap4a.lisp
+;;; Filename: problem-knap4a.lisp
 
 ;;; Problem specification for a 4-item knapsack problem.
 ;;; First iteration.
@@ -17,7 +17,7 @@
 (ww-set *solution-type* max-value)
 
 
-(ww-set *progress-reporting-interval* 10)  ;for debugging
+;(ww-set *progress-reporting-interval* 10)  ;for debugging
 
 
 (defparameter *items-values-weights*
@@ -25,7 +25,7 @@
 
 
 (defparameter *sorted-items-values-weights*  ;sort according to value/weight ratio
-  (sort *items-values-weights* #'>
+  (sort (copy-list *items-values-weights*) #'>
         :key (lambda (x)
                (/ (second x) (third x)))))
 
@@ -57,7 +57,7 @@
        (setf $new-knapsack-load (+ $knapsack-load $item-weight))
        (bind (capacity $knapsack-capacity))
        (<= $new-knapsack-load $knapsack-capacity))
-  (?item item)
+  (?item)
   (assert (setf $new-knapsack-items (cons ?item $knapsack-items))
           (contents $new-knapsack-items)
           (load $new-knapsack-load)

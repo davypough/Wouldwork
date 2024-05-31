@@ -37,22 +37,21 @@
   peg (compute (loop for i from 1 to (- *size* (length *init-holes*))  ;peg1, peg2, ...
                      collect (intern (format nil "PEG~D" i))))
   index (compute (loop for i from 1 to *N*
-                     collect i))
-  current-peg (get-current-pegs?))
+                     collect i)))
 
 
 (define-dynamic-relations
-    (loc peg $x-index $y-index $z-index)      ;location of a peg
+    (loc peg $index $index $index)      ;location of a peg
     (contents> index index index $peg)  ;peg contents at a location
     (board-pegs $list)   ;list of remaining pegs
     (peg-count $integer))    ;pegs remaining on the board
 
 
 (define-static-relations
-    (pos position $x-index $y-index $z-index))      ;location of a position
+    (pos position $index $index $index))      ;location of a position
 
 
-(define-query get-current-pegs? ()
+(define-query get-remaining-pegs? ()
   (do (bind (board-pegs $board-pegs))
       $board-pegs))
 
@@ -75,7 +74,7 @@
       (setq $x-min 100) (setq $y-min 100) (setq $z-min 100)
       (setq $x-max 0) (setq $y-max 0) (setq $z-max 0)
       (setq $enclosed-hole-count 0)
-      (doall (?peg current-peg)
+      (doall (?peg (get-remaining-pegs?))
         (do (bind (loc ?peg $x $y $z))
             (if (< $x $x-min)
               (setq $x-min $x))   
@@ -102,7 +101,7 @@
 
 (define-action jump
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (setq $x-2 (- $x 2))
        (setq $x-1 (- $x 1))
@@ -118,7 +117,7 @@
        (setq $z+2 (+ $z 2))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y $dir) fluent)
+  ($x $y $dir)
   (do (assert (if (and (<= $y (- *N* 2))
                        (>= $z 3)
                        (bind (contents> $x $y+1 $z-1 $adj-peg))
@@ -180,7 +179,7 @@
                     (board-pegs (remove $adj-peg $board-pegs)))))))
 
 
-(progn (format t "~&Initializing database...~%")
+(progn (format t "~&Initializing database...")
   (loop with pegs = (gethash 'peg *types*)
         with positions = (gethash 'position *types*)
     ;*db* is the name of the initial database

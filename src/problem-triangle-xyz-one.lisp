@@ -42,22 +42,21 @@
   peg (compute (loop for i from 1 to (- *size* (length *init-holes*))  ;peg1, peg2, ...
                      collect (intern (format nil "PEG~D" i))))
   index (compute (loop for i from 1 to *N*
-                     collect i))
-  current-peg (get-current-pegs?))
+                     collect i)))
 
 
 (define-dynamic-relations
-    (loc peg $x-index $y-index $z-index)      ;location of a peg
+    (loc peg $fixnum $fixnum $fixnum)      ;location of a peg
     (contents> index index index $peg)  ;peg contents at a location
     (board-pegs $list)   ;list of remaining pegs
     (peg-count $integer))    ;pegs remaining on the board
 
 
 (define-static-relations
-    (pos position $x-index $y-index $z-index))      ;location of a position
+    (pos position $fixnum $fixnum $fixnum))      ;location of a position
 
 
-(define-query get-current-pegs? ()
+(define-query get-remaining-pegs? ()
   (do (bind (board-pegs $board-pegs))
       $board-pegs))
 
@@ -76,7 +75,7 @@
 
 (define-action jump
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (setq $x-2 (- $x 2))
        (setq $x-1 (- $x 1))
@@ -92,7 +91,7 @@
        (setq $z+2 (+ $z 2))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y $dir) fluent)
+  ($x $y $dir)
   (do (if (and (<= $y (- *N* 2))
                (>= $z 3)
                (bind (contents> $x $y+1 $z-1 $adj-peg))

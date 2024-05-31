@@ -7,7 +7,7 @@
 
 (ww-set *problem* crossword13)
 
-(ww-set *tree-or-graph* graph)
+(ww-set *tree-or-graph* tree)
 
 (ww-set *solution-type* first)
 
@@ -23,7 +23,7 @@
     (contents field $string)
     (filled field)
     (used word)
-    (word-count $int))
+    (word-count $fixnum))
 
 
 (define-static-relations
@@ -80,7 +80,7 @@
     (and (not (filled ?field))
          (not (used ?word))
          (compatible? ?word ?field))
-    (?field field ?word word)
+    (?field ?word)
     (assert (install! ?word ?field)))
 
 

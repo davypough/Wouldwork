@@ -1,4 +1,4 @@
-;;;; Filename: problem-crater.lisp
+;;; Filename: problem-crater.lisp
 
 ;;; Problem specification (in Talos Principle)
 ;;; for the (second) Nexus-2 crater problem in Road to Gehenna.
@@ -10,7 +10,7 @@
 
 (ww-set *depth-cutoff* 9)
 
-(ww-set *solution-type* first)
+(ww-set *solution-type* first)  ;min-length)
 
 
 (define-types
@@ -47,6 +47,7 @@
   (jamming jammer $target)
   (connecting connector terminus)
   (active (either connector gate receiver gears))
+  (height support $real)
   (color terminus $hue))
 
 
@@ -275,13 +276,13 @@
 
 
 (define-action connect-to-1-terminus
-    1
+    1.1
   (?terminus terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus))
-  ($cargo fluent ?terminus terminus ($area $hue) fluent)
+  ($cargo ?terminus $area $hue)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus)
@@ -291,14 +292,14 @@
 
 
 (define-action connect-to-2-terminus
-    1
-  (combinations (?terminus1 ?terminus2) terminus)
+    2.2
+  (combination (?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus1)
        (connectable? $area ?terminus2))
-  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
+  ($cargo ?terminus1 ?terminus2 $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
@@ -315,15 +316,15 @@
 
 
 (define-action connect-to-3-terminus
-    4
-  (combinations (?terminus1 ?terminus2 ?terminus3) terminus)
+    3.3
+  (combination (?terminus1 ?terminus2 ?terminus3) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus1)
        (connectable? $area ?terminus2)
        (connectable? $area ?terminus3))
-  ($cargo fluent (?terminus1 ?terminus2 ?terminus3) terminus $area fluent)
+  ($cargo ?terminus1 ?terminus2 ?terminus3 $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
@@ -347,13 +348,13 @@
 
 
 (define-action jam
-    1
+    1.4
   (?target target)
   (and (bind (holding me $cargo))
        (jammer $cargo)
        (bind (loc me $area))
        (los? $area ?target))
-  (?target target $cargo fluent $area fluent)
+  (?target $cargo $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (jamming $cargo ?target)
@@ -366,7 +367,7 @@
   (and (not (bind (holding me $cargo)))
        (bind (loc me $area))
        (loc ?jammer $area))
-  (?jammer jammer ($area $target) fluent)
+  (?jammer $area $target)
   (assert (holding me ?jammer)
           (not (loc ?jammer $area))
           (if (bind (jamming ?jammer $target))
@@ -379,7 +380,7 @@
   (and (free me)
        (bind (loc me $area))
        (loc ?connector $area))
-  (?connector connector $area fluent)
+  (?connector $area)
   (assert (holding me ?connector)
           (not (loc ?connector $area))
           (if (bind (color ?connector $hue))
@@ -390,11 +391,11 @@
 
 
 (define-action drop-cargo
-    1
+  .8
   ()
   (and (bind (loc me $area))
        (bind (holding me $cargo)))
-  ($cargo fluent $area fluent)
+  ($cargo $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)))
 
@@ -405,7 +406,7 @@
   (and (bind (loc me $area1))
        (different $area1 ?area2)
        (passable? $area1 ?area2))
-  ($area1 fluent ?area2 area)
+  ($area1 ?area2)
   (assert (loc me ?area2)))
 
 

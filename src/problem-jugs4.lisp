@@ -8,7 +8,7 @@
 
 (ww-set *problem* jugs4)
 
-(ww-set *depth-cutoff* 10)  ;set to >= expected # steps to goal
+;(ww-set *depth-cutoff* 10)  ;set to >= expected # steps to goal
 
 (ww-set *solution-type* min-length)
 
@@ -33,7 +33,7 @@
        (bind (contents ?jugB $amtB))
        (bind (capacity ?jugB $capB))
        (< $amtB $capB))
-  (?jugA jug $amtA fluent ?jugB jug ($amtB $capB) fluent)
+  (?jugA $amtA ?jugB $amtB $capB)
   (if (<= $amtA (- $capB $amtB))
     (assert (contents ?jugA 0)
             (contents ?jugB (+ $amtB $amtA)))

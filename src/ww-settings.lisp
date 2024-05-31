@@ -1,4 +1,4 @@
-;;; Filename: settings.lisp
+;;; Filename: ww-settings.lisp
 
 ;;; Default settings for planning program.
 
@@ -7,19 +7,34 @@
 
 ;Note: It is necessary to close & reopen the lisp environment after
 ;      changing from nonparallel to parallel, or parallel to nonparallel here.
-(defparameter *threads* 0
-  "The number of parallel threads to use.
-    0 means no parallelism (ie, serial processing)
-    1 means use one parallel thread
-      (in addition to parallel management, effectively serial, useful for debugging)
-    2 means two or more parallel processing threads
-    N up to the number of available CPU threads")
-(declaim (fixnum *threads*))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *threads* 0
+    "The number of parallel threads to use.
+      0 means no parallelism (ie, serial processing)
+      1 means use one parallel thread
+        (in addition to parallel management, effectively serial, useful for debugging)
+      2 means two or more parallel processing threads
+      N up to the number of available CPU threads"))
+(declaim (type fixnum *threads*))
 
 
-(declaim (ftype (function (&rest list) boolean) eql*))
+(defparameter *lock* (bt:make-lock))  ;for thread protection
+
+
+(if (> *threads* 0)
+  (setf *debugger-hook* #'(lambda (condition original-hook)
+                            (declare (ignore original-hook))
+                            (bt:with-lock-held (*lock*)
+                              (sb-debug:print-backtrace)
+                              (format *error-output* "~%~A~2%" condition)
+                              (finish-output *error-output*))
+                            (abort)))
+  (setf *debugger-hook* nil))
+
+
 (defun eql* (&rest arguments)
   (every #'eql arguments (rest arguments)))
+;(declaim (type ftype (function (&rest list) boolean) eql*))
 
 
 (setq *print-right-margin* 140)
@@ -32,35 +47,143 @@
 ;Reset user defined functions, when defined on previous load.
 
 
-(defparameter *problem* 'unspecified
+(defmacro define-global (var-name val-form &optional doc-string)
+  `,(if (> *threads* 0)
+      (if (boundp var-name)
+        `(setf ,var-name ,val-form)
+        `(sb-ext:defglobal ,var-name ,val-form ,doc-string))
+      `(defparameter ,var-name ,val-form ,doc-string)))
+
+
+(defmacro increment-global (var-name &optional (delta-form 1))
+  `(progn (declaim (type fixnum ,var-name))
+     ,(if (> *threads* 0)
+        `(sb-ext:atomic-incf ,var-name ,delta-form)
+        `(incf ,var-name ,delta-form))))
+
+
+(defmacro push-global (item var-name)
+  `(progn (declaim (type list ,var-name))
+     ,(if (> *threads* 0)
+        `(sb-ext:atomic-push ,item ,var-name)
+        `(push ,item ,var-name))))
+
+
+(defmacro pop-global (var-name)
+  `(progn (declaim (type list ,var-name))
+     ,(if (> *threads* 0)
+        `(sb-ext:atomic-pop ,var-name)
+        `(pop ,var-name))))
+
+
+;;;;;;;;;;;;;;;;;;;; Global Parameters ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(define-global *counter* 1
+  "For misc debugging with probe function")
+(declaim (type fixnum *counter*))
+
+(define-global *-* '---------------------------------------------------------
+  "Division marker for debugging printout convenience.")
+(declaim (type symbol *-*))
+
+(define-global *solution-count* 0
+  "Holds the total number of solutions found following search.")
+(declaim (type fixnum *solution-count*))
+
+(define-global *num-idle-threads* 0
+  "Holds the number of currently idle threads (shared).")
+(declaim (type fixnum *num-idle-threads*))
+
+(define-global *total-states-processed* 0
+  "Count of states either newly generated, updated, or regenerated while searching (shared).")
+(declaim (type fixnum *total-states-processed*))
+
+(define-global *prior-total-states-processed* 0
+  "Count of states produced since last progress printing (shared).")
+(declaim (type fixnum *prior-total-states-processed*))
+
+(define-global *prior-time* 0
+  "Time since last progress printing (shared).")
+(declaim (type fixnum *prior-time*))
+
+(define-global *best-states* nil
+  "Holds the best states encountered during a graph search.")
+(declaim (type list *best-states*))
+
+(define-global *repeated-states* 0
+  "Count of the repeated states during a graph search.")
+(declaim (type fixnum *repeated-states*))
+
+(define-global *program-cycles* 0
+ "Count of complete cycles of searching (shared).")
+(declaim (type fixnum *program-cycles*))
+
+(define-global *max-depth-explored* 0
+  "Keeps track of the maximum depth reached so far during the search (shared).")
+(declaim (type fixnum *max-depth-explored*))
+
+(define-global *accumulated-depths* 0
+  "Sums the final depths of all terminated paths so far.")
+(declaim (type fixnum *accumulated-depths*))
+
+(define-global *num-paths* 0
+  "Tracks the total number of paths explored so far.")
+(declaim (type fixnum *num-paths*))
+
+(define-global *num-init-successors* 0
+  "The number of branches completed so far from the start state.")
+(declaim (type fixnum *num-init-successors*))
+
+(define-global *rem-init-successors* nil
+  "Holds the remaining initial branch nodes from the start state.")
+(declaim (type list *rem-init-successors*))
+
+(define-global *solutions* nil
+  "Holds the solutions found during search.")
+(declaim (type list *solutions*))
+
+(define-global *average-branching-factor* 0.0
+  "Average branching factor so far during search (shared).")
+(declaim (type single-float *average-branching-factor*))
+
+(define-global *search-tree* nil
+  "DFS search tree for debugging (serial processing only).")
+(declaim (type list *search-tree*))
+
+(define-global *start-time* 0
+  "Stores time at beginning of the search.")
+(declaim (type (integer 0 4611686018427387903) *start-time*))
+
+(define-global *problem* 'unspecified
   "Name of the current problem, assigned in problem.lisp by user.")
-(declaim (symbol *problem*))
+(declaim (type symbol *problem*))
 
-(defparameter *solution-type* 'first
+(define-global *problem-type* 'planning
+  "Spedify whether it's a planning problem or constraint satisfaction problem.")
+(declaim (type symbol *problem-type*))
+
+(define-global *solution-type* 'first
   "Specify whether to search for 'first, 'min-length, 'min-time, or 'every solution.")
-(declaim (symbol *solution-type*))
+(declaim (type symbol *solution-type*))
 
-(defparameter *tree-or-graph* 'graph
+(define-global *tree-or-graph* 'graph
   "Whether there are repeated states (graph) or not (tree); try both.")
-(declaim (symbol *tree-or-graph*))
+(declaim (type symbol *tree-or-graph*))
 
-(defparameter *depth-cutoff* 0
+(define-global *depth-cutoff* 0
   "Negative or 0 means no cutoff.")
-(declaim (fixnum *depth-cutoff*))
+(declaim (type fixnum *depth-cutoff*))
 
-;(defparameter *max-states* 100000
-;  "If this number is exceeded, hash table resizing may slow graph search.")
-;(declaim (fixnum *max-states*))
-
-(defparameter *progress-reporting-interval* 200000
+(define-global *progress-reporting-interval* 200000
   "Print progress during search after each multiple n of states examined.")
-(declaim (fixnum *progress-reporting-interval*))
+(declaim (type fixnum *progress-reporting-interval*))
 
-(defparameter *randomize-search* nil
+(define-global *randomize-search* nil
   "Set to t or nil.")
-(declaim ((or nil t) *randomize-search*))
+(declaim (type (member nil t) *randomize-search*))
 
-(defvar *probe* nil
+(define-global *probe* nil
   "Inserts a probe to stop processing at a specific state.")
 ;Example probes:
 ;   Stops at specified node, for debugging given 
@@ -70,9 +193,9 @@
 ;   (ww-set *probe* (move (AREA1 AREA8) 3 5))  ;problem-crater
 ;   (ww-set *probe* (pickup-connector (CONNECTOR3 AREA8) 4))
 ;   (ww-set *probe* (JUMP (1 3 LD) 4))
-(declaim (list *probe*))
+(declaim (type list *probe*))
 
-(defparameter *debug* (if (member :wouldwork-debug *features*) *debug* 0)
+(defvar *debug* 0  ;(if (member :ww-debug *features*) *debug* 0)
   "Set the debug level for subsequent runs.
     0 - no debugging
     1 - display full search tree
@@ -80,152 +203,141 @@
     3 - display basic nodes
     4 - display full nodes
     5 - display full nodes + break after each expansion cycle")
-(declaim (fixnum *debug*))
+(declaim (type fixnum *debug*))
 
-
-
-(defparameter *types* (make-hash-table :test #'eq)
+(define-global *types* (make-hash-table :test #'eq)
   "Table of all types.")
-(declaim (hash-table *types*))
+(declaim (type hash-table *types*))
 
-(defparameter *relations* (make-hash-table :test #'eq)
+(define-global *relations* (make-hash-table :test #'eq)
   "Dynamic relations.")
-(declaim (hash-table *relations*))
+(declaim (type hash-table *relations*))
 
-(defparameter *static-relations* (make-hash-table :test #'eq)
+(define-global *static-relations* (make-hash-table :test #'eq)
   "Static relations.")
-(declaim (hash-table *static-relations*))
+(declaim (type hash-table *static-relations*))
 
-(defparameter *connectives* '(and or not)
+(define-global *connectives* '(and or not)
   "Logical connectives.")
-(declaim (list *connectives*))
+(declaim (type list *connectives*))
 
-(defparameter *symmetrics* (make-hash-table :test #'eq)
+(define-global *symmetrics* (make-hash-table :test #'eq)
   "Symmetric relations.")
-(declaim (hash-table *symmetrics*))
+(declaim (type hash-table *symmetrics*))
 
-(defparameter *complements* (make-hash-table :test #'eq)
+(define-global *complements* (make-hash-table :test #'eq)
   "Table of complement relations.")
-(declaim (hash-table *complements*))
+(declaim (type hash-table *complements*))
 
-(defparameter *fluent-relation-indices* (make-hash-table :test #'eq)
+(define-global *fluent-relation-indices* (make-hash-table :test #'eq)
   "List of fluent argument indices for a relation.")
-(declaim (hash-table *fluent-relation-indices*))
+(declaim (type hash-table *fluent-relation-indices*))
 
-(defparameter *db* (make-hash-table :test #'equal)
+(define-global *db* (make-hash-table :test #'equal)
   "Initial database of dynamic db relations.")
-(declaim (hash-table *db*))
+(declaim (type hash-table *db*))
 
-(defparameter *hdb* (make-hash-table :test #'equal)
+(define-global *hdb* (make-hash-table :test #'equal)
   "Initial database of dynamic hdb relations.")
-(declaim (hash-table *hdb*))
+(declaim (type hash-table *hdb*))
 
-(defparameter *idb* (make-hash-table)
+(define-global *idb* (make-hash-table)
   "Initial integer database of dynamic idb propositions.")
-(declaim (hash-table *idb*))
+(declaim (type hash-table *idb*))
 
-(defparameter *hidb* (make-hash-table)
+(define-global *hidb* (make-hash-table)
   "Initial integer database of dynamic hidb propositions.")
-(declaim (hash-table *hidb*))
+(declaim (type hash-table *hidb*))
 
-(defparameter *constant-integers* (make-hash-table)
+(define-global *constant-integers* (make-hash-table)
   "Integer codes for the problem's object constants.")
-(declaim (hash-table *constant-integers*))
+(declaim (type hash-table *constant-integers*))
 
-(defparameter *integer-constants* (make-hash-table)
+(define-global *integer-constants* (make-hash-table)
   "Translating codes back to constants for printout.")
-(declaim (hash-table *integer-constants*))
+(declaim (type hash-table *integer-constants*))
 
-(defparameter *min-action-duration* 0.0
+(define-global *min-action-duration* 0.0
   "The least action duration among all actions.")
-(declaim (real *min-action-duration*))
+(declaim (type real *min-action-duration*))
 
-(defparameter *query-names* nil
+(define-global *query-names* nil
   "List of all user-defined query functions.")
-(declaim (list *query-names*))
+(declaim (type list *query-names*))
 
-(defparameter *update-names* nil
+(define-global *update-names* nil
   "List of all user-defined update functions.")
-(declaim (list *update-names*))
+(declaim (type list *update-names*))
 
-(defparameter *actions* nil
+(define-global *actions* nil
   "List of all potential actions.")
-(declaim (list *actions*))
+(declaim (type list *actions*))
 
-(defparameter *init-actions* nil
+(define-global *init-actions* nil
   "List of all initialization actions.")
-(declaim (list *init-actions*))
+(declaim (type list *init-actions*))
 
-(defparameter *happenings* nil
+(define-global *happenings* nil
   "The list of objects having exogenous events.")
-(declaim (list *happenings*))
+(declaim (type list *happenings*))
 
-(defparameter *static-db* (make-hash-table :test #'equal)
+(define-global *static-db* (make-hash-table :test #'equal)
   "Initial database of static propositions.")
-(declaim (hash-table *static-db*))
+(declaim (type hash-table *static-db*))
 
-(defparameter *static-idb* (make-hash-table)
+(define-global *static-idb* (make-hash-table)
   "Initial integer database of static propositions.")
-(declaim (hash-table *static-idb*))
+(declaim (type hash-table *static-idb*))
 
-(defparameter *hap-db* (make-hash-table :test #'equal)
+(define-global *hap-db* (make-hash-table :test #'equal)
   "Initial database of happenings propositions.")
-(declaim (hash-table *hap-db*))
+(declaim (type hash-table *hap-db*))
 
-(defparameter *hap-idb* (make-hash-table)
+(define-global *hap-idb* (make-hash-table)
   "Initial integer database of happenings propositions.")
-(declaim (hash-table *hap-idb*))
+(declaim (type hash-table *hap-idb*))
 
-(defparameter *goal* nil
+(define-global *goal* nil
   "Holds the goal test function--value is a lambda expression,
    symbol-function is the function.")
-(declaim (list *goal*))
+(declaim (type list *goal*))
 
-(defparameter *constraint* nil
+(define-global *constraint* nil
   "Any constraint test function.")
-(declaim (list *constraint*))
+(declaim (type list *constraint*))
 
-(defparameter *last-object-index* 0
+(define-global *last-object-index* 0
   "Last index of object constants seen so far in propositions.")
-(declaim (fixnum *last-object-index*))
+(declaim (type fixnum *last-object-index*))
 
-(defparameter *objective-value-p* nil
+(define-global *objective-value-p* nil
   "Does the variable $objective-value appear in an action rule.")
-(declaim ((or nil t) *objective-value-p*))
+(declaim (type (member nil t) *objective-value-p*))
 
-(defparameter *eff-param-vars* nil
+(define-global *eff-param-vars* nil
   "Make eff-param-vars available in translate-assert.")
-(declaim (list *eff-param-vars*))
+(declaim (type list *eff-param-vars*))
 
-(defparameter *solutions* nil)
-  ;The resulting list of solutions found.
-(declaim (list *solutions*))
-
-(defparameter *unique-solutions* nil)
+(define-global *unique-solutions* nil)
   ;The culled list of unique solutions.
-(declaim (list *unique-solutions*))
+(declaim (type list *unique-solutions*))
 
-(defparameter *best-states* nil)
-  ;The states having the best results found so far for min-value,max-value.
-(declaim (list *best-states*))
-
-(defparameter *unique-best-states* nil)
-  ;The states having the best results found so far for min-value,max-value.
-(declaim (list *unique-best-states*))
-
-(defparameter *upper-bound* 1000000.0)
+(define-global *upper-bound* 1000000.0)
   ;The current upper bound if bounds are being calculated.
-(declaim (real *upper-bound*))
+(declaim (type real *upper-bound*))
 
-(defparameter *cost* 0.0)
+(define-global *cost* 0.0)
   ;The memoized cost bound for left search tree expansions. 
-(declaim (real *cost*))
+(declaim (type real *cost*))
 
-(defparameter *upper* 0.0)
+(define-global *upper* 0.0)
   ;The memoized upper bound for left search tree expansions.
-(declaim (real *upper*))
+(declaim (type real *upper*))
 
 (defvar *state-codes* (make-hash-table)
   "Holding place for integer state codes in bi-directional search.")
-(declaim (hash-table *state-codes*))
+(declaim (type hash-table *state-codes*))
 
+(define-global *parameter-headers* '(standard product combination dot-product)
+  "The different ways values can be combined in a pre-parameter list.")
+(declaim (type list *parameter-headers*))

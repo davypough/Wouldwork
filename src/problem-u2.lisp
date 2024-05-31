@@ -1,4 +1,4 @@
-;;;; Filename: problem-u2.lisp
+;;; Filename: problem-u2.lisp
 
 ;;; Problem specification for Braingle U2 bridge problem.
 
@@ -7,7 +7,7 @@
 
 (ww-set *problem* u2)
 
-(ww-set *depth-cutoff* 7)
+;(ww-set *depth-cutoff* 7)
 
 (ww-set *solution-type* min-length)
 
@@ -36,7 +36,7 @@
        (bind (walk-time ?person $walk-time))
        (bind (current-time $current-time))
        (<= (+ $current-time $walk-time) 17)) 
-  (?person person (?side1 ?side2) side ($walk-time $current-time) fluent)
+  (?person ?side1 ?side2 $walk-time $current-time)
   (assert (not (on ?person ?side1))
           (on ?person ?side2)
           (not (on lite ?side1))
@@ -55,7 +55,7 @@
        (setq $walk-time (max $walk-time1 $walk-time2))
        (bind (current-time $current-time))
        (<= (+ $current-time $walk-time) 17))
-  ((?person1 ?person2) person (?side1 ?side2) side ($walk-time $current-time) fluent)
+  (?person1 ?person2 ?side1 ?side2 $walk-time $current-time)
   (assert (not (on ?person1 ?side1))
           (on ?person1 ?side2)
           (not (on ?person2 ?side1))

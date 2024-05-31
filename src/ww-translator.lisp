@@ -1,4 +1,4 @@
-;;; Filename: translator.lisp
+;;; Filename: ww-translator.lisp
 
 ;;; Translates a domain file containing formulas into lisp.
 
@@ -18,6 +18,7 @@
 (defun translate-list (form flag)
   "Most basic form translation."
   (declare (ignore flag))
+  (check-proposition form)
   `(list ,@(iter (for item in form)
              (if (or (varp item)
                      (numberp item)
@@ -31,7 +32,6 @@
 (defun translate-simple-atom (form flag)
   "Pre/ante only.
    Eg, (velocity ?car wheel1 50 $direction) -> (list 'velocity ?car 'wheel1 50 $direction)."
-  (check-type form (satisfies atomic-formula))
   `(gethash ,(translate-list form flag)
             ,(if (gethash (car form) *relations*)
                (if *happenings*
@@ -47,18 +47,26 @@
   (let* ((fluent-indices (get-prop-fluent-indices form))
          (fluentless-atom (ut::remove-at-indexes fluent-indices form))
          (fluents (ut::collect-at-indexes fluent-indices form)))  ;eg, area1, ?area1, or $area1
-    `(equal (gethash ,(translate-list fluentless-atom flag) ,(if (gethash (car form) *relations*)
-                                                          (case flag
-                                                            (pre '(problem-state.db state))
-                                                            ((ante eff) 'idb))
-                                                          '*static-db*))
-            (list ,@(mapcar (lambda (x)
-                              (if (varp x) x `',x))
-                            fluents)))))
+    `(equalp (gethash ,(translate-list fluentless-atom flag) ,(if (gethash (car form) *relations*)
+                                                               (case flag
+                                                                 (pre '(problem-state.db state))
+                                                                 ((ante eff) 'idb))
+                                                               '*static-db*))
+             (list ,@(mapcar (lambda (x)
+                               (if (or (varp x)
+                                       (and (consp x)
+                                         (symbolp (car x))
+                                         (or (fboundp (car x))
+                                             (special-operator-p (car x)))))
+                                  x
+                                  `',x))
+                               ;(if (symbolp x) `',x x))  ;(if (varp x) x `',x))
+                             fluents)))))
 
 
 (defun translate-proposition (form flag)
   "Distinguishes fluent from non-fluent propositions."
+  (check-proposition form)
   (if (get-prop-fluent-indices form)
     (translate-fluent-atom form flag)
     (translate-simple-atom form flag)))
@@ -71,7 +79,7 @@
                       -> (update idb (list 'loc 'me ?area))  ;eff"
   (ecase flag
     ((pre ante) (translate-proposition form flag))
-    (eff `(update idb ,(translate-list form flag)))))   ;,(translate-proposition form flag)))))
+    (eff `(update idb ,(translate-list form flag)))))
 
 
 (defun translate-negative-relation (form flag)
@@ -81,10 +89,11 @@
       (eff `(update idb (list 'not ,(translate-list (second form) flag))))))
 
 
-(defun translate-function (form flag)
+(defun translate-function-call (form flag)
   "Form consists only of the function name & vars.
    Eg, (elevation? ?support)  ;pre
        (toggle! 'grave1 'grave2 'grave3)  ;eff"
+  (check-query/update-call form)
   (let ((fn-call (concatenate 'list (list (car form))
                                     (case flag
                                       ((pre ante) '(state))
@@ -115,6 +124,7 @@
 (defun translate-bind (form flag)
   "Translates a binding for a relation form, returns t if there are is a binding,
    even NIL. But returns NIL if there is no binding."
+  (check-proposition (second form))
   (let* ((fluent-indices (get-prop-fluent-indices (second form)))
          (fluentless-atom (ut::remove-at-indexes fluent-indices (second form)))
          (prop-fluents (get-prop-fluents (second form)))
@@ -126,35 +136,26 @@
               (when vals
                 (progn (setf ,@(mapcan #'list prop-fluents setf-values)) t)))))
 
-         
-(defun generate-type-lists (state pre-types)
-  "Expands all query type functions in pre-types into lists."
-  (mapcar (lambda (item)
-            (if (member (car item) *query-names*)
-              (apply (car item) state (cdr item))
-              item))
-          pre-types))
-
 
 (defun translate-existential (form flag)
   "The existential is interpreted differently for pre vs eff.  
    In pre, (exists (vars) form) is true when form is true
-   for any instantiation of vars, otherwise false.
-   In eff, it asserts form for the first instantiation of the vars, and then exits."
+   for any instantiation of vars, otherwise false. In eff, it asserts form
+   for the first true instantiation of the vars, and then exits."
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
-      (check-type ?vars (satisfies list-of-?variables))
-      (check-type user-types (satisfies list-of-parameter-types))
-      (let* ((pre-types (transform-types user-types))
-             (queries (intersection (alexandria:flatten pre-types) *query-names*))
-             (dynamic (when queries pre-types)))
-        `(apply #'some (lambda ,?vars
-                         ,(translate body flag))
-                ,(if dynamic
-                   `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
-                                                              ,restriction))
-                   `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction)))))))))
+    (check-precondition-parameters parameters)
+    (unless (member (first parameters) *parameter-headers*)
+      (push 'standard parameters))
+    (multiple-value-bind (pre-param-?vars pre-param-types) (dissect-pre-params parameters)
+      (let ((queries (intersection (alexandria:flatten pre-param-types) *query-names*))
+            (type-inst (instantiate-type-spec pre-param-types)))
+        `(apply #'some (lambda (&rest args)
+                         (destructuring-bind ,pre-param-?vars args
+                           ,(translate body flag)))
+                ,(if queries
+                   `(ut::transpose (eval-instantiated-spec ',type-inst state))
+                   `(ut::transpose (quote ,(eval-instantiated-spec type-inst)))))))))
 
 
 (defun translate-universal (form flag)
@@ -163,20 +164,20 @@
    In eff, it asserts form for every instantiation of the vars."
   (let ((parameters (second form))
         (body (third form)))
+    (check-precondition-parameters parameters)
+    (unless (member (first parameters) *parameter-headers*)
+      (push 'standard parameters))
     (when (eql flag 'eff)
       (warn "Found FORALL statement in effect; DOALL is often intended: ~A" form))
-    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
-      (check-type ?vars (satisfies list-of-?variables))
-      (check-type user-types (satisfies list-of-parameter-types))
-      (let* ((pre-types (transform-types user-types))
-             (queries (intersection (alexandria:flatten pre-types) *query-names*))
-             (dynamic (when queries pre-types)))
-        `(apply #'every (lambda ,?vars
-                          ,(translate body flag))
-                ,(if dynamic
-                    `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
-                                                               ,restriction))
-                    `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction)))))))))
+    (multiple-value-bind (pre-param-?vars pre-param-types) (dissect-pre-params parameters)
+      (let ((queries (intersection (alexandria:flatten pre-param-types) *query-names*))
+            (type-inst (instantiate-type-spec pre-param-types)))
+        `(apply #'every (lambda (&rest args)
+                         (destructuring-bind ,pre-param-?vars args
+                           ,(translate body flag)))
+                ,(if queries
+                   `(ut::transpose (eval-instantiated-spec ',type-inst state))
+                   `(ut::transpose (quote ,(eval-instantiated-spec type-inst)))))))))
 
 
 (defun translate-doall (form flag)
@@ -184,19 +185,18 @@
    It can be used to do something for all instances of its variables."
   (let ((parameters (second form))
         (body (third form)))
-    (destructuring-bind (?vars user-types restriction) (dissect-parameters parameters)
-      (check-type ?vars (satisfies list-of-?variables))
-      (check-type user-types (satisfies list-of-parameter-types))
-      (let* ((pre-types (transform-types user-types))
-             (queries (intersection (alexandria:flatten pre-types) *query-names*))
-             (dynamic (when queries pre-types)))
-        `(block doall 
-          (apply #'mapc (lambda ,?vars
-                           ,(translate body flag))
-                ,(if dynamic
-                     `(ut::regroup-by-index (instantiate-types (generate-type-lists state ',dynamic)
-                                                               ,restriction))
-                     `(quote ,(ut::regroup-by-index (instantiate-types pre-types restriction))))))))))
+    (check-precondition-parameters parameters)
+    (unless (member (first parameters) *parameter-headers*)
+      (push 'standard parameters))
+    (multiple-value-bind (pre-param-?vars pre-param-types) (dissect-pre-params parameters)
+      (let ((queries (intersection (alexandria:flatten pre-param-types) *query-names*))
+            (type-inst (instantiate-type-spec pre-param-types)))
+        `(apply #'mapc (lambda (&rest args)
+                         (destructuring-bind ,pre-param-?vars args
+                           ,(translate body flag)))
+                ,(if queries
+                   `(ut::transpose (eval-instantiated-spec ',type-inst state))
+                   `(ut::transpose (quote ,(eval-instantiated-spec type-inst)))))))))
 
 
 (defun translate-connective (form flag)
@@ -210,7 +210,7 @@
   "Returns t if condition satisfied or nil if condition not satisfied."
   (when (or (and (third form) (listp (third form)) (eql (car (third form)) 'and))
             (and (fourth form) (listp (fourth form)) (eql (car (fourth form)) 'and)))
-    (error "~%ERROR: AND not allowed in <then> or <else> clause of IF statement; use DO: ~A~2%"
+    (error "AND not allowed in <then> or <else> clause of IF statement; use DO: ~A"
            form))
   (if (fourth form)  ;else clause
     `(if ,(translate (second form) (if (eql flag 'eff) 'ante flag))
@@ -223,7 +223,7 @@
 (defun translate-assert (form flag)
   "Translates an assert relation."
   (ecase flag
-    (eff (error "~%Error: Nested ASSERT statements not allowed:~%~A~%" form))
+    (eff (error "Nested ASSERT statements not allowed:~%~A" form))
     (pre `(let ((idb (copy-idb (problem-state.idb state))))
             ,@(iter (for statement in (cdr form))
                     (collect (translate statement 'eff)))
@@ -250,15 +250,15 @@
 
 (defun translate-mvsetq (form flag)
   "Translates a multiple-value-setq clause."
-  `(multiple-value-setq ,(second form)
-     ,@(iter (for statement in (cddr form))
-             (collect (translate statement flag)))))
+  `(multiple-value-setq ,(second form) ,(translate (third form) flag)))
+;     ,@(iter (for statement in (cddr form))
+;             (collect (translate statement flag)))))
 
 
-(defun translate-setq (form flag)  ;always need to return t, even if nil
+(defun translate-setq (form flag)
   "Translates a setq statement. Used to assign a variable the value of a function."
   ;(declare (ignore flag))
-  `(progn (setq ,(second form) ,(translate (third form) flag)) t))
+  `(setq ,(second form) ,(translate (third form) flag)))
 
 
 (defun translate-case (form flag)
@@ -294,7 +294,7 @@
         ((eql (car form) 'setq) (translate-setq form flag))
         ((eql (car form) 'let) (translate-let form flag))
         ((eql (car form) 'case) (translate-case form flag))
-        ((eql (car form) 'multiple-value-setq) (translate-mvsetq form flag))
+        ((member (car form) '(mvsetq multiple-value-setq)) (translate-mvsetq form flag))
         ((eql (car form) 'declare) form)
         ((eql (car form) 'print) (translate-print form flag))
 ;        ((eql (car form) 'cancel-assert) (translate-cancel-assert form flag))
@@ -302,7 +302,7 @@
         ((and (eql (car form) 'not) (gethash (caadr form) *relations*)) (translate-negative-relation form flag))
         ((member (car form) *connectives*) (translate-connective form flag))
         ((or (gethash (car form) *relations*) (gethash (car form) *static-relations*))
-         (translate-positive-relation form flag))
-        ((member (car form) (append *query-names* *update-names*)) (translate-function form flag))
+           (translate-positive-relation form flag))
+        ((member (car form) (append *query-names* *update-names*)) (translate-function-call form flag))
         ;((or (fboundp (car form)) (special-operator-p (car form)) form)   ;any lisp function
         (t form)))

@@ -1,6 +1,6 @@
-;;;; Filename: utilities.lisp
+;;; Filename: ww-utilities.lisp
 
-;;;; Collection of utilities for the Wouldwork Planner.
+;;; Collection of utilities for the Wouldwork Planner.
 
 
 (in-package :ut)
@@ -9,7 +9,7 @@
 (set-pprint-dispatch '(array * (* *))
   (lambda (stream array)
     "User friendly printout for a state representation containing a 2D array."
-    (declare (simple-array array))
+    (declare (type simple-array array))
     (loop for i below (first (array-dimensions array))
       do (format stream "~%    ")
          (loop for j below (second (array-dimensions array))
@@ -24,38 +24,12 @@
      (if it ,then ,else)))
 
 
-(defmacro prt (&rest vars)
-  "Print the names & values of given variables or accessors.
+(defmacro prt (&rest forms)
+  "Print the names & values of given forms (ie,variables or accessors).
    Can wrap around an expression, returning its value."
-  `(progn ,@(loop for var in vars
-              collect `(format t "~&  ~S => ~S~%" ',var ,var))
-          ,@(last `,vars)))
-
-
-(defun profile (fn &rest args)
-  "Deterministically profiles a :ww function"
-  (sb-profile:reset)
-  (sb-profile:profile "WOULDWORK-PKG")
-  (apply fn args)
-  (sb-profile:report))
-
-
-(defun ht-set-difference (hash-table-1 hash-table-2)
-  "Returns difference as a list between two ht sets."
-  (let (result)
-    (maphash (lambda (key value)
-               (declare (ignore value))
-               (unless (gethash key hash-table-2)
-                 (push key result)))
-             hash-table-1)
-    result))
-
-
-(defun forget (sym)
-  "Removes a symbol from the current package."
-  (makunbound sym)
-  (fmakunbound sym)
-  (setf (symbol-plist sym) nil))
+  `(progn ,@(loop for form in forms
+              collect `(format t "~&  ~S => ~S~%" ',form ,form))
+          ,@(last `,forms)))
 
 
 (defmacro mvb (vars values-form &rest body)
@@ -73,12 +47,38 @@
   "Modifies a referenced sequence by sorting it.")
 
 
+
+(defun profile ()
+  "Deterministically profiles Wouldwork."
+  (in-package :cl-user)
+  (sb-profile:reset)
+  (sb-profile:profile "WOULDWORK-PKG")
+  (in-package :ww)
+  (ww::solve)
+  (in-package :cl-user)
+  (sb-profile::report)
+  (in-package :ww))
+
+
+(defun forget (sym)
+  "Removes a symbol from the current package."
+  (declare (type symbol sym))
+  (makunbound sym)
+  (fmakunbound sym)
+  (setf (symbol-plist sym) nil))
+  
+
+(defun sort-symbols (list-of-symbols)
+  "Sorts a list of symbols alphabetically."
+  (sort (copy-list list-of-symbols) #'string< :key #'symbol-name))
+
+
 (defun merge-sort (item items predicate)
   "Adds an item to list of items sorted."
+  (declare (type function predicate))
   (merge 'list (list item) (copy-list items) predicate))
   
   
-(declaim (ftype (function (list list) list) remove-at-indexes))
 (defun remove-at-indexes (idxs lst)
   "Removes items at given indexes from a list."
   (loop for i from 0
@@ -87,7 +87,6 @@
     collect elt))
 
 
-(declaim (ftype (function (list list) list) collect-at-indexes))
 (defun collect-at-indexes (idxs lst)
   "Collect items at given indexes from a list."
   (loop for i from 0
@@ -107,8 +106,7 @@
              (pop items)
       else collect elt))
 
-
-(declaim (ftype (function (list) list) segregate-plist))
+#|
 (defun segregate-plist (plist)
   "Returns two lists, the list of properties and the list of values in plist.
    Ex call: (destructuring-bind (properties values) (segregate-plist plist) ..."
@@ -121,9 +119,9 @@
       else do (push property properties)
               (push value values)
     finally (return (list (reverse properties) (reverse values)))))
+(declaim (ftype (function (list) list) segregate-plist))
+|#
 
-
-(declaim (ftype (function (&rest t) (values symbol boolean)) intern-symbol))
 (defun intern-symbol (&rest args)
   "Interns a symbol created by concatenating args.
    Based on symb in Let Over Lambda."
@@ -131,23 +129,34 @@
            (with-output-to-string (s)
              (dolist (a args) (princ a s)))))
     (values (intern (apply #'mkstr args)))))
+(declaim (ftype (function (&rest t) (values symbol &optional)) intern-symbol))
 
 
-(declaim (ftype (function (list list) list) list-difference))
-(defun list-difference (lst sublst)
-  "Returns lst with elements in sublst removed."
-  (remove-if (lambda (item)
-               (member item sublst))
-    lst))
+;(defun list-difference (lst sublst)
+;  "Returns lst with elements in sublst removed."
+;  (assert (and (listp lst) (listp sublst)))
+;  (remove-if (lambda (item)
+;               (member item sublst))
+;    lst))
+;(declaim (ftype (function (list list) list) list-difference))
 
 
-(declaim (ftype (function (function list) list) walk-tree))
 (defun walk-tree (fun tree)
-  ;Apply fun to each cons and atom in tree.
-  (subst-if t
-            (constantly nil)
-            tree
-            :key fun))
+  "Apply fun to each cons and atom in tree."
+  (the list (subst-if t (constantly nil) tree :key fun)))
+(declaim (ftype (function (function list) list) walk-tree))
+
+
+(defun map-into-tree-atoms (fn tree)
+  "Returns a new tree with all atoms replaced by the value of fn."
+  (declare (type function fn))
+  (cond ((null tree) nil)
+        ((atom tree) (let ((result (funcall fn tree)))
+                       (if result result)))
+        (t (remove-if #'null
+                      (mapcar (lambda (subtree)
+                                (map-into-tree-atoms fn subtree))
+                              tree)))))
 
 
 (defun ninsert-list (new-element position lst)
@@ -158,60 +167,45 @@
   lst)
 
 
-(declaim (ftype (function (t list) list) intersperse))
 (defun intersperse (element lst)
   "Returns a list with element inserted at odd indexed locations."
   (loop for item in lst
     append (list item element)))
+(declaim (ftype (function (t list) list) intersperse))
 
 
-(declaim (ftype (function (list) string) interleave+))
 (defun interleave+ (lst)
   "Inserts a + sign between list items."
   (format nil "~{~A~^+~}" lst))
+(declaim (ftype (function (list) string) interleave+))
 
 
-(declaim (ftype (function (list) list) regroup-by-index))
-(defun regroup-by-index (list-of-lists)
+(defun transpose (list-of-equi-length-lists)  ;same as regroup-by-index ?
   "Regroups all first elements together, second elements together, etc into a new
-   list-of-lists. Changes instantiate-types into arg format for some, every, etc."
-  (if (every #'null list-of-lists)
-    (mapcar #'list list-of-lists)
-    (apply #'mapcar #'list list-of-lists)))
+   list-of-lists. Changes instantiate-types into arg format for some, every, etc.
+   ((a b) (c d) (e f)) -> ((a c e) (b d f))"
+  (apply #'mapcar #'list list-of-equi-length-lists))
 
 #|
-(declaim (ftype (function (list) list) regroup-by-index))
-(defun regroup-by-index (list-of-lists)
-  "Regroups all first elements together, second elements together, etc into a new
-   list-of-lists. Changes instantiate-types into arg format for some, every, etc."
-  (let ((regrouping (apply #'mapcar #'list list-of-lists)))
-    (if regrouping
-      (mapcar (lambda (lst) `(quote ,lst)) regrouping)
-      (mapcar (lambda (lst)
-                (declare (ignore lst))
-                `(quote ,nil))
-              list-of-lists))))
-|#     
-
-(declaim (ftype (function (list) list) quote-elements))
 (defun quote-elements (lst)
   "Quotes the individual elements of a list."
   (or (mapcar (lambda (elem) `',elem) lst)
       '((quote nil))))
+(declaim (ftype (function (list) list) quote-elements))
 
 
-(declaim (ftype (function (list) list) map-product-less-bags))
 (defun map-product-less-bags (lists)
-  "Performs alexandria:map-product but leaves out combinations with duplicates."
-  (if (car lists)
-    (mapcan (lambda (inner-val)
-              (mapcan (lambda (outer-val)
-                        (unless (member outer-val inner-val)
-                          (list (cons outer-val inner-val))))
-                (car lists)))
-      (map-product-less-bags (cdr lists)))
-    (list nil)))
-
+  "Performs alexandria:map-product but leaves out combination with duplicates."
+  (the list (if (car lists)
+              (mapcan (lambda (inner-val)
+                        (mapcan (lambda (outer-val)
+                                  (unless (member outer-val inner-val)
+                                (list (cons outer-val inner-val))))
+                                (car lists)))
+                      (map-product-less-bags (cdr lists)))
+              (list nil))))
+(declaim (ftype (function (list) list) map-product-less-bags))
+|#
 
 (defgeneric show (object &rest rest)
   (:documentation "Displays an object in a user-friendly format."))
@@ -219,7 +213,7 @@
 
 (defmethod show ((table hash-table) &key (sort-by 'key))
   "Displays a hash table line-by-line, sorted either by key or val."
-  (declare (hash-table table))
+  (declare (type hash-table table))
   (when (= (hash-table-count table) 0)
     (format t "~&~A Empty~%" table)
     (return-from show))
@@ -230,7 +224,7 @@
           alist))
       table)
     (setf alist 
-      (sort alist #'string< :key (ecase sort-by (key #'car) (val #'cdr))))
+      (sort (copy-list alist) #'string< :key (ecase sort-by (key #'car) (val #'cdr))))
     (loop for (key . val) in alist
       do (format t "~&~A ->~10T ~A~%" key val)))
   t)
@@ -256,7 +250,7 @@
 
 (defun print-ht (table) 
   "Prints a hash table line by line."
-  (declare (hash-table table))
+  (declare (type hash-table table))
   (format t "~&~A" table)
   (maphash #'(lambda (key val) (format t "~&~A ->~10T ~A" key val)) table)
   (terpri)
@@ -265,7 +259,7 @@
 
 (defun hash-table-same-keys-p (ht1 ht2)
   "Returns t if two hash tables have the same keys."
-  (declare (hash-table ht1 ht2))
+  (declare (type hash-table ht1 ht2))
   (when (= (hash-table-count ht1) (hash-table-count ht2))
     (maphash (lambda (ht1-key ht1-value)
                (declare (ignore ht1-value))
@@ -277,7 +271,7 @@
 
 (defun hash-table-present-p (key ht)
   "Determines if a key is present in ht."
-  (declare (hash-table ht))
+  (declare (type hash-table ht))
   (mvb (* present) (gethash key ht)
     present))
 
@@ -293,7 +287,7 @@
   "Retrieves one or more objects from a file."
   (with-open-file (in-stream file :direction :input)
     (loop for object = (read in-stream nil in-stream)
-      until (eq object in-stream)
+      until (eql object in-stream)
       collect object into objects
       finally (return (if (= (length objects) 1)
                         (first objects)

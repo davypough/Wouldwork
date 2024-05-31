@@ -132,7 +132,7 @@
        (setq $new-load (+ $load $item-weight))
        (bind (capacity $capacity))
        (<= $new-load $capacity))
-  (?item-id item-id)
+  (?item-id)
   (assert (in ?item-id)
           (bind (contents $item-ids))
           (setq $new-item-ids

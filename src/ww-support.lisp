@@ -1,9 +1,29 @@
-;;; Filename: support.lisp
+;;; Filename: ww-support.lisp
 
 ;;; Support functions for planning.
 
 
 (in-package :ww)
+
+
+(defmacro mvsetq (var-list form)
+  `(multiple-value-setq ,var-list ,form))
+
+
+(defmacro when-debug>= (n &rest expressions)
+  "Inserts debugging expressions when *debug* >= n, otherwise NIL"
+  `(when (>= *debug* ,n)
+     ,@expressions))
+
+
+;;;;;;;;;;;;; User Functions ;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defun different (sym1 sym2)
+  "Determines whether two symbols are different."
+  (if (and (symbolp sym1) (symbolp sym2))
+    (not (eql sym1 sym2))
+    (error "Arguments must be symbols: ~A ~A" sym1 sym2)))
 
 
 (defun delete-actions (&rest names)
@@ -27,18 +47,86 @@
 
 (defun backward-path-exists (state)
   "Use in forward search goal to check existence of backward path."
+  (declare (type problem-state state))
   (gethash (funcall 'encode-state (list-database (problem-state.idb state))) *state-codes*))
 
 
-(defmacro when-debug>= (n &rest expressions)
-  "Inserts debugging expressions when *debug* >= n, otherwise NIL"
-  `(when (>= *debug* ,n)
-     ,@expressions))
+(defun make-ht-set (&rest args &key (initial-contents nil initial-contents-p) &allow-other-keys)
+  "Makes a wouldwork hash-table that works as a set container for the user."
+  (let* ((ht-args (if initial-contents-p
+                    (alexandria:remove-from-plist args :initial-contents)
+                    args))
+         (ht (apply #'make-hash-table ht-args)))
+    (when initial-contents-p
+      (dolist (key initial-contents)
+        (setf (gethash key ht) t)))
+    ht))
+    
+    
+(defun union-ht-set (&rest set-hts)
+  "Unions two hash tables keys. Assumes values are all t and have the same :test function."
+  (let ((test-fn (hash-table-test (first set-hts))))
+    (assert (and (every (lambda (ht) (typep ht 'hash-table)) set-hts)
+                 (every (lambda (ht) (eql (hash-table-test ht) test-fn)) (rest set-hts)))
+            () "All arguments must be hash tables, and have the same :test function in union-ht.")
+    (let ((result-ht (make-hash-table :test test-fn)))
+      (dolist (ht set-hts)
+        (maphash (lambda (key value)
+                   (setf (gethash key result-ht) value))
+                 ht))
+      result-ht)))
+      
+      
+(defun set-difference-ht-set (ht1 ht2)
+  "Returns a new hash table that represents the set difference of HT1 and HT2."
+  (assert (and (typep ht1 'hash-table)
+               (typep ht2 'hash-table)
+               (eql (hash-table-test ht1) (hash-table-test ht2)))
+          () "The two arguments must be hash tables and have the same :test function in set-difference-ht.")
+  (let ((result-ht (make-hash-table :test (hash-table-test ht1))))
+    (maphash (lambda (key value)
+               (unless (gethash key ht2)
+                 (setf (gethash key result-ht) value)))
+             ht1)
+    result-ht))
+
+
+(defun copy-ht-set (set-ht)
+  "Copy a set hash table (with t values)."
+  (loop with new-ht = (make-hash-table
+                        :test (hash-table-test set-ht)
+                        :size (hash-table-size set-ht)
+                        :rehash-size (hash-table-rehash-size set-ht)
+                        :rehash-threshold (hash-table-rehash-threshold set-ht))
+      for key being the hash-key in set-ht using (hash-value value)
+      do (setf (gethash key new-ht) t)
+      finally (return new-ht)))
+
+
+(defun vectorize (lists)
+  "Turns a list of lists into vector vectors."
+  (iter (for list in lists)
+        (collect (apply #'vector list) result-type 'simple-vector)))
+
+
+#|
+(defun make-bv-set (dotted-pairs)
+  "Makes a bit vector that works as a set container corresponding to board coordinates."
+  (let ((bv (make-array (* *row-dimension* *col-dimension*) :element-type 'bit :adjustable nil)))
+    (dolist (pair dotted-pairs)
+      (let* ((row (car pair))
+             (col (cdr pair))
+             (index (+ (* row *col-dimension*) col)))
+        (setf (sbit bv index) 1)))
+    bv))
+|#
+
+;;;;;;;;;;;;;;;;; Program Support Functions ;;;;;;;;;;;;;;;;
 
 
 (defun add-prop (proposition db)
-  "Effectively adds a literal proposition to the database."
-  (declare (hash-table db))
+  "Effectively adds an atomic proposition to the database."
+  (declare (type hash-table db))
   (let ((int-db (eql (hash-table-test db) 'eql)))
     (if (get-prop-fluent-indices proposition)
       ;do if proposition has fluents
@@ -59,7 +147,8 @@
   
 
 (defun del-prop (proposition db)
-  "Effectively removes a literal proposition from the database."
+  "Effectively removes an atomic proposition from the database."
+  (declare (type hash-table db))
   (let ((int-db (eql (hash-table-test db) 'eql)))
     (if (get-prop-fluent-indices proposition)
       ;do if proposition has fluents
@@ -78,8 +167,8 @@
   
 
 (defun add-proposition (proposition db)  
-  "Adds a proposition and all its symmetries to the database."
-  (declare (hash-table db))
+  "Adds an atomic proposition and all its symmetries to the database."
+  (declare (type hash-table db))
   (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
     (if (null symmetric-indexes)
       (add-prop proposition db)
@@ -96,7 +185,7 @@
 
               
 (defun delete-proposition (proposition db)
-  (declare (hash-table db))
+  (declare (type hash-table db))
   (let ((symmetric-indexes (gethash (car proposition) *symmetrics*)))
     (if (null symmetric-indexes)
       (del-prop proposition db)
@@ -124,14 +213,15 @@
   (let (propositions)
     (alexandria:map-permutations
       (lambda (perm)
-        (push (ut::subst-items-at-ascending-indexes perm (mapcar #'1+ idxs) proposition) propositions))
+        (push (ut::subst-items-at-ascending-indexes perm (mapcar #'1+ idxs) proposition)
+              propositions))
       vars)
     propositions))
 
 
 (defun revise (db literals)
-  "Updates a database given a simple list of literals."
-  (declare (hash-table db))
+  "Updates a database given a simple list of atomic propositions."
+  (declare (type hash-table db))
   (loop for literal in literals
       do (update db literal)
       finally (return db)))
@@ -139,17 +229,11 @@
 
 (defun update (db literal)
   "Single add or delete from db."
-  (declare (hash-table db))
+  (declare (type hash-table db))
   (if (eql (car literal) 'not)
     (delete-proposition (second literal) db)
     (add-proposition literal db))
   db)
-
-
-;(defun commit1 (db literal)
-;  (when (>= *debug* 4)
-;    (format t "~&    COMMIT => ~A" literal))
-;  (update db literal))
 
 
 (defun expand-into-plist (parameters)
@@ -159,12 +243,6 @@
       append (ut::intersperse type vars) into plist
       else append (list vars type) into plist
         finally (return plist)))
-
-
-(defun different (sym1 sym2)
-  (if (and (symbolp sym1) (symbolp sym2))
-    (not (eql sym1 sym2))
-    (error "Arguments must be symbols: ~A ~A" sym1 sym2)))
 
 
 (defun get-fluentless-prop (proposition)
@@ -180,102 +258,110 @@
          (prop-pattern (first joint-patterns))
          (comp-pattern (copy-tree (second (second joint-patterns)))))
     (loop for const in (cdr proposition)
-            for pat in (cdr prop-pattern)
-            when (member pat comp-pattern :test #'equal)
-              do (nsubst const pat comp-pattern :test #'equal)
-            finally (return comp-pattern))))
+          for pat in (cdr prop-pattern)
+          when (member pat comp-pattern :test #'equal)
+            do (nsubst const pat comp-pattern :test #'equal)
+          finally (return comp-pattern))))
 
 
-(defun consolidate-types (types)
-  (loop for type in types
-      if (and (listp type)
-              (eql (car type) 'either))
-        collect (let* ((combo-instances (remove-duplicates 
-                                          (loop for typ in (cdr type)
-                                                append (gethash typ *types*))))
-                       (sorted-types (sort (cdr type) #'string< :key #'symbol-name))
-                       (combo-type (intern (ut::interleave+ sorted-types))))
-                  (setf (gethash combo-type *types*) combo-instances)
-                  combo-type)
-      else collect type))
+(defun dissect-pre-params (pre-param-list)
+  (iter (for item in pre-param-list)
+        (for prior-item previous item)
+        (cond ((member item *parameter-headers*) (collecting item into types))  ;header
+              ((?varp item) (collecting item into ?vars))  ;?variable
+              ((and (listp item) (?varp (first item)))  ;list of ?variables
+                 (appending item into ?vars))
+              ((nth-value 1 (gethash item *types*))  ;type
+                 (if (symbolp prior-item)  ;single prior ?variable
+                   (collecting item into types)
+                   (appending (make-list (length prior-item) :initial-element item) into types)))  ;multiple prior ?variables
+              ((and (listp item)
+                    (member (first item) *query-names*))  ;call to a query
+                 (collecting item into types))
+              ((eql (first item) 'either)  ;combo type
+                 (let ((new-type (intern (ut::interleave+ (ut::sort-symbols (cdr item)))))  ;new combo type
+                       (new-instances (remove-duplicates (loop for type in (cdr item)
+                                                               append (gethash type *types*)))))
+                   (setf (gethash new-type *types*) new-instances)
+                   (if (symbolp prior-item)  ;single prior ?variable
+                     (collecting new-type into types)
+                     (appending (make-list (length prior-item) :initial-element new-type) into types))))  ;multiple prior ?variables
+              ((member (first item) *parameter-headers*)  ;subparameter list
+                 (multiple-value-bind (additional-?vars additional-types)
+                   (dissect-pre-params item)
+                   (collecting additional-?vars into ?vars)
+                   (collecting additional-types into types)))
+              (t (error "Problem detected in dissect-pre-params: ~A" pre-param-list)))
+        (finally (return (values ?vars types)))))
+       
+        
+(defun dissect-eff-params (eff-parameter-list)
+  "Returns a list of primitive eff-parameter variables and types."
+  (iter (for (var-form type-form) on eff-parameter-list by #'cddr)
+        (cond ((atom var-form)
+                 (collecting var-form into vars)
+                 (collecting type-form into types))
+              ((listp var-form)
+                 (appending var-form into vars)
+                 (appending (make-list (length var-form) :initial-element type-form) into types)))
+        (finally (return (values vars types)))))
 
-
-(defun get-set-instances (symbol-types product-instances)
-  "Culls out duplicate instances of the same type from product-instances."
-  (iter (for product-instance in product-instances)
-        (unless (duplicate-product-instance symbol-types product-instance)
-          (collect product-instance))))
-
-
-(defun duplicate-product-instance (symbol-types product-instance)
-  "Tests whether a product-instance contains duplicate type assignments of constants."
-  (iter (for common-values in (get-common-values symbol-types product-instance))
-        (unless (alexandria:setp common-values)  ;duplicate values
-          (return t))
-        (finally (return nil))))
-
-
-(defun get-common-values (symbol-types product-instance)
-  "Returns a set of product-instance values for equivalent types in symbol-types."
-  (iter (with types-set = (remove-duplicates symbol-types))
-        (for type in types-set)
-        (collect (iter (for sym-type in symbol-types)
-                       (for value in product-instance)
-                       (for i from 0)
-                       (when (eql sym-type type)
-                         (collect value))))))
-
-
-(defun dissect-parameters (parameter-list)
-  "Returns a list of primitive parameter variables and types."
-  (let ((restriction (case (car parameter-list)
-                       (products 'products)
-                       (combinations 'combinations)
-                       (dot-products 'dot-products))))
-    (destructuring-bind (variables types)
-        (ut::segregate-plist (expand-into-plist (if restriction
-                                                  (cdr parameter-list)
-                                                  parameter-list)))
-      (list variables (consolidate-types types) restriction))))
-
-
-(defun transform-types (user-types)
-  "Followup processing of user types returned from dissect-parameters.
-   Returns types for passing to a call to type-instantiations."
-  (iter (for user-type in user-types)
-    (for entry = (gethash user-type *types*))
-    (collect (etypecase user-type
-               (symbol (if ($varp user-type)
-                         user-type
-                         entry))
-               (list user-type)))))
-
-
-(defun instantiate-types (type-lists restriction)
-  "Returns list of possible variable instantiations, given a list of type-lists.
-   May restrict symbol types to products, combinations or dot-products."
-  (when type-lists
-    (if (eql restriction 'dot-products)
-      (apply #'mapcar #'list type-lists)
-      (let ((product-instances (apply #'alexandria:map-product 'list type-lists)))
-        (if (eql restriction 'products)
-          product-instances
-         (let ((set-instances (delete-if-not #'alexandria:setp product-instances)))    ;(ut::prt type-lists product-instances set-instances)
-           (if (eql restriction 'combinations)
-             (or (delete-duplicates set-instances :test #'alexandria:set-equal)
-                 (make-list (length type-lists) :initial-element nil))
-             (if (null restriction)
-               (or set-instances
-                   (make-list (length type-lists) :initial-element nil))
-               (error "~2%Unknown restriction label in the action rule: ~A~%" restriction)))))))))
-
-
-;(defun duplicate-db-entry-test (predicate object db)
-;  (loop with partial-keys
-;      for key being the hash-keys of db
-;      do (let ((partial-key (list (first key) (second key))))
-;           (if (and (eql (first key) predicate)
-;                    (eql (second key) object)
-;                    (member partial-key partial-keys :test #'equal))
-;            (return-from duplicate-db-entry-test t)
-;            (push partial-key partial-keys)))))
+     
+(defun instantiate-type-spec (pre-type-spec)
+  "Given the pre-type-spec from dissect-pre-params,
+   eg (product gate (get-remaining? ladder) (product fan fan)),
+   instantiate all of the included types,
+   eg (product (gate1 gate2) (get-remaining? ladder) (product (fan1 fan2) (fan1 fan2)))."
+  (iter (for item in pre-type-spec)
+        (cond ((member item *parameter-headers*) ;collect header
+                 (collecting item))
+              ((nth-value 1 (gethash item *types*))  ;collect type instances
+                 (collecting (gethash item *types*)))
+              ((and (listp item)  ;collect dynamic query
+                    (member (first item) *query-names*))
+                 (collecting item))
+              ((and (listp item)
+                    (member (first item) *parameter-headers*))
+                 (collecting (instantiate-type-spec item))))))
+                 
+                 
+(defun eval-instantiated-spec (instantiated-pre-type-spec &optional state)
+  "Receives possibly nested static or dynamic input from instantiate-type-spec,
+   and evaluates it. State not needed for exists, forall, doall."
+  (iter (for item in instantiated-pre-type-spec)
+        (cond ((member item *parameter-headers*) ;collect header
+                 (collecting item into instantiated-spec))
+              ((and (listp item)  ;collect dynamic query, only present if dynamic
+                    (member (first item) *query-names*))
+                 (collecting (apply (first item) state (cdr item)) into instantiated-spec))
+              ((and (listp item)
+                    (member (first item) *parameter-headers*))
+                 (collecting (eval-instantiated-spec item state) into instantiated-spec))
+              ((listp item)  ;collect list of values
+                 (collecting item into instantiated-spec))
+              (t (error "Unexpected item ~A in dynamic-spec ~A" item instantiated-pre-type-spec)))
+        (finally (return (get-pre-lambda-arg-lists instantiated-spec)))))
+        
+        
+(defun get-pre-lambda-arg-lists (instantiated-spec)
+  "Returns list of instantiations as arg list for a rule precondition."
+  (when (or (equal instantiated-spec '(standard))  ;no precondition parameters
+            (equal instantiated-spec '(standard (nil))))
+    (return-from get-pre-lambda-arg-lists '((nil))))
+  (let ((header (first instantiated-spec))
+        (value-lists (cdr instantiated-spec)))
+    (if (eql header 'dot-product)
+      (apply #'mapcar #'list value-lists)
+      (let ((product-values (apply #'alexandria:map-product 'list value-lists)))
+        (if (eql header 'product)
+          product-values
+          (let ((set-values (remove-if-not (lambda (x) (alexandria:setp x :test #'equalp))
+                                           product-values)))
+            (if (eql header 'combination)
+              (or (delete-duplicates set-values :test #'alexandria:set-equal)
+                  (make-list (length value-lists) :initial-element nil))
+              (if (eql header 'standard)
+                (or set-values
+                    (make-list (length value-lists) :initial-element nil))
+                (error "Unknown header label ~A in an instantiated-spec: ~A"
+                       header instantiated-spec)))))))))

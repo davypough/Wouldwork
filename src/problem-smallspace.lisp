@@ -1,4 +1,4 @@
-;;;; Filename: problem-smallspace.lisp
+;;; Filename: problem-smallspace.lisp
 
 
 ;;; Problem specification (in Talos Principle)
@@ -12,7 +12,9 @@
 
 (ww-set *solution-type* min-time)
 
-(ww-set *depth-cutoff* 19)
+(ww-set *tree-or-graph* graph)
+
+(ww-set *depth-cutoff* 15)
 
 
 (define-types
@@ -41,15 +43,15 @@
 
 
 (define-dynamic-relations
-  (holding myself $cargo)
+  (holding myself $symbol)  ;cargo   ;can you use $cargo instead of $symbol and still check type
   (free myself)
-  (loc (either myself cargo) $area)
-  (on (either myself cargo) $support)
+  (loc (either myself cargo) $symbol)  ;area
+  (on (either myself cargo) $symbol)  ;support
   (attached fan gears)
-  (jamming jammer $target)
+  (jamming jammer $symbol)  ;target
   (connecting connector terminus)
   (active (either connector receiver gate))
-  (color terminus $hue))
+  (color terminus $symbol))  ;hue
 
 
 (define-static-relations
@@ -238,7 +240,7 @@
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus))
-  ($cargo fluent ?terminus terminus ($area $hue) fluent)
+  ($cargo ?terminus $area $hue)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus)
@@ -249,13 +251,13 @@
 
 (define-action connect-to-2-terminus
     3
-  (combinations (?terminus1 ?terminus2) terminus)
+  (combination (?terminus1 ?terminus2) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus1)
        (connectable? $area ?terminus2))
-  ($cargo fluent (?terminus1 ?terminus2) terminus $area fluent)
+  ($cargo ?terminus1 ?terminus2 $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
@@ -273,14 +275,14 @@
 
 (define-action connect-to-3-terminus
     4
-  (combinations (?terminus1 ?terminus2 ?terminus3) terminus)
+  (combination (?terminus1 ?terminus2 ?terminus3) terminus)
   (and (bind (holding me $cargo))
        (connector $cargo)
        (bind (loc me $area))
        (connectable? $area ?terminus1)
        (connectable? $area ?terminus2)
        (connectable? $area ?terminus3))
-  ($cargo fluent (?terminus1 ?terminus2 ?terminus3) terminus $area fluent)
+  ($cargo ?terminus1 ?terminus2 ?terminus3 $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)
           (connecting $cargo ?terminus1)
@@ -309,7 +311,7 @@
   (and (free me)
        (bind (loc me $area))
        (loc ?connector $area))
-  (?connector connector $area fluent)
+  (?connector $area)
   (assert (holding me ?connector)
           (not (loc ?connector $area))
           (if (bind (color ?connector $hue))
@@ -324,7 +326,7 @@
   ()
   (and (bind (loc me $area))
        (bind (holding me $cargo)))
-  ($cargo fluent $area fluent)
+  ($cargo $area)
   (assert (not (holding me $cargo))
           (loc $cargo $area)))
 
@@ -335,7 +337,7 @@
   (and (bind (loc me $area1))
        (different $area1 ?area2)
        (passable? $area1 ?area2))
-  ($area1 fluent ?area2 area)
+  ($area1 ?area2)
   (assert (loc me ?area2)))
 
 

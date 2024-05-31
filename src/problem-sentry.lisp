@@ -1,4 +1,4 @@
-;;;; Filename: problem-sentry.lisp
+;;; Filename: problem-sentry.lisp
 
 
 ;;; Problem specification for getting by an automated 
@@ -21,8 +21,6 @@
   gun       (gun1)
   sentry    (sentry1)  
   switch    (switch1)
-  red       ()  ;red & green are predicates
-  green     ()
   area      (area1 area2 area3 area4 area5 area6 area7
              area8)
   cargo     (either jammer box)
@@ -69,8 +67,8 @@
 
 
 (define-happening sentry1
-  :inits ((loc sentry1 area6))
-  :events
+  :inits ((loc sentry1 area6))  ;what's true at t=0
+  :events  ;events happening at t>0
   ((1 (not (loc sentry1 area6)) (loc sentry1 area7))
    (2 (not (loc sentry1 area7)) (loc sentry1 area6))
    (3 (not (loc sentry1 area6)) (loc sentry1 area5))
@@ -98,7 +96,7 @@
        (loc me ?area1)
        (loc ?target ?area2)
        (visible ?area1 ?area2))
-  (?target target ?jammer jammer ?area1 area)
+  (?target ?jammer ?area1)
   (assert (not (holding me ?jammer))
           (loc ?jammer ?area1)
           (jamming ?jammer ?target)))
@@ -115,7 +113,7 @@
   (and (free? me)
        (loc me ?area)
        (loc ?switch ?area))
-  (?switch switch)
+  (?switch)
   (assert (if (red ?switch)
             (do (not (red ?switch))
                 (green ?switch))
@@ -129,7 +127,7 @@
   (and (loc me ?area)
        (loc ?cargo ?area)
        (free? me))
-  (?cargo cargo ?area area)
+  (?cargo ?area)
   (assert (not (loc ?cargo ?area))
           (holding me ?cargo)
           (exists (?t target)
@@ -143,7 +141,7 @@
   (?cargo cargo ?area area)
   (and (loc me ?area)
        (holding me ?cargo))
-  (?cargo cargo ?area area)
+  (?cargo ?area)
   (assert (not (holding me ?cargo))
           (loc ?cargo ?area)))
        
@@ -162,7 +160,7 @@
   (and (loc me ?area1)
        (passable? ?area1 ?area2)
        (safe? ?area2))
-  ((?area1 ?area2) area)
+  (?area1 ?area2)
   (assert (not (loc me ?area1))
           (loc me ?area2)))
 

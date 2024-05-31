@@ -1,4 +1,4 @@
-;;;; Filename: problem-triangle-xyz.lisp
+;;; Filename: problem-triangle-xyz.lisp
 
 ;;; Three coordinates (x,y,z) allows easier computation of heuristic.
 
@@ -38,22 +38,21 @@
   peg (compute (loop for i from 1 to (- *size* (length *init-holes*))  ;peg1, peg2, ...
                      collect (intern (format nil "PEG~D" i))))
   index (compute (loop for i from 1 to *N*
-                     collect i))
-  current-peg (get-current-pegs?))
+                     collect i)))
 
 
 (define-dynamic-relations
-    (loc peg $x-index $y-index $z-index)      ;location of a peg
+    (loc peg $index $index $index)      ;location of a peg
     (contents> index index index $peg)  ;peg contents at a location
     (board-pegs $list)   ;list of remaining pegs
     (peg-count $integer))    ;pegs remaining on the board
 
 
 (define-static-relations
-    (pos position $x-index $y-index $z-index))      ;location of a position
+    (pos position $index $index $index))      ;location of a position
 
 
-(define-query get-current-pegs? ()
+(define-query get-remaining-pegs? ()
   (do (bind (board-pegs $board-pegs))
       $board-pegs))
 
@@ -73,7 +72,7 @@
 
 (define-action jump-LD
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $y (- *N* 2))
        (>= $z 3)
@@ -85,7 +84,7 @@
        (not (bind (contents> $x $y+2 $z-2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x $y+2 $z-2)
           (discard! $adj-peg $x $y+1 $z-1)
@@ -95,7 +94,7 @@
 
 (define-action jump-RU
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $z (- *N* 2))
        (>= $y 3)
@@ -107,7 +106,7 @@
        (not (bind (contents> $x $y-2 $z+2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x $y-2 $z+2)
           (discard! $adj-peg $x $y-1 $z+1)
@@ -117,7 +116,7 @@
 
 (define-action jump-RD
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $x (- *N* 2))
        (>= $z 3)
@@ -129,7 +128,7 @@
        (not (bind (contents> $x+2 $y $z-2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x+2 $y $z-2)
           (discard! $adj-peg $x+1 $y $z-1)
@@ -139,7 +138,7 @@
 
 (define-action jump-LU
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $z (- *N* 2))
        (>= $x 3)
@@ -151,7 +150,7 @@
        (not (bind (contents> $x-2 $y $z+2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x-2 $y $z+2)
           (discard! $adj-peg $x-1 $y $z+1)
@@ -161,7 +160,7 @@
 
 (define-action jump-RH
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $x (- *N* 2))
        (>= $y 3)
@@ -173,7 +172,7 @@
        (not (bind (contents> $x+2 $y-2 $z $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x+2 $y-2 $z)
           (discard! $adj-peg $x+1 $y-1 $z)
@@ -183,7 +182,7 @@
 
 (define-action jump-LH
   1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $x $y $z))
        (<= $y (- *N* 2))
        (>= $x 3)
@@ -195,7 +194,7 @@
        (not (bind (contents> $x-2 $y+2 $z $any-peg)))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
-  (($x $y) fluent)
+  ($x $y)
   (assert (not (contents> $x $y $z ?peg))
           (put! ?peg $x-2 $y+2 $z)
           (discard! $adj-peg $x-1 $y+1 $z)

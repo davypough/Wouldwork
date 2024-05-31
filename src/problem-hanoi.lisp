@@ -38,7 +38,7 @@
        (cleartop? ?support2)
        (bind (size ?support2 $support-size))
        (< $disk-size $support-size))
-  (?disk disk (?support1 ?support2) support)
+  (?disk ?support1 ?support2)
   (assert (not (on ?disk ?support1))
           (on ?disk ?support2)))
 

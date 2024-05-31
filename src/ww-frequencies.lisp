@@ -1,4 +1,4 @@
-;;; Filename: frequencies.lisp
+;;; Filename: ww-frequencies.lisp
 
 ;;; Computes the frequencies of action macro sequences in *solutions*.
 ;;; Eg, (freq 1 2 3) will compute the frequencies of all macro sequences
@@ -16,7 +16,7 @@
         (iter (for len in run-lengths)
               (process-solution solution len)))
   (let ((alist (alexandria:hash-table-alist *freq-ht*)))
-    (sort alist #'> :key #'cdr)))
+    (sort (copy-list alist) #'> :key #'cdr)))
 
 
 (defun process-solution (solution run-length)

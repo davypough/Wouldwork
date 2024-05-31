@@ -1,4 +1,4 @@
-;;;; Filename: problem-tsp.lisp
+;;; Filename: problem-tsp.lisp
 
 ;;; Problem specification for a simple traveling salesperson problem.
 
@@ -58,7 +58,7 @@
        (bind (path-distance $path-distance))
        (setq $new-path-distance (+ $path-distance $dist))
        (setq $objective-value $new-path-distance))
-  (($new-path $new-path-distance) fluent)
+  ($new-path $new-path-distance)
   (assert (path $new-path)
           (path-distance $new-path-distance)))
 
@@ -85,13 +85,13 @@
   ()
   (do (doall (?c city)
         (push (cons ?c nil) $city-edges))
-      (doall (combinations (?c1 ?c2) city)
+      (doall (combination (?c1 ?c2) city)
         (if (bind (distance ?c1 ?c2 $dist))
           (do (push $dist (cdr (assoc ?c1 $city-edges)))
               (push $dist (cdr (assoc ?c2 $city-edges))))))
       (setf $city-edges (mapcar (lambda (pair)
                                   (cons (car pair)
-                                        (subseq (sort (cdr pair) #'<) 0 2)))
+                                        (subseq (sort (copy-list (cdr pair)) #'<) 0 2)))
                                 $city-edges))
       (doall (?c city)
         (do (setq $min-edges (cdr (assoc ?c $city-edges)))

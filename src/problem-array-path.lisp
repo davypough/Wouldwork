@@ -1,7 +1,8 @@
-;;;; Filename: problem-array-path.lisp
+;;; Filename: problem-array-path.lisp
 
 
-;;; Basic problem specification for finding a path thru an array of allowed & disallowed points.
+;;; Basic problem specification for finding a path thru an array of allowed & disallowed points,
+;;; not visiting any point more than once.
 
 
 (in-package :ww)  ;required
@@ -9,6 +10,8 @@
 (ww-set *problem* array-path)
 
 (ww-set *tree-or-graph* tree)
+
+(ww-set *solution-type* min-length)
 
 
 (defparameter *grid* (make-array '(5 5)
@@ -18,7 +21,7 @@
                                           (1 1 1 1 1)
                                           (1 1 1 1 0))))
 
-(defparameter *start* '(2 2))
+(defparameter *start* '(0 1))
 
 
 (define-types
@@ -28,12 +31,12 @@
 
 (define-dynamic-relations
   (visited row col)   ;current visitation status
-  (num-visits $integer)     ;# of points visited so far
-  (loc $row $col))     ;current location in the grid
+  (num-visits $fixnum)     ;# of points visited so far
+  (loc $fixnum $fixnum))     ;current location in the grid
 
 
 (define-static-relations
-  (total $integer))     ;total number of 1s in *grid*
+  (total $fixnum))     ;total number of 1s in *grid*
 
 
 (define-action move-right

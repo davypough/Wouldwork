@@ -1,4 +1,4 @@
-;;;; Filename: problem-crossword5-11.lisp
+;;; Filename: problem-crossword5-11.lisp
 
 ;;; Problem specification for 5x5 crossword, best filling
 
@@ -18,13 +18,13 @@
 (ww-set *problem* crossword5-11)
 
 
-(ww-set *tree-or-graph* graph)
+(ww-set *tree-or-graph* tree)
 
 
 (ww-set *solution-type* max-value)  ;maximize number of used words
 
 
-(ww-set *progress-reporting-interval* 1000)
+(ww-set *progress-reporting-interval* 100000)
 
 
 (defparameter *fields*  ;(field length)
@@ -208,7 +208,7 @@
 
 
 (define-dynamic-relations
-  (used-fields $hash-table)
+  (used-fields $hash-table)  ;hash-table set of field-names
   (used-words $hash-table)
   (text field $string)
   (used-field-ids-ht $hash-table)
@@ -224,12 +224,24 @@
 
 (define-query get-remaining-fields? ()
   (do (bind (used-fields $used-fields))
-      (ut::ht-set-difference *fields-ht* $used-fields)))
+      (setf $remaining-fields (set-difference-ht-set *fields-ht* $used-fields))
+      (let ($fields)
+        (maphash (lambda (key value)
+                   (declare (ignore value))
+                   (push key $fields))
+                 $remaining-fields)
+        $fields)))
 
 
 (define-query get-remaining-words? ()
   (do (bind (used-words $used-words))
-      (ut::ht-set-difference *words-ht* $used-words)))
+      (setf $remaining-words (set-difference-ht-set *words-ht* $used-words))
+      (let ($words)
+        (maphash (lambda (key value)
+                   (declare (ignore value))
+                   (push key $words))
+                 $remaining-words)
+        $words)))
 
 
 ;-------------- heuristic ---------------------
@@ -296,7 +308,7 @@
             (compute-bounds? $used-field-ids)))))
 
 
-;------------------------- action rule -----------------------
+;------------------------- queries -----------------------
 
 
 (defun full-word ($word-string)
@@ -330,7 +342,10 @@
                           (if (not (gethash $cross-field $used-field-ids-ht))  ;field not already filled in
                             (push (list $cross-field $new-cross-str) $new-cross-fills)))))))))  ;returns true
 
-  
+
+;------------------------ actions ----------------------------  
+
+
 (define-action fill
     1
     (?field (get-remaining-fields?) ?word (get-remaining-words?))
@@ -339,7 +354,7 @@
       (and (word-compatible? ?word ?field)
            (bind (used-field-ids-ht $used-field-ids-ht))
            (crosscuts-compatible? ?word ?field $used-field-ids-ht)))
-    (?field field ?word word)
+    (?field ?word)
     (assert (bind (used-words $used-words))
             (setf $new-used-words (alexandria:copy-hash-table $used-words))
             (bind (used-fields $used-fields))
@@ -427,7 +442,7 @@
 
 
 (defun cull-best-states ()
-  (remove-duplicates *best-states* :from-end t :test #'state-equal-p))
+  (remove-duplicates *best-states* :from-end t :test #'equalp :key #'problem-state.idb))
 
 
 (defun corresponding-char-lists (word-list1 index1 word-list2 index2)

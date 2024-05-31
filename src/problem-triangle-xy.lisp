@@ -1,4 +1,4 @@
-;;;; Filename: problem-triangle-xy.lisp
+;;; Filename: problem-triangle-xy.lisp
 
 
 ;;; Basic problem specification for triangle peg problem with peg-count.
@@ -33,25 +33,24 @@
   row (compute (loop for i from 1 to *N*
                    collect i))
   col (compute (loop for j from 1 to *N*
-                   collect j))
-  current-peg (get-current-pegs?))
+                   collect j)))
 
 
 (define-dynamic-relations
-    (loc peg $row $col)      ;location of a peg
+    (loc peg $fixnum $fixnum)      ;location of a peg
     (contents row col $peg)  ;peg contents at a location
     (remaining-pegs $list)   ;list of remaining pegs
     (peg-count $integer))    ;pegs remaining on the board
 
 
-(define-query get-current-pegs? ()
+(define-query get-remaining-pegs? ()
   (do (bind (remaining-pegs $pegs))
       $pegs))
 
 
 (define-action jump-left-down  ;jump downward in the / diagonal direction
     1
-  (?peg (get-current-pegs?))  ;function type
+  (?peg (get-remaining-pegs?))  ;function type
   (and (bind (loc ?peg $r $c))
        (<= (+ $r $c) (- *N* 1))
        (setq $c+1 (1+ $c))
@@ -60,7 +59,7 @@
        (not (bind (contents $r $c+2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))  ;from
           (loc ?peg $r $c+2)           ;to
           (contents $r $c+2 ?peg)      ;update to
@@ -72,7 +71,7 @@
 
 (define-action jump-right-up  ;jump upward in the / diagonal direction
     1
-  (?peg current-peg)  ;named type
+  (?peg (get-remaining-pegs?))  ;named type
   (and (bind (loc ?peg $r $c))
        (>= $c 3)
        (setq $c-1 (1- $c))
@@ -81,7 +80,7 @@
        (not (bind (contents $r $c-2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r $c-2)
           (contents $r $c-2 ?peg)
@@ -93,7 +92,7 @@
 
 (define-action jump-right-down  ;jump downward in the \ diagonal direction
     1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $r $c))
        (<= (+ $r $c) (- *N* 1))
        (setq $r+1 (+ $r 1))
@@ -102,7 +101,7 @@
        (not (bind (contents $r+2 $c $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r+2 $c)
           (contents $r+2 $c ?peg)
@@ -114,7 +113,7 @@
 
 (define-action jump-left-up  ;jump upward in the \ diagonal direction
     1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $r $c))
        (>= $r 3)
        (setq $r-1 (- $r 1))
@@ -123,7 +122,7 @@
        (not (bind (contents $r-2 $c $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r-2 $c)
           (contents $r-2 $c ?peg)
@@ -136,7 +135,7 @@
 
 (define-action jump-right-horiz  ;jump rightward in the horizontal direction
     1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $r $c))
        (>= $c 3)
        (setq $r+1 (+ $r 1))
@@ -147,7 +146,7 @@
        (not (bind (contents $r+2 $c-2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r+2 $c-2)
           (contents $r+2 $c-2 ?peg)
@@ -159,7 +158,7 @@
 
 (define-action jump-left-horiz  ;jump leftward in the horizontal direction
     1
-  (?peg current-peg)
+  (?peg (get-remaining-pegs?))
   (and (bind (loc ?peg $r $c))
        (>= $r 3)
        (setq $r-1 (- $r 1))
@@ -170,7 +169,7 @@
        (not (bind (contents $r-2 $c+2 $any-peg)))
        (bind (peg-count $peg-count))
        (bind (remaining-pegs $pegs)))
-  (($r $c) fluent)
+  ($r $c)
   (assert (not (contents $r $c ?peg))
           (loc ?peg $r-2 $c+2)
           (contents $r-2 $c+2 ?peg)

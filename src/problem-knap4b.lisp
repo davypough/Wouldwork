@@ -20,7 +20,7 @@
 
 
 (defparameter *sorted-items-values-weights*  ;sort according to value/weight ratio
-  (sort *items-values-weights* #'>
+  (sort (copy-list *items-values-weights*) #'>
         :key (lambda (x)
                (/ (second x) (third x)))))
 
@@ -100,7 +100,7 @@
        (setf $new-knapsack-load (+ $knapsack-load $item-weight))
        (bind (capacity $knapsack-capacity))
        (<= $new-knapsack-load $knapsack-capacity))
-  (?item item)
+  (?item)
   (assert (bind (contents $knapsack-items))
           (bind (content-ids $knapsack-item-ids))
           (bind (item-id ?item $item-id))

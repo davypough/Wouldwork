@@ -1,7 +1,7 @@
-;;;; Filename: problem-boxes.lisp
+;;; Filename: problem-boxes.lisp
 
-
-;;; Problem specification for using boxes to move to an ;;; area through a sequence of gates controlled by 
+;;; Problem specification for using boxes to move to an 
+;;; area through a sequence of gates controlled by 
 ;;; pressure plates.
 
 
@@ -9,9 +9,11 @@
 
 (ww-set *problem* boxes)
 
-(ww-set *depth-cutoff* 10)
+(ww-set *depth-cutoff* 15)
 
 (ww-set *solution-type* min-length)
+
+(ww-set *tree-or-graph* graph)
 
 
 
@@ -67,7 +69,7 @@
   (and (loc me ?area1)
        (exists (?g gate)
          (open? ?g ?area1 ?area2)))
-  ((?area1 ?area2) area)
+  (?area1 ?area2)
   (assert (not (loc me ?area1))
           (loc me ?area2)))
 
@@ -78,11 +80,11 @@
   (and (loc me ?area)
        (loc ?box ?area)
        (free? me))
-  (?box box ?area area)
+  (?box ?area)
   (assert (not (loc ?box ?area))
           (holding me ?box)
           (exists (?p plate)
-            (if (on ?box ?p)     ;(gethash (list 'on ?box ?p) idb)
+            (if (on ?box ?p)
               (not (on ?box ?p))))))
 
 
@@ -91,7 +93,7 @@
   (?box box ?area area)
   (and (loc me ?area)
        (holding me ?box))
-  (?box box ?area area)
+  (?box ?area)
   (assert (loc ?box ?area)
           (not (holding me ?box))))
 
@@ -103,7 +105,7 @@
        (holding me ?box)
        (loc ?plate ?area)
        (cleartop? ?plate))
-  (?box box ?plate plate ?area area)
+  (?box ?plate ?area)
   (assert (loc ?box ?area)
           (not (holding me ?box))
           (on ?box ?plate)))

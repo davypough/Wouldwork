@@ -1,4 +1,4 @@
-;;; Filename:  converter.lisp
+;;; Filename:  ww-converter.lisp
 
 ;;; Procedures for converting database hashtable lookups from symbols to integers
 
@@ -67,7 +67,7 @@
     (alexandria:appendf objects (iter (for (predicate nil) in-hashtable *static-relations*)
                                       (collecting predicate)))
     (setf objects (delete-duplicates objects))
-    (setf objects (sort objects #'string< :key (lambda (obj)
+    (setf objects (sort (copy-list objects) #'string< :key (lambda (obj)
                                                  (or (and (symbolp obj) (symbol-name obj))
                                                      (and (numberp obj) (princ-to-string obj))))))
     (iter (for obj in objects)
@@ -80,6 +80,7 @@
 (defun subst-int-code (code-tree)
   (iter (for item in code-tree)
         (cond ((atom item) nil)
+              ((not (typep item 'alexandria:proper-list)) nil)
               ((and (consp item) (eql (first item) 'gethash)
                     (consp (second item)) (eql (first (second item)) 'list))
                  (setf (second item) (convert-prop-list (second item)))  ;)
@@ -91,9 +92,7 @@
                           (setf (third item) 'idb))
                        ((equal (third item) '(merge-db-hdb state))
                           (setf (third item) (list 'merge-idb-hidb 'state)))
-                       (t (error "~%Error in subst-int-code: ~A~%" (third item)))))
-;              ((and (consp item) (eql (first item) 'commit1))
-;                 (setf (second item) (list 'problem-state.idb 'state)))
+                       (t (error "Error in subst-int-code: ~A" (third item)))))
               (t (subst-int-code item)))
         (finally (return code-tree))))
 
@@ -105,7 +104,7 @@
           (summing (* ut::it multiplier))
           (progn (incf *last-object-index*)
                  (when (>= *last-object-index* 1000)
-                   (error "~%Design Limit Error: Total # of actual + derived planning objects > 999~%"))
+                   (error "Design Limit Error: Total # of actual + derived planning objects > 999"))
                  (setf (gethash item *constant-integers*) *last-object-index*)
                  (setf (gethash *last-object-index* *integer-constants*) item)
                  (summing (* *last-object-index* multiplier))))))
@@ -124,7 +123,7 @@
                                  `(* (gethash ,item *constant-integers*) ,multiplier))
                               ((numberp item)
                                  (* (gethash item *constant-integers*) multiplier))
-                              (t (error "~%Error in convert-prop-list: ~A invalid in ~A~%"
+                              (t (error "Error in convert-prop-list: ~A invalid in ~A"
                                         item prop-list))))
         (collect new-item into new-items)
         (finally (return (cons '+ new-items)))))

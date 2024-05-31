@@ -1,4 +1,4 @@
-;;; Filename: structures.lisp
+;;; Filename: ww-structures.lisp
 
 ;;; Structure definitions.
 
@@ -54,11 +54,20 @@
 
 
 (defun list-database (idb)
-  (let ((propositions (iter (for (key val) in-hashtable idb)
-                            (if (eql val t)
-                              (collecting (convert-to-proposition key))  ;non-fluent prop
-                              (collecting (convert-to-fluent-proposition key val))))))
-    (sort propositions #'string< :key (lambda (prop) (format nil "~A" prop)))))
+  (let* ((propositions (iter (for (key val) in-hashtable idb)
+                             (if (eql val t)
+                               (collecting (convert-to-proposition key))  ;non-fluent prop
+                               (collecting (convert-to-fluent-proposition key val)))))
+         (sorted-props (sort (copy-list propositions) #'string< :key (lambda (prop) (format nil "~A" (car prop))))))
+    sorted-props))
+
+;    (iter (for prop in sorted-props)
+;          (collecting (iter (for item in prop)
+;                            (if (hash-table-p item)
+;                              (collecting (sort (copy-list (alexandria:hash-table-keys item))
+;                                                #'string< 
+;                                               :key (lambda (key) (format nil "~A" key))))
+;                              (collecting item)))))))
 
 
 (defun database (state)
@@ -68,7 +77,7 @@
 
 
 (defun print-problem-state (state &optional (stream t) depth)
-  (declare (problem-state state) (ignore depth))
+  (declare (type problem-state state) (ignore depth))
   (format stream "<~A ~A ~A ~A ~A ~A~%  ~S~%  ~S>"
       (problem-state.name state)
       (problem-state.instantiations state)
@@ -94,7 +103,7 @@
 
 (defun copy-idb (idb)
   "Copies a Wouldwork database."
-  (declare (hash-table idb))
+  (declare (type hash-table idb))
   (alexandria:copy-hash-table idb
     :key (lambda (val)
            (if (listp val)
@@ -113,10 +122,11 @@
   (precondition-params nil :type list)
   (precondition-variables nil :type list)
   (precondition-types nil :type list)
-  (init nil :type (or nil t))  ;signals if an init-action or a normal rule action
-  (restriction nil :type symbol)  ;eg, dot-products, combinations
-  (dynamic nil :type (or nil t))  ;a dynamic rule requires recomputation of params on each execution
-  (precondition-instantiations nil :type (or list symbol))
+  (precondition-type-inst nil :type list)
+  ;(restriction nil :type symbol)  ;eg, dot-product, combination
+  (dynamic nil :type list)  ;a dynamic rule requires recomputation of params on each execution
+  (precondition-args nil :type (or list symbol))
+  (init nil :type (member nil t))  ;signals if an init-action or a normal rule action
   (precondition-lambda nil :type list)
   (iprecondition-lambda nil :type list)
   ;(precondition-lits nil :type list)  ;used for backward search (not implemented)
@@ -144,4 +154,17 @@
   (value 0.0 :type real)
   (path nil :type list)
   (goal (make-problem-state) :type problem-state))
+
+
+(defstruct (node (:conc-name node.)
+             (:print-function
+               (lambda (node stream depth)
+                 ;Prints out a node. Used for debugging.
+                 (declare (ignore depth) (type node node) (type stream stream))
+                 (format stream "~&NODE: STATE=~A DEPTH=~:D"   ;PARENT=~S~%"
+                   (node.state node) (node.depth node)))))
+  (state (make-problem-state) :type problem-state)    ;problem state
+  (depth 0 :type fixnum)           ;depth in the search tree
+  (parent nil :type (or null node)))  ;this node's parent
+
 

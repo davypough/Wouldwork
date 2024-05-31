@@ -1,4 +1,4 @@
-;;;; Filename: problem-blocks4.lisp
+;;; Filename: problem-blocks4.lisp
 
 
 ;;; Problem specification for a blocks world problem:
@@ -10,6 +10,8 @@
 (ww-set *problem* blocks4)
 
 (ww-set *solution-type* min-length)
+
+(ww-set *tree-or-graph* graph)
 
 
 (define-types
@@ -40,7 +42,7 @@
        (on ?block ?block-support)
        (cleartop? ?support)
        (different ?block ?support))
-  (?block block ?support support)
+  (?block ?support)
   (assert (on ?block ?support)
           (not (on ?block ?block-support))))
 

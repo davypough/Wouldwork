@@ -8,7 +8,7 @@
 
 (ww-set *problem* queens4)
 
-(ww-set *depth-cutoff* 4)
+;(ww-set *depth-cutoff* 4)
 
 (ww-set *solution-type* every)
 
@@ -21,9 +21,9 @@
 
 
 (define-dynamic-relations
-  (loc queen $row $col)   ;$integer column)
+  (loc queen $fixnum $fixnum)   ;row column of a queen
   (placed queen)
-  (next-row $integer))
+  (next-row $fixnum))
 
 
 (define-action put
@@ -38,7 +38,7 @@
                        (= $c ?column)
                        (= (- $r $row) (- $c ?column))
                        (= (- $r $row) (- ?column $c)))))))
-  (?queen queen $row fluent ?column column)
+  (?queen $row ?column) 
   (assert (loc ?queen $row ?column)
           (placed ?queen)
           (next-row (1+ $row))))

@@ -1,18 +1,19 @@
-;;; Filename: problem-blocks3.lisp
+;;; Filename: problem-blocks3a.lisp
 
 
 ;;; Problem specification for a blocks world problem:
 ;;; stack blocks named A, B, and C on a table named T.
+;;; Keep problem-state.idb keys fixed.
 
 
 (in-package :ww)  ;required
 
 
-(ww-set *problem* blocks3)
+(ww-set *problem* blocks3a)
 
 (ww-set *solution-type* every)
 
-(ww-set *tree-or-graph* tree)  ;note: preferrable to use blocks3a if graph search wanted
+(ww-set *tree-or-graph* graph)
 
 
 (define-types
@@ -22,28 +23,28 @@
 
 
 (define-dynamic-relations
-    (on block target))
+    (on block $symbol))  ;eg, (on A T)
 
 
 (define-static-relations
     (height target $real))
 
 
-(define-query cleartop? (?block)
-  (not (exists (standard ?b block)
-         (on ?b ?block))))
+(define-query cleartop? ($block)
+  (not (exists (?b block)
+         (on ?b $block))))
 
 
 (define-action put
     1
-  (standard ?block block (?block-support ?target) target)
+  (standard ?block block ?target target)
   (and (cleartop? ?block)
-       (on ?block ?block-support)
        (cleartop? ?target)
        (different ?block ?target))
   (?block ?target)
-  (assert (on ?block ?target)
-          (not (on ?block ?block-support))))
+  (assert (bind (on ?block $block-support))
+          (not (on ?block $block-support))
+          (on ?block ?target)))
 
 
 (define-init
@@ -53,5 +54,5 @@
 
 
 (define-goal
-  (or (and (on C T) (on B C) (on A B))
-      (and (on A T) (on B A) (on C B))))
+  (or (and (on C T) (on B C) (on A B))  ;A -> B -> C -> T
+      (and (on A T) (on B A) (on C B))))  ;C -> B -> A -> T

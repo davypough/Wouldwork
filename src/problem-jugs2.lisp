@@ -1,4 +1,4 @@
-;;;; Filename: problem-jugs2.lisp
+;;; Filename: problem-jugs2.lisp
 
 
 ;;; Fluent problem specification for pouring between jugs
@@ -9,11 +9,11 @@
 
 (ww-set *problem* jugs2)
 
-(ww-set *depth-cutoff* 7)  ;set to expected # steps to goal
+;(ww-set *depth-cutoff* 7)  ;set to expected # steps to goal
 
-(ww-set *solution-type* every)
+(ww-set *solution-type* min-length)
 
-(ww-set *tree-or-graph* tree)
+(ww-set *tree-or-graph* graph)
 
 
 (define-types
@@ -34,7 +34,7 @@
   (and (bind (contents ?jug $amt))
        (bind (capacity ?jug $cap))
        (< $amt $cap))
-  (?jug jug $cap fluent)
+  (?jug $cap)
   (assert (contents ?jug $cap)))
 
 
@@ -43,7 +43,7 @@
   (?jug jug)
   (and (bind (contents ?jug $amt))
        (> $amt 0))
-  (?jug jug)
+  (?jug)
   (assert (contents ?jug 0)))
 
 
@@ -55,7 +55,7 @@
        (bind (contents ?jugB $amtB))
        (bind (capacity ?jugB $capB))
        (< $amtB $capB))
-  (?jugA jug $amtA fluent ?jugB jug ($amtB $capB) fluent)
+  (?jugA $amtA ?jugB $amtB $capB)
   (if (<= $amtA (- $capB $amtB))
     (assert (contents ?jugA 0)
             (contents ?jugB (+ $amtB $amtA)))

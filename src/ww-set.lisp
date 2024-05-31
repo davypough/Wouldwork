@@ -1,4 +1,4 @@
-;;; Filename: set.lisp
+;;; Filename: ww-set.lisp
 
 ;;; User interface for resetting Wouldwork's search control parameters.
 
@@ -17,23 +17,14 @@
 (defmacro ww-set (param val)
   ;Allows resetting of user parameters after loading.
   (case param
-    ((*problem* *depth-cutoff* *progress-reporting-interval* *randomize-search*)
+    ((*problem* *problem-type* *depth-cutoff* *tree-or-graph* *solution-type* *progress-reporting-interval* *randomize-search*)
        `(setq ,param ',val))
-    (*solution-type* 
-       `(progn (setq *solution-type* ',val)
-               (iter (for fn-name in '(process-successor-graph process-successor-tree detect-goals))
-                 (setf (symbol-function fn-name)
-                   (compile nil (function-lambda-expression (symbol-function fn-name)))))
-               ',val))
     (*debug*
        `(progn (setq *debug* ',val)
                (if (or (> *debug* 0) *probe*)
-                 (pushnew :wouldwork-debug *features*)  ;allows inserting debug code
-                 (setf *features* (delete :wouldwork-debug *features*)))
+                 (pushnew :ww-debug *features*)  ;allows inserting debug code
+                 (setf *features* (delete :ww-debug *features*)))
                (progn (asdf:load-system "ww-wouldwork-planner" :force t) (in-package :ww))
-               ',val))
-    (*tree-or-graph*
-       `(progn (setq *tree-or-graph* ',val)
                ',val))
     (*probe*
        `(progn (setq *probe* ',val)
