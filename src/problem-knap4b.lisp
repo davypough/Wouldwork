@@ -152,6 +152,3 @@
                (id-value $id $item-value)
                (item-id $item $id))))            
 |#
-
-(define-goal
-  nil)

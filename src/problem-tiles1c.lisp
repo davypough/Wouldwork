@@ -2,7 +2,7 @@
 
 
 ;;; Problem specification for a blue/yellow tile shuffle in Islands of Insight.
-;;; Uses vector representation.
+;;; Uses vector representation for coordinates. (slower than list)
 
 
 (in-package :ww)  ;required
@@ -13,7 +13,7 @@
 
 (ww-set *tree-or-graph* graph)
 
-;(ww-set *depth-cutoff* 45)
+(ww-set *depth-cutoff* 40)
 
 
 (define-types

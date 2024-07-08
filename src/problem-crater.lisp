@@ -119,14 +119,6 @@
                   (not (active ?d2)))))))
 
 
-(define-query los-thru-1-divider? (?area ?station)
-  (exists (?d divider)
-    (and (los1 ?area ?d ?station)
-         (or (barrier ?d)
-             (and (gate ?d)
-                  (not (active ?d)))))))
-
-
 (define-query los? (?area ?station)
   (or (los0 ?area ?station)
       (los-thru-1-divider? ?area ?station)

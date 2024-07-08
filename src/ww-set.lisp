@@ -17,7 +17,7 @@
 (defmacro ww-set (param val)
   ;Allows resetting of user parameters after loading.
   (case param
-    ((*problem* *problem-type* *depth-cutoff* *tree-or-graph* *solution-type* *progress-reporting-interval* *randomize-search*)
+    ((*problem* *problem-type* *depth-cutoff* *tree-or-graph* *solution-type* *progress-reporting-interval* *randomize-search* *branch*)
        `(setq ,param ',val))
     (*debug*
        `(progn (setq *debug* ',val)
@@ -28,7 +28,7 @@
                ',val))
     (*probe*
        `(progn (setq *probe* ',val)
-               (ww-set *debug* 0)
+               (setf *debug* 0)
                (setq *counter* 1)
                ',val))
     (*threads*

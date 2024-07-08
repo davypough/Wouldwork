@@ -54,20 +54,13 @@
 
 
 (defun list-database (idb)
+  "Used to printout idb in propositional form."
   (let* ((propositions (iter (for (key val) in-hashtable idb)
                              (if (eql val t)
                                (collecting (convert-to-proposition key))  ;non-fluent prop
                                (collecting (convert-to-fluent-proposition key val)))))
          (sorted-props (sort (copy-list propositions) #'string< :key (lambda (prop) (format nil "~A" (car prop))))))
     sorted-props))
-
-;    (iter (for prop in sorted-props)
-;          (collecting (iter (for item in prop)
-;                            (if (hash-table-p item)
-;                              (collecting (sort (copy-list (alexandria:hash-table-keys item))
-;                                                #'string< 
-;                                               :key (lambda (key) (format nil "~A" key))))
-;                              (collecting item)))))))
 
 
 (defun database (state)
@@ -118,33 +111,30 @@
 
 (defstruct (action (:conc-name action.))
   (name nil :type symbol)
+  (pre-defun-name nil :type symbol)
+  (eff-defun-name nil :type symbol)
   (duration 0.0 :type real)
   (precondition-params nil :type list)
   (precondition-variables nil :type list)
   (precondition-types nil :type list)
   (precondition-type-inst nil :type list)
-  ;(restriction nil :type symbol)  ;eg, dot-product, combination
   (dynamic nil :type list)  ;a dynamic rule requires recomputation of params on each execution
   (precondition-args nil :type (or list symbol))
   (init nil :type (member nil t))  ;signals if an init-action or a normal rule action
   (precondition-lambda nil :type list)
   (iprecondition-lambda nil :type list)
-  ;(precondition-lits nil :type list)  ;used for backward search (not implemented)
-  (iprecondition #'identity :type function)
   (effect-variables nil :type list)
-  (effect-types nil :type list)
   (effect-adds nil :type list)  ;nonnegative literals only for backward search
   (effect-lambda nil :type list)
-  (ieffect-lambda nil :type list)
-  (ieffect #'identity :type function))
+  (ieffect-lambda nil :type list))
 
 
 (defstruct (update (:conc-name update.))
   "Db updates resulting from a successful action instantiation."
   (changes nil :type hash-table)
   (value 0.0 :type real)
-  (instantiations nil :type list))
-;  (followups nil :type list))  ;next & finally followup function calls
+  (instantiations nil :type list)
+  (followups nil :type list))  ;next & finally followup function calls
 
 
 (defstruct (solution (:conc-name solution.))

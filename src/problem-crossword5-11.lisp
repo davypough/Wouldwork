@@ -24,7 +24,7 @@
 (ww-set *solution-type* max-value)  ;maximize number of used words
 
 
-(ww-set *progress-reporting-interval* 100000)
+(ww-set *progress-reporting-interval* 1000000)
 
 
 (defparameter *fields*  ;(field length)
@@ -411,7 +411,7 @@
     (always-true)
     ()
     (assert (ww-loop for ($field $field-length) in *sorted-fields*
-              for $field-id from 1
+                     for $field-id from 1
                 do (text $field (make-string $field-length :initial-element #\?))
                    (field-id $field $field-id)
                    (setf $field-length+1 (1+ $field-length))
@@ -419,8 +419,7 @@
                    (weight $field-id $field-length+1))))  ;one added for each cross-field
 
 
-(define-goal  ;just find the best (max-value) of all states
-  nil)
+;no goal to find the best (max-value) of all states
 
 ;-------------- pre-processing -----------------
 

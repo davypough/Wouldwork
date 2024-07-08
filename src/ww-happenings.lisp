@@ -45,7 +45,7 @@
       (setf (problem-state.happenings net-state) following-happenings)
       #+:ww-debug (when (>= *debug* 4)
                            (ut::prt act-state hap-state net-state))
-      (if (and *constraint*
+      (if (and (boundp 'constraint-fn)
                (constraint-violated-in-act-hap-net act-state hap-state net-state))
         (values nil nil)
         (values net-state act-state)))))  ;act-state is final state
@@ -72,13 +72,13 @@
   "Determines if the interrupt function for object is satisfied in this state;
    eg, if the object is currently being jammed, and therefore disabled."
   (declare (type symbol object) (type problem-state state))
-  (funcall (get object :interrupt-fn) state))
+  (funcall (get object :interrupt) state))
 
 
 (defun rebound-condition (object new-state)
   "Determines if a rebound condition is satisfied in this state."
   (declare (type symbol object) (type problem-state new-state))
-  (ut::if-it (get object :rebound-fn)
+  (ut::if-it (get object :rebound)
              (funcall ut::it new-state)))
  
 
@@ -86,5 +86,5 @@
   "Determines whether the input states violate a constraint or not."
   (declare (type problem-state act-state hap-state net-state) (ignorable act-state))
   (or ;(and (not (funcall (symbol-function '*constraint*) act-state))
-      (not (funcall (symbol-function '*constraint*) hap-state))  ;disallow swaps
-      (not (funcall (symbol-function '*constraint*) net-state))))
+      (not (funcall (symbol-function 'constraint-fn) hap-state))  ;disallow swaps
+      (not (funcall (symbol-function 'constraint-fn) net-state))))

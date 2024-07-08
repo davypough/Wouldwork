@@ -83,7 +83,3 @@
   (assert (ww-loop for ($item $value $weight) in *sorted-items-values-weights*
             do (value $item $value)
                (weight $item $weight))))
-
-
-(define-goal
-  nil)

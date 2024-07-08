@@ -27,6 +27,7 @@
       (format t "~&~A...~%" name)
       (let ((pre-fn (compile nil precondition-lambda))
             (eff-fn (compile nil effect-lambda))
+            ;(eff-fn (symbol-function (eval effect-lambda)))
             pre-results updated-dbs)
         (setf pre-results
              (remove-if #'null (mapcar (lambda (pinsts)
@@ -68,11 +69,12 @@
     (when (and (eql *problem-type* 'csp) (< (node.depth current-node) (length *actions*)))
       (setf actions (list (nth (node.depth current-node) *actions*))))
     (iter (for action in actions)
-      (with-slots (name iprecondition precondition-params precondition-variables
-                   dynamic precondition-args ieffect)
+      (with-slots (name pre-defun-name eff-defun-name  ;iprecondition
+                       precondition-params precondition-variables
+                   dynamic precondition-args)  ; ieffect)
                   action
-        #+:ww-debug (when (>= *debug* 4)
-                             (format t "~%~A" name))
+        (when (>= *debug* 4)
+          (format t "~%~A" name))
         (when dynamic  ;holds the insts with query calls
           (unless (setf precondition-args  ;overrides previous arguments list if dynamic
                     (remove-if (lambda (sublist)
@@ -82,7 +84,8 @@
         (let (pre-results updated-dbs)
           (setf pre-results  ;process this action, collecting all ? and $ vars
             (remove-if #'null (mapcar (lambda (pinsts)  ;nil = failed precondition
-                                        (process-iprecondition pinsts iprecondition state))
+                                        (apply pre-defun-name  ;iprecondition
+                                               state pinsts))
                                       precondition-args)))
           #+:ww-debug (when (>= *debug* 5)
                                (let ((*package* (find-package :ww)))
@@ -94,15 +97,22 @@
             (next-iteration))
           (setf updated-dbs  ;returns list of update structures
             (mapcan (lambda (pre-result)
-                      (process-ieffect pre-result ieffect state))
+                      (if (eql pre-result t)
+                        (funcall eff-defun-name state)
+                        (apply eff-defun-name state pre-result)))
                     pre-results))
-          #+:ww-debug (when (>= *debug* 4)
-                        (let ((*package* (find-package :ww)))
-                          (format t "  UPDATED-DBS/~D =>~%" (length updated-dbs))
-                          (dolist (updated-db updated-dbs)
-                            (format t "~A,~A~%" (or (list-database (update.changes updated-db)) nil)
-                                                    (update.value updated-db)))
-                            (terpri)))
+          (when (>= *debug* 4)
+            (let ((*package* (find-package :ww)))
+              (format t "  UPDATED-DBS/~D =>~%" (length updated-dbs))
+              (iter (for updated-db in updated-dbs)
+                    (for pre-result in pre-results)
+                    (format t "~A~%~A,~A~2%"
+                              pre-result
+                              (or (list-database (update.changes updated-db)) nil)
+                              (update.value updated-db)))
+              (terpri)))
+          (when *troubleshoot-current-node*  ;signaled in process-ieffect below
+             (return-from generate-children))
           (let ((child-states (get-new-states state action updated-dbs)))  ;keep idb & hidb separate
             (when (fboundp 'heuristic?)
               (dolist (child-state child-states)
@@ -112,38 +122,29 @@
     (nreverse children)))  ;put first action child states first
 
 
-(defun process-iprecondition (pinsts iprecondition state)
-  (apply iprecondition state pinsts))
-
-
-(defun process-ieffect (pre-result ieffect state)
-  (if (eql pre-result t)
-    (funcall ieffect state)
-    (apply ieffect state pre-result)))
-
-
 (defun get-new-states (state action updated-dbs)
   "Creates new states given current state and the new updates."
   (mapcan
-      (lambda (updated-db)
+      (lambda (updated-db)  ;process one update structure
         (let ((act-state (initialize-act-state action state updated-db))  ;act-state from action
               net-state new-state)
           (when act-state  ;no new act-state if wait action was cancelled
-            (if *happenings*
+            (if *happening-names*
               (ut::mvs (net-state new-state) (amend-happenings state act-state))  ;check for violation
-              (if (and *constraint* 
-                       (not (funcall (symbol-function '*constraint*) act-state))) ;violated
+              (if (and (boundp 'constraint-fn)
+                       (symbol-value 'constraint-fn) 
+                       (not (funcall (symbol-function 'constraint-fn) act-state))) ;violated
                 (setf new-state nil)
                 (setf new-state act-state)))
             #+:ww-debug (when (>= *debug* 4)
                           (if net-state
-                            (when *constraint*
+                            (when (and (boundp 'constraint-fn) (symbol-value 'constraint-fn))
                               (format t "~&  ***NO CONSTRAINT VIOLATION"))
-                            (when *constraint* 
+                            (when (and (boundp 'constraint-fn) (symbol-value 'constraint-fn))
                               (format t "~&  ***CONSTRAINT VIOLATED"))))
             (when new-state
               (list (setf new-state 
-                          (process-followup-updates act-state updated-db)))))))
+                          (process-followups act-state updated-db)))))))
       updated-dbs))
 
 
@@ -151,7 +152,7 @@
   "Returns a new child of state incorporating action updated-db list,
    or nil if repeating previous wait action."
   (declare (type action action) (problem-state state) (update updated-db))
-  (unless (and *happenings*
+  (unless (and *happening-names*
                (eql (action.name action) 'wait)
                (eql (problem-state.name state) 'wait))  ;previous state is also wait
     (create-action-state action state updated-db)))  ;create non-wait state
@@ -194,24 +195,21 @@
     (minimizing time)))
 
 
-(defun process-followup-updates (net-state updated-db)
+(defun process-followups (net-state updated-db)  ;followups for one update structure from effect
   "Triggering forms are saved previously during effect apply."
   (declare (ignorable updated-db))
-  (iter (for followup in nil)   ;(update.followups updated-db))
-    #+:ww-debug (when (>= *debug* 4)
-                         (ut::prt followup))
-    (for returns = (sort (copy-list (apply (car followup) net-state (cdr followup)))
-                         #'(lambda (x y) 
-                             (declare (ignore y))
-                             (and (listp x)
-                                  (eql (car x) 'not)))))  ;get ordered updates
-    #+:ww-debug (when (>= *debug* 4)
-                         (ut::prt returns))
-    (revise (problem-state.idb net-state) returns)
-    (finally (return-from process-followup-updates net-state))))
+  (iter (with idb = (update.changes updated-db))  ;post effect idb
+        (for followup in (update.followups updated-db))
+        #+:ww-debug (when (>= *debug* 4)
+                      (ut::prt followup))
+        (for updated-idb = (apply (car followup) net-state idb (cdr followup)))  ;rtn followup updated idb
+        #+:ww-debug (when (>= *debug* 4)
+                      (ut::prt (list-database updated-idb)))
+        (setf (problem-state.idb net-state) updated-idb)
+    (finally (return-from process-followups net-state))))
 
 
-(defun expand (current-node)
+(defun expand (current-node)  ;called from df-bnb1
   "Returns the new states."
   (declare (type node current-node))   
   (unless (and (fboundp 'prune?) (funcall 'prune? (node.state current-node))) ;don't expand state further if bounded 

@@ -12,6 +12,8 @@
 
 (ww-set *tree-or-graph* graph)
 
+(ww-set *depth-cutoff* 40)
+
 
 (defparameter *row-dimension* 4)  ;the dimensions of the board
 (defparameter *col-dimension* 4)
@@ -31,15 +33,6 @@
   (loc tile $simple-bit-vector)  ;location of a tile with coordinates
   (empty $simple-bit-vector))
 
-#|
-(defun merge-into-vector (pair pairs)
-  "Lexicographically merges a vector pair into a vector of vector pairs."
-  (merge 'simple-bit-vector (vector pair) pairs
-         (lambda (a b)
-           (or (< (sbit a 0) (sbit b 0))
-               (and (= (sbit a 0) (sbit b 0))
-                    (<= (sbit a 1) (sbit b 1)))))))
-|#
 
 (defun merge-into-vector (pair pairs)
   "Lexicographically merges a vector pair into a vector of vector pairs."
@@ -51,6 +44,14 @@
                       (<= (sbit a 1) (sbit b 1))))))))
 
 
+(defun make-bv-set (dotted-pairs)
+  (let ((bv (make-array (* *row-dimension* *col-dimension*) :element-type 'bit :adjustable nil)))
+    (dolist (pair dotted-pairs)
+      (let* ((row (car pair))
+             (col (cdr pair))
+             (index (+ (* row *col-dimension*) col)))
+        (setf (sbit bv index) 1)))
+    bv))
 
 (define-action move
   1

@@ -82,7 +82,29 @@
                  (or (fboundp (car arg))  ;arg is a lisp function
                      (special-operator-p (car arg))))  ;arg is a special lisp op
             (error "Found a malformed query or update argument ~A in ~A" arg fn-call))))
-                    
+
+
+(defun check-variable-names (action-name pre-param-?vars precondition effect all-detected-vars)
+  "Checks the validity (eg, spelling) of vars in an action rule."
+  (let ((valid-vars pre-param-?vars))
+    (subst-if t (constantly nil) `(list ,precondition ,effect)  ;adds valid $vars
+              :key (lambda (item)
+                     (when (consp item)
+                       (case (first item)
+                         ((setq setf) (when (symbolp (second item)) (push (second item) valid-vars)))
+                         (ww-loop     (when (eq (second item) 'for)
+                                        (typecase (third item)
+                                          (symbol (push (third item) valid-vars))
+                                          (list (alexandria:appendf valid-vars (third item)))))
+                                      (when (eq (sixth item) 'for)
+                                        (typecase (seventh item)
+                                          (symbol (push (seventh item) valid-vars))
+                                          (list (alexandria:appendf valid-vars (seventh item))))))
+                         ((bind let)  (alexandria:appendf valid-vars
+                                        (remove-if-not #'varp (second item))))))))
+    (ut::if-it (set-difference all-detected-vars valid-vars)
+      (error "Check spelling of unknown variables ~A in ~A" ut::it action-name))))
+                 
                     
 (defun check-precondition-parameters (pre-parameter-list)
   "Checks a user precondition action or logical parameter list."
@@ -117,6 +139,13 @@
       (nth-value 1 (gethash (car proposition) *static-relations*))
       (error "The predicate ~A in proposition ~A is not previously defined in a relation."
              (car proposition) proposition)))
+
+
+(defun check-form-body (form)
+  "Detects an error in a ww translated form expression."
+  (when (fourth form)
+    (error "The body of ~A must contain only one expression; eg, use 'do' to group expressions."
+           form)))
 
 
 (defun check-happening (happening-object property-list)

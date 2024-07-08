@@ -53,6 +53,9 @@
               (succ-nodes (df-bnb1 open)))  ;work a little more on current problem
           (declare (ignorable current-node))
           (when (= *program-cycles* 0)  ;ie, expanding the start state
+            (when (>= *branch* 0)  ;choose an initial branch to explore, drop others
+              (format t "~&Exploring only branch ~D of ~D~%" *branch* (length succ-nodes))
+              (setf succ-nodes (subseq succ-nodes *branch* (1+ *branch*))))
             (setf *num-init-successors* (length succ-nodes))
             (setf *rem-init-successors* (reverse succ-nodes)))
           #+:ww-debug (when (>= *debug* 1)
@@ -79,14 +82,11 @@
           (when (hs::empty-hstack open)  ;nothing left on open to explore
             #+:ww-debug (when (>= *debug* 1)
                           (lprt 'open-exhausted))
-            ;(when (= *num-idle-threads* (1- *threads*))  ;all other threads idle
-            ;  #+:ww-debug (when (>= *debug* 1)
-            ;                       (lprt 'signal-exhausted-done))
-            ;  (lparallel.queue:push-queue t done))  ;signal all done to process-threads
             (increment-global *num-idle-threads*)
             (leave))) ;go back to top
         (increment-global *program-cycles* 1)  ;finished with this cycle
-        (setf *average-branching-factor* (compute-average-branching-factor))))))
+        (setf *average-branching-factor* (compute-average-branching-factor))
+        (print-search-progress)))))
 
 
 (defun split-off (open)

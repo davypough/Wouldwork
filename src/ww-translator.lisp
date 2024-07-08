@@ -34,7 +34,7 @@
    Eg, (velocity ?car wheel1 50 $direction) -> (list 'velocity ?car 'wheel1 50 $direction)."
   `(gethash ,(translate-list form flag)
             ,(if (gethash (car form) *relations*)
-               (if *happenings*
+               (if *happening-names*
                  '(merge-db-hdb state)  ;dummy function replaced by merge-idb-hidb
                  (case flag
                    (pre '(problem-state.db state))
@@ -122,7 +122,7 @@
 
 
 (defun translate-bind (form flag)
-  "Translates a binding for a relation form, returns t if there are is a binding,
+  "Translates a binding for a relation form, returns t if there is a binding,
    even NIL. But returns NIL if there is no binding."
   (check-proposition (second form))
   (let* ((fluent-indices (get-prop-fluent-indices (second form)))
@@ -142,6 +142,7 @@
    In pre, (exists (vars) form) is true when form is true
    for any instantiation of vars, otherwise false. In eff, it asserts form
    for the first true instantiation of the vars, and then exits."
+  (check-form-body form)
   (let ((parameters (second form))
         (body (third form)))
     (check-precondition-parameters parameters)
@@ -162,6 +163,7 @@
   "The universal is interpreted differently for pre vs eff.  
    In pre, (forall (vars) form) is true when form is always true, otherwise false.
    In eff, it asserts form for every instantiation of the vars."
+  (check-form-body form)
   (let ((parameters (second form))
         (body (third form)))
     (check-precondition-parameters parameters)
@@ -183,6 +185,7 @@
 (defun translate-doall (form flag)
   "The doall form is a generator for all its variable instances. It always returns true. 
    It can be used to do something for all instances of its variables."
+  (check-form-body form)
   (let ((parameters (second form))
         (body (third form)))
     (check-precondition-parameters parameters)
@@ -231,7 +234,8 @@
                                        :value ,(if *objective-value-p*
                                                  '$objective-value
                                                  0.0)
-                                       :instantiations (list ,@*eff-param-vars*))
+                                       :instantiations (list ,@*eff-param-vars*)
+                                       :followups (nreverse followups))
                           updated-dbs)))))
 
 
@@ -251,14 +255,13 @@
 (defun translate-mvsetq (form flag)
   "Translates a multiple-value-setq clause."
   `(multiple-value-setq ,(second form) ,(translate (third form) flag)))
-;     ,@(iter (for statement in (cddr form))
-;             (collect (translate statement flag)))))
 
 
 (defun translate-setq (form flag)
-  "Translates a setq statement. Used to assign a variable the value of a function."
-  ;(declare (ignore flag))
-  `(setq ,(second form) ,(translate (third form) flag)))
+  "Translates a setq statement. Used to assign a variable the value of a function.
+   Always returns t, even if nil is assigned."
+  `(progn (setq ,(second form) ,(translate (third form) flag))
+          t))
 
 
 (defun translate-case (form flag)
@@ -266,7 +269,14 @@
   `(case ,(second form)
      ,@(iter (for clause in (cddr form))
          (collect `(,(first clause) ,@(iter (for statement in (rest clause))
-                                        (collect (translate statement flag))))))))
+                                            (collect (translate statement flag))))))))
+
+
+;(defun translate-cond (form flag)
+;  "Translates a cond statement."
+;  `(cond ,@(iter (for clause in cddr form))
+;             (collect `(,(first clause) ,@(iter (for statement in (rest clause))
+;                                            (collect (translate statement flag)))))))
 
 (defun translate-print (form flag)
   "Translates a print statement for debugging actions."
@@ -278,6 +288,13 @@
   `(loop ,@(loop for item in (cdr form) collect (translate item flag))))
 
 
+(defun translate-followup (form flag)
+  ;Processes a trigger followup form for next & finally.
+  (declare (ignore flag))
+  (let ((base-form (second form)))
+    `(push (list ',(car base-form) ,@(cdr base-form)) followups)))
+
+
 (defun translate (form flag)  ;test-then distinguishes between if stmt forms
   "Beginning translator for all forms in actions."
   (cond ((atom form) form)  ;atom or (always-true) translates as itself
@@ -286,6 +303,7 @@
         ((eql (car form) 'assert) (translate-assert form flag))
         ((member (car form) '(forsome exists exist)) (translate-existential form flag))  ;specialty first
         ((member (car form) '(forall forevery)) (translate-universal form flag)) ;removed every
+        ((member (car form) '(finally next)) (translate-followup form flag))
         ((eql (car form) 'doall) (translate-doall form flag))
         ((eql (car form) 'if) (translate-conditional form flag))
         ((eql (car form) 'do) (translate-do form flag))
@@ -297,7 +315,7 @@
         ((member (car form) '(mvsetq multiple-value-setq)) (translate-mvsetq form flag))
         ((eql (car form) 'declare) form)
         ((eql (car form) 'print) (translate-print form flag))
-;        ((eql (car form) 'cancel-assert) (translate-cancel-assert form flag))
+        ;((eql (car form) 'cancel-assert) (translate-cancel-assert form flag))
         ((eql (car form) #+sbcl 'sb-int:quasiquote #+allegro 'excl::backquote) (translate (eval form) flag))
         ((and (eql (car form) 'not) (gethash (caadr form) *relations*)) (translate-negative-relation form flag))
         ((member (car form) *connectives*) (translate-connective form flag))

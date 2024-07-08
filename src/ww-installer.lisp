@@ -149,22 +149,24 @@
   (format t "~&Installing happening for ~A ..." object)
   (check-happening object plist)
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
-  (makunbound object)
-  (setf (the simple-vector (get object :events))
-    (coerce (getf plist :events) 'simple-vector))
   (when (getf plist :inits)
     (setf (get object :inits) (getf plist :inits)))
+  (when (getf plist :events)
+    (setf (the simple-vector (get object :events))
+          (coerce (getf plist :events) 'simple-vector)))
+  (when (getf plist :repeat)
+    (setf (get object :repeat) (getf plist :repeat)))
+  (when (getf plist :interrupt)
+    (setf (get object :interrupt) (getf plist :interrupt)))
   (ut::if-it (getf plist :interrupt)
     (let (($vars (get-all-nonspecial-vars #'$varp ut::it)))
-      (setf (get object :interrupt) 
+      (setf (symbol-value object)  ;(get object :interrupt) 
         `(lambda (state)
            (let ,$vars
              ,(when $vars
                 `(declare (ignorable @,$vars)))
                 ,(translate (getf plist :interrupt) 'pre))))))
-  (fix-if-ignore '(state) (get object :interrupt))
-  (when (getf plist :repeat)
-    (setf (get object :repeat) (getf plist :repeat)))
+  (fix-if-ignore '(state) (symbol-value object))  ; (get object :interrupt))
   ;(when (get object :rebound) 
   ;  (setf (get object :rebound) `(lambda (state)
   ;                                 ,(translate (get object :rebound) 'pre)))
@@ -177,7 +179,7 @@
         (delete-proposition (second literal) *hap-db*))
       (when (gethash (car literal) *relations*)
         (add-proposition literal *hap-db*))))
-  (push object *happenings*))
+  (push object *happening-names*))
            
 
 (defmacro define-query (name args body)
@@ -185,14 +187,12 @@
 
 
 (defun install-query (name args body)
-  (format t "~&Installing ~A query..." name)
+  (format t "~&Installing ~A query-fn..." name)
   (check-query/update-function name args body)
-  (fmakunbound `,name)  ;avoids compiler warning if recursive fn
-  (push `,name *query-names*)
-  (setf (get `,name 'formula) body)
+  (push name *query-names*)
   (let ((new-$vars (delete-duplicates 
                      (set-difference (get-all-nonspecial-vars #'$varp body) args))))
-    (setf (get `,name 'fn)
+    (setf (symbol-value name)
       `(lambda (state ,@args)
          ,(format nil "~A query-fn" name)
          (block ,name
@@ -206,8 +206,7 @@
                      ,(third body)  ;should be a declare statement
                      ,(translate (fourth body) 'pre)))
                 (translate body 'pre)))))))
-  (fix-if-ignore '(state) (get `,name 'fn))
-  (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
+  (fix-if-ignore '(state) (symbol-value name)))  ;(get `,name 'fn)))
 
 
 (defmacro define-update (name args body)
@@ -215,15 +214,13 @@
 
 
 (defun install-update (name args body)
-  (format t "~&Installing ~A update..." name)
+  (format t "~&Installing ~A update-fn..." name)
   (check-query/update-function name args body)
-  (fmakunbound `,name)  ;avoids compiler warning if recursive fn
-  (push `,name *update-names*)
-  (setf (get `,name 'formula) body)
+  (push name *update-names*)
   (ut::if-it (delete-duplicates
                  (set-difference
                    (get-all-nonspecial-vars #'$varp body) args))  ;get $vars for let
-      (setf (get `,name 'fn)
+      (setf (symbol-value name)
         `(lambda (state idb ,@args)
            ,(format nil "~A update-fn" name)
            (declare (ignorable state))
@@ -231,15 +228,14 @@
              (declare (ignorable updated-dbs ,@ut::it))
              ,(translate body 'eff)
              idb)))
-      (setf (get `,name 'fn)
+      (setf (symbol-value name)
         `(lambda (state idb ,@args)
            ,(format nil "~A update-fn" name)
            (declare (ignorable state))
            (progn
              ,(translate body 'eff))
              idb)))
-  (fix-if-ignore '(idb) (get `,name 'fn))
-  (setf (symbol-value `,name) (copy-tree (get `,name 'fn))))
+  (fix-if-ignore '(idb) (symbol-value name)))
 
   
 (defmacro define-constraint (form)
@@ -249,16 +245,14 @@
 (defun install-constraint (form)
   (format t "~&Installing constraint...")
   (check-type form list)
-  (setf (get '*constraint* 'formula) form)
   (let (($vars (get-all-nonspecial-vars #'$varp form)))
-    (setf (get '*constraint* 'fn)
+    (setf (symbol-value 'constraint-fn)
       `(lambda (state)
          (let ,$vars
            ,(when $vars
               `(declare (ignorable ,@$vars)))
            ,(translate form 'pre)))))
-  (fix-if-ignore '(state) (get '*constraint* 'fn))
-  (setf *constraint* (copy-tree (get '*constraint* 'fn))))
+  (fix-if-ignore '(state) (symbol-value 'constraint-fn)))
         
 
 (defmacro define-action (name duration pre-params precondition eff-params effect)
@@ -268,7 +262,7 @@
 (defun install-action (name duration pre-params precondition eff-params effect)
   (format t "~&Installing ~A action..." name)
   (push (create-action name duration pre-params precondition eff-params effect nil)
-    *actions*))
+        *actions*))
 
 
 (defmacro define-init-action (name duration pre-params precondition eff-params effect)
@@ -290,11 +284,13 @@
   (unless (member (first pre-params) *parameter-headers*)
     (push 'standard pre-params))
   (multiple-value-bind (pre-param-?vars pre-param-types) (dissect-pre-params pre-params)
-    (let ((eff-param-vars eff-params))   ;eff-param-types) (dissect-eff-params eff-params)
+    (let ((eff-param-vars eff-params))
       (let* ((flat-pre-param-?vars (alexandria:flatten pre-param-?vars))
+             (pre-?vars (delete-duplicates (get-all-nonspecial-vars #'?varp precondition) :from-end t))
              (pre-$vars (delete-duplicates (get-all-nonspecial-vars #'$varp precondition) :from-end t))
              (pre-special-$vars (get-special-vars precondition))
              (pre-type-inst (instantiate-type-spec pre-param-types))
+             (pre-bound-?vars (get-bound-?vars precondition))
              (eff-$vars (delete-duplicates (get-all-nonspecial-vars #'$varp effect) :from-end t))
              (eff-args (append flat-pre-param-?vars pre-$vars pre-special-$vars))
              (eff-?vars (delete-duplicates (get-all-nonspecial-vars #'?varp effect) :from-end t))
@@ -307,8 +303,11 @@
              (eff-missing-vars (set-difference eff-args (append eff-free-?vars eff-$vars)))
              (queries (intersection (alexandria:flatten pre-param-types) *query-names*))
              (action nil))
-;        (ut::prt pre-$vars pre-special-$vars eff-$vars eff-args eff-?vars eff-bound-?vars eff-free-?vars
-;                 eff-extra-$vars eff-extra-?vars eff-missing-vars)
+        ;(ut::prt pre-?vars pre-$vars pre-special-$vars pre-bound-?vars
+        ;         eff-?vars eff-$vars eff-bound-?vars eff-free-?vars eff-args
+        ;         eff-extra-?vars eff-extra-$vars eff-missing-vars)
+        (check-variable-names name (append flat-pre-param-?vars pre-bound-?vars eff-bound-?vars)
+                              precondition effect (append pre-$vars eff-$vars pre-?vars eff-?vars))
         (cond (init-action
                  (setq *objective-value-p* nil))  ;this is an init-action, disable $objective-value
               ((or (member '$objective-value pre-$vars)  ;used in translate-assert
@@ -318,6 +317,8 @@
         (setq *eff-param-vars* eff-param-vars)  ;used in translate-assert
         (setf action (make-action
                        :name name
+                       :pre-defun-name (ut::intern-symbol name '-PRE-FN)
+                       :eff-defun-name (ut::intern-symbol name '-EFF-FN)
                        :duration duration
                        :precondition-params pre-params
                        :precondition-variables (append flat-pre-param-?vars pre-$vars)
@@ -330,8 +331,9 @@
                                               (if (equal evaluation '((nil)))
                                                 '(nil)
                                                 evaluation)))
-                       :precondition-lambda `(lambda (state &rest args)  ;,@pre-param-?vars)
+                       :precondition-lambda `(lambda (state &rest args)
                                                ,(format nil "~A precondition" name)
+                                               (declare (ignorable state))
                                                (destructuring-bind ,pre-param-?vars args
                                                  (let ,pre-$vars
                                                    (declare (ignorable ,@pre-$vars))
@@ -347,11 +349,11 @@
                                                             `(list ,@eff-args)
                                                             `t))))))
                        :effect-variables eff-param-vars  ;user listed parameter variables
-                       :effect-types nil  ;eff-param-types
                        :effect-lambda `(lambda (state ,@eff-args ,@eff-extra-?vars)
                                          ,(format nil "~A effect" name)
-                                         (let (updated-dbs ,@(set-difference (set-difference eff-extra-$vars eff-args)
-                                                                             eff-extra-?vars))  ;eff-extra-$vars)
+                                         (declare (ignorable ,@eff-args))
+                                         (let (updated-dbs followups ,@(set-difference (set-difference eff-extra-$vars eff-args)
+                                               eff-extra-?vars))
                                            (declare (ignorable ,@eff-extra-$vars))
                                            ,(translate effect 'pre)  ;start as pre, shift to eff in assert
                                            updated-dbs))
@@ -360,16 +362,7 @@
         (fix-if-ignore `(state ,@eff-missing-vars) (action.effect-lambda action))
         action))))
 
-#|
-(defun get-bound-?vars (tree)
-  "Searches tree for an atom or cons, and returns
-   list of all such items. To include tree itself, pass in (list tree)."
-  (iter (for item in tree)  (ut::prt item)
-        (when (and (listp item) (not (consp item)))
-          (if (member (car item) '(exists exist forsome forall forevery doall))
-            (nconcing (delete-if-not #'?varp (alexandria:flatten (second item))))
-            (nconcing (when (listp item) (get-bound-?vars item)))))))
-|#
+
 (defun get-bound-?vars (tree)
   "Retrieves the bound ?vars from a code tree."
   (let (?var-list)
@@ -449,13 +442,11 @@
              (not (eql *solution-type* 'min-value))
              (not (eql *solution-type* 'max-value)))
     (error "Goal is required unless searching for a *solution-type* of min-value or max-value."))
-  (setf (get '*goal* 'formula) form)  ;save user's goal for summary printout
   (let (($vars (get-all-nonspecial-vars #'$varp form)))
-    (setf (get '*goal* 'fn)
+    (setf (symbol-value 'goal-fn)
       `(lambda (state)  ;save uncoded goal translation
          (let ,$vars
            ,(when $vars
               `(declare (ignorable ,@$vars)))
            ,(translate form 'pre)))))
-  (fix-if-ignore '(state) (get '*goal* 'fn))
-  (setq *goal* (copy-tree (get '*goal* 'fn))))  ;to be compiled
+  (fix-if-ignore '(state) (symbol-value 'goal-fn)))  ;(get 'goal-fn 'fn))

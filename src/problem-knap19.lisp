@@ -163,7 +163,3 @@
   (contents nil)
   (load 0)
   (worth 0))
-
-
-(define-goal  
-  nil)

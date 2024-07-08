@@ -1,18 +1,18 @@
 ;;; Filename: problem-tiles2a.lisp
 
 
-;;; List problem specification for a blue/yellow tile shuffle in Islands of Insight.
+;;; Hash-table problem specification for a blue/yellow tile shuffle in Islands of Insight.
 
 
 (in-package :ww)  ;required
 
 (ww-set *problem* tiles2a)
 
-(ww-set *solution-type* every)  ;min-length)
+(ww-set *solution-type* min-length)
 
 (ww-set *tree-or-graph* graph)
 
-(ww-set *depth-cutoff* 32)  ;22)
+(ww-set *depth-cutoff* 26)
 
 
 (define-types
@@ -22,64 +22,60 @@
 
 
 (define-dynamic-relations
-  (loc tile $list)  ;location of a tile with coordinates
-  (empty $list))
-
-
-(defun merge-into-list (dotted-pair list)
-  "Lexicographically and destructively merges a dotted pair into a list of dotted pairs."
-  (merge 'list (list dotted-pair) list
-         (lambda (a b)
-           (or (< (car a) (car b))
-               (and (= (car a) (car b))
-                    (<= (cdr a) (cdr b)))))))
+  (loc tile $hash-table)  ;note $coordinates represented as a hash-table set with keys (row col)
+  (empty $hash-table))  ;note $coordinates represented as a hash-table set
 
 
 (define-action move
   1
   (standard ?tile tile (dot-product ?d-row delta-row ?d-col delta-col))
-  (and (bind (loc ?tile $tile-coords))
+  (and (bind (loc ?tile $tile-coords))  ;list of (row col) coordinates of a tile
        (bind (empty $empty-coords))
-       (setf $new-empty-coords (copy-list $empty-coords))
-       (iter (for tile-coord in $tile-coords)  ;starting empty coords subsequently updated
-             (for new-tile-coord = (cons (+ (car tile-coord) ?d-row) (+ (cdr tile-coord) ?d-col)))
-             (if (member new-tile-coord $empty-coords :test #'equal)
-               (setf $new-empty-coords (remove new-tile-coord $new-empty-coords :test #'equal))  
-               (unless (member new-tile-coord $tile-coords :test #'equal)  ;tile coord can move into spot vacated by other tile coord
+       (setf $new-empty-coords (copy-ht-set $empty-coords))
+       (iter (for (tile-coord nil) in-hashtable $tile-coords)
+             (for new-tile-coord = (cons (+ (car tile-coord) ?d-row)
+                                         (+ (cdr tile-coord) ?d-col)))
+             (if (gethash new-tile-coord $empty-coords)
+               (remhash new-tile-coord $new-empty-coords)
+               (unless (gethash new-tile-coord $tile-coords)
                  (return nil)))  ;can't make this move
-             (for opposite-coord = (cons (- (car tile-coord) ?d-row) (- (cdr tile-coord) ?d-col)))
-             (when (or (member opposite-coord $empty-coords :test #'equal)  ;check before next
-                       (not (member opposite-coord $tile-coords :test #'equal)))
-               (setf $new-empty-coords (merge-into-list (copy-list tile-coord) (copy-list $new-empty-coords)))) ;move leaves an empty space behind
-             (finally (setf $new-tile-coords (iter (for tile-coord in $tile-coords)  ;perform actual tile move
-                                                   (collect (cons (+ (car tile-coord) ?d-row)
-                                                                  (+ (cdr tile-coord) ?d-col)))))
+             (for opposite-coord = (cons (- (car tile-coord) ?d-row)
+                                         (- (cdr tile-coord) ?d-col)))
+             (when (or (gethash opposite-coord $empty-coords)  ;check before next
+                       (not (gethash opposite-coord $tile-coords)))
+               (setf (gethash (copy-list tile-coord) $new-empty-coords) t)) ;move leaves an empty space behind
+             (finally (setf $new-tile-coords (make-ht-set :test #'equal :size 4))
+                      (iter (for (tile-coord nil) in-hashtable $tile-coords)
+                            (setf (gethash (cons (+ (car tile-coord) ?d-row)
+                                                 (+ (cdr tile-coord) ?d-col))
+                                           $new-tile-coords)
+                                    t))  ;(ut::show $tile-coords) (ut::show $new-tile-coords)
                       (return t))))
-  (?tile $direction)
-  (do (setf $direction (cond ((= ?d-col 1) 'right)
-                             ((= ?d-row 1) 'down)
-                             ((= ?d-col -1) 'left)
-                             ((= ?d-row -1) 'up)
-                             (t (error "Incorrect direction"))))
+  (?tile ?d-row ?d-col)
+  (do ;(setf $direction (cond ((and (= ?d-row 0) (= ?d-col 1)) 'right)
+      ;                       ((and (= ?d-row 1) (= ?d-col 0)) 'down)
+      ;                       ((and (= ?d-row 0) (= ?d-col -1)) 'left)
+      ;                       ((and (= ?d-row -1) (= ?d-col 0)) 'up)
+      ;                       (t (error "Incorrect direction"))))
       (assert (loc ?tile $new-tile-coords)
               (empty $new-empty-coords))))
       
 
 (define-init
-  (loc H1 ((0 . 1) (0 . 2)))  ;initial locations of all parts of a tile
-  (loc V1 ((0 . 3) (1 . 3)))
-  (loc SQ1 ((0 . 4)))
-  (loc S1 ((0 . 5) (0 . 6) (1 . 4) (1 . 5)))
-  (loc H2 ((1 . 0) (1 . 1)))
-  (loc SQ2 ((1 . 2)))
-  (loc S2 ((2 . 1) (2 . 2) (3 . 0) (3 . 1)))
-  (loc H3 ((2 . 3) (2 . 4)))
-  (loc V2 ((2 . 5) (3 . 5)))
-  (loc SQ3 ((2 . 6)))
-  (loc H4 ((3 . 2) (3 . 3)))
-  (loc SQ4 ((3 . 4)))
-  (empty ((0 . 0) (1 . 6) (2 . 0) (3 . 6))))
+  `(loc H1 ,(make-ht-set :test #'equal :size 2 :initial-contents '((0 . 1) (0 . 2))))  ;initial locations of all parts of a tile
+  `(loc V1 ,(make-ht-set :test #'equal :size 2 :initial-contents '((0 . 3) (1 . 3))))
+  `(loc SQ1 ,(make-ht-set :test #'equal :size 1 :initial-contents '((0 . 4))))
+  `(loc S1 ,(make-ht-set :test #'equal :size 4 :initial-contents '((0 . 5) (0 . 6) (1 . 4) (1 . 5))))
+  `(loc H2 ,(make-ht-set :test #'equal :size 2 :initial-contents '((1 . 0) (1 . 1))))
+  `(loc SQ2 ,(make-ht-set :test #'equal :size 1 :initial-contents '((1 . 2))))  ;initial locations of all parts of a tile
+  `(loc S2 ,(make-ht-set :test #'equal :size 4 :initial-contents '((2 . 1) (2 . 2) (3 . 0) (3 . 1))))
+  `(loc H3 ,(make-ht-set :test #'equal :size 2 :initial-contents '((2 . 3) (2 . 4))))
+  `(loc V2 ,(make-ht-set :test #'equal :size 2 :initial-contents '((2 . 5) (3 . 5))))
+  `(loc SQ3 ,(make-ht-set :test #'equal :size 1 :initial-contents '((2 . 6))))
+  `(loc H4 ,(make-ht-set :test #'equal :size 2 :initial-contents '((3 . 2) (3 . 3))))  ;initial locations of all parts of a tile
+  `(loc SQ4 ,(make-ht-set :test #'equal :size 1 :initial-contents '((3 . 4))))
+  `(empty ,(make-ht-set :test #'equal :size 4 :initial-contents '((0 . 0) (1 . 6) (2 . 0) (3 . 6)))))
 
 
 (define-goal
-  (loc H1 ((1 . 2) (1 . 3))))
+  `(loc H1 ,(make-ht-set :test #'equal :size 2 :initial-contents '((1 . 2) (1 . 3)))))

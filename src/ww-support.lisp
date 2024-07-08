@@ -16,6 +16,12 @@
      ,@expressions))
 
 
+(defun troubleshoot (error-msg &rest args)
+  (apply #'cerror "Troubleshoot the current node" error-msg args)
+  (setf *troubleshoot-current-node* t)
+  nil)
+
+
 ;;;;;;;;;;;;; User Functions ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 

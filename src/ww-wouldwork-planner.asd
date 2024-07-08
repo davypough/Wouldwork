@@ -3,10 +3,9 @@
 
 (asdf:defsystem "ww-wouldwork-planner"
   :serial t
-  :around-compile (lambda (next)
-                    ;(proclaim '(optimize (debug 3)))
-                    (sb-ext:restrict-compiler-policy 'debug 3)
-                    (funcall next))
+;  :around-compile (lambda (next)
+;                    (sb-ext:restrict-compiler-policy 'debug 3)
+;                    (funcall next))
   :components
     ((:file "ww-utilities")
      (:file "ww-hstack")

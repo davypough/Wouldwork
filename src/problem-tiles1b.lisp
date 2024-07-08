@@ -2,7 +2,7 @@
 
 
 ;;; Problem specification for a blue/yellow tile shuffle in Islands of Insight.
-
+;;; Hash table for tile & empty sets (slow)
 
 (in-package :ww)  ;required
 
@@ -12,7 +12,7 @@
 
 (ww-set *tree-or-graph* graph)
 
-;(ww-set *depth-cutoff* 45)
+(ww-set *depth-cutoff* 40)
 
 
 (define-types

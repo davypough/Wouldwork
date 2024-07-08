@@ -6,7 +6,7 @@
 
 
 ;Note: It is necessary to close & reopen the lisp environment after
-;      changing from nonparallel to parallel, or parallel to nonparallel here.
+;      changing here from nonparallel to parallel, or parallel to nonparallel.
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter *threads* 0
     "The number of parallel threads to use.
@@ -16,6 +16,30 @@
       2 means two or more parallel processing threads
       N up to the number of available CPU threads"))
 (declaim (type fixnum *threads*))
+
+
+(defvar *probe* nil
+  "Inserts a probe to stop processing at a specific state.")
+;Example probes:
+;   Stops at specified node, for debugging given 
+;   (<action name> <instantiations> <depth> &optional <count>)
+;   (ww-set *probe* (wait (1 area4) 11))
+;   (ww-set *probe* (pour (jug4 9 jug2 0 4) 5))
+;   (ww-set *probe* (move (AREA1 AREA8) 3 5))  ;problem-crater
+;   (ww-set *probe* (pickup-connector (CONNECTOR3 AREA8) 4))
+;   (ww-set *probe* (JUMP (1 3 LD) 4))
+(declaim (type list *probe*))
+
+
+(defvar *debug* 0
+  "Set the debug level for subsequent runs.
+    0 - no debugging
+    1 - display full search tree
+    2 - display full search tree with states
+    3 - display basic nodes
+    4 - display full nodes
+    5 - display full nodes + break after each expansion cycle")
+(declaim (type fixnum *debug*))
 
 
 (defparameter *lock* (bt:make-lock))  ;for thread protection
@@ -39,12 +63,6 @@
 
 (setq *print-right-margin* 140)
 ;Allows non-wrap printing of *search-tree* for deep trees.
-
-
-(unintern 'heuristic?)
-(unintern 'prune?)
-(unintern 'bounding-function?)
-;Reset user defined functions, when defined on previous load.
 
 
 (defmacro define-global (var-name val-form &optional doc-string)
@@ -76,8 +94,37 @@
         `(pop ,var-name))))
 
 
+(defun reset-globals (symbols)
+  (dolist (symbol symbols)
+    (unintern symbol)))
+
+
+(reset-globals '(goal-fn constraint-fn heuristic? prune? bounding-function?))
+;Reset certain user defined functions, when defined on previous load.
+
+#|
+(when (boundp '*query-names*)
+  (reset-globals *query-names*))
+(when (boundp '*update-names*)
+  (reset-globals *update-names*))
+(when (boundp '*actions*)
+  (reset-globals (mapcar #'action.pre-defun-name *actions*))
+  (reset-globals (mapcar #'action.eff-defun-name *actions*)))
+(when (boundp '*init-actions*)
+  (reset-globals (mapcar #'action.pre-defun-name *init-actions*))
+  (reset-globals (mapcar #'action.eff-defun-name *init-actions*)))
+|#
+
 ;;;;;;;;;;;;;;;;;;;; Global Parameters ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+(define-global *troubleshoot-current-node* nil
+  "A flag telling wouldwork to redo the current node for debugging.")
+(declaim (type boolean *troubleshoot-current-node*))
+
+(define-global *branch* -1
+  "If n>0, explore only the nth branch from the *start-state*.")
+(declaim (type fixnum *branch*))
 
 (define-global *counter* 1
   "For misc debugging with probe function")
@@ -183,28 +230,6 @@
   "Set to t or nil.")
 (declaim (type (member nil t) *randomize-search*))
 
-(define-global *probe* nil
-  "Inserts a probe to stop processing at a specific state.")
-;Example probes:
-;   Stops at specified node, for debugging given 
-;   (<action name> <instantiations> <depth> &optional <count>)
-;   (ww-set *probe* (wait (1 area4) 11))
-;   (ww-set *probe* (pour (jug4 9 jug2 0 4) 5))
-;   (ww-set *probe* (move (AREA1 AREA8) 3 5))  ;problem-crater
-;   (ww-set *probe* (pickup-connector (CONNECTOR3 AREA8) 4))
-;   (ww-set *probe* (JUMP (1 3 LD) 4))
-(declaim (type list *probe*))
-
-(defvar *debug* 0  ;(if (member :ww-debug *features*) *debug* 0)
-  "Set the debug level for subsequent runs.
-    0 - no debugging
-    1 - display full search tree
-    2 - display full search tree with states
-    3 - display basic nodes
-    4 - display full nodes
-    5 - display full nodes + break after each expansion cycle")
-(declaim (type fixnum *debug*))
-
 (define-global *types* (make-hash-table :test #'eq)
   "Table of all types.")
 (declaim (type hash-table *types*))
@@ -277,9 +302,9 @@
   "List of all initialization actions.")
 (declaim (type list *init-actions*))
 
-(define-global *happenings* nil
+(define-global *happening-names* nil
   "The list of objects having exogenous events.")
-(declaim (type list *happenings*))
+(declaim (type list *happening-names*))
 
 (define-global *static-db* (make-hash-table :test #'equal)
   "Initial database of static propositions.")
@@ -296,15 +321,6 @@
 (define-global *hap-idb* (make-hash-table)
   "Initial integer database of happenings propositions.")
 (declaim (type hash-table *hap-idb*))
-
-(define-global *goal* nil
-  "Holds the goal test function--value is a lambda expression,
-   symbol-function is the function.")
-(declaim (type list *goal*))
-
-(define-global *constraint* nil
-  "Any constraint test function.")
-(declaim (type list *constraint*))
 
 (define-global *last-object-index* 0
   "Last index of object constants seen so far in propositions.")

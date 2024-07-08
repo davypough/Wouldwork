@@ -212,7 +212,7 @@
        (not (bind (contents> $x-2 $y+2 $z $any-peg)))
        (setq $x-3 (- $x 3))
        (setq $y+3 (+ $y 3))
-       (bind (contents> $x-3 $y+3 $z $any-peg))
+       (bind (contents> $x-3 $y+3 $z $2nd-peg))
        (bind (peg-count $peg-count))
        (bind (board-pegs $board-pegs)))
   ($x $y)
