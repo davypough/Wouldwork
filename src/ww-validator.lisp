@@ -3,6 +3,9 @@
 ;;; Tests to verify structures created from user inputs are error free.
 
 
+(in-package :ww)
+
+
 (defun check-relation (relation)
   "Checks for errors in a user-defined relation--eg, (height ?obj $fixnum)."
   (check-type relation cons)
