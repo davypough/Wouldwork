@@ -206,7 +206,7 @@
                      ,(third body)  ;should be a declare statement
                      ,(translate (fourth body) 'pre)))
                 (translate body 'pre)))))))
-  (fix-if-ignore '(state) (symbol-value name)))  ;(get `,name 'fn)))
+  (fix-if-ignore '(state) (symbol-value name)))
 
 
 (defmacro define-update (name args body)
@@ -402,8 +402,8 @@
   "Ignores variable symbols that are not in the lambda-body."
   (let ((ignores (set-difference
                     symbols (get-all-nonspecial-vars (lambda (x)
-                                            (member x symbols))
-                                          (cddr lambda-expr)))))
+                                                       (member x symbols))
+                                                     (cddr lambda-expr)))))
     (when ignores
       (push `(declare (ignorable ,@ignores)) (cddr lambda-expr)))))
 
@@ -449,4 +449,5 @@
            ,(when $vars
               `(declare (ignorable ,@$vars)))
            ,(translate form 'pre)))))
+  (setf (get 'goal-fn :form) form)
   (fix-if-ignore '(state) (symbol-value 'goal-fn)))  ;(get 'goal-fn 'fn))

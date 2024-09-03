@@ -487,7 +487,7 @@
   (format t "~2%Average branching factor = ~,1F" *average-branching-factor*)
   (format t "~2%Start state:~%~A" (list-database (problem-state.idb *start-state*)))
   (format t "~2%Goal:~%~A~2%" (when (boundp 'goal-fn)
-                                (symbol-value 'goal-fn)))  ;(get 'goal-fn 'formula))
+                                (get 'goal-fn :form)))  ;(symbol-value 'goal-fn)
   (when (and (eql *solution-type* 'count)) (> *solution-count* 0)
     (format t "~%Total solution paths found = ~:D ~2%" *solution-count*))
   (when *solutions*  ;ie, recorded solutions
