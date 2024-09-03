@@ -285,10 +285,9 @@ USE MULTIPLE CORES:
 						(*print-pretty* . t))))
      ,@body))
 
-(defun run-test-problems (&optional (problem-file "problem.lisp"))
+(defun run-test-problems (&optional (problem-file "problem.lisp") (cpu-cores *threads*))
   (with-silenced-compilation
-      (let ((problem-names (list-problem-names))
-            (cores *threads*))
+      (let ((problem-names (list-problem-names)))
 	(loop for problem in problem-names
 	      when (member problem *problem-names* :test #'string=)
 		do (progn
@@ -296,8 +295,8 @@ USE MULTIPLE CORES:
 		     (format t "starting to analyze \"~a\"~%~%" problem)
 		     (format t "=====================================================~%~%")
 		     (reload-with-new-problem problem problem-file)
-                     (setf *threads* cores)
-		     (solve)
+                     (let ((*threads* cpu-cores))
+		       (solve))
 		     (format t "=====================================================~%~%")
 		     (format t "problem \"~a\" successfully solved.~%~%" problem)
 		     (format t "=====================================================~%~%"))
@@ -314,12 +313,13 @@ USE MULTIPLE CORES:
 
 
 
-(defun run (problem-name)
+(defun run (problem-name &optional (cpu-cores *threads*))
   "Loads, reloads and solves a single problem."
   (with-silenced-compilation
       (cond ((member problem-name (list-all) :test #'string=)
              (reload-with-new-problem problem-name)
-             (solve))
+             (let ((*threads* cpu-cores))
+               (solve)))
             (t
              (format t "The problem \"~a\" was not found. Please check spelling (and the path)." problem-name)))))
 
