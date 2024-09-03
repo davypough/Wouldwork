@@ -24,7 +24,7 @@
                (if (or (> *debug* 0) *probe*)
                  (pushnew :ww-debug *features*)  ;allows inserting debug code
                  (setf *features* (delete :ww-debug *features*)))
-               (progn (asdf:load-system "ww-wouldwork-planner" :force t) (in-package :ww))
+               (progn (asdf:load-system :wouldwork :force t) (in-package :ww))
                ',val))
     (*probe*
        `(progn (setq *probe* ',val)
