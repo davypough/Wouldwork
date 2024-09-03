@@ -48,10 +48,28 @@ SOLVE A SINGLE PROBLEM:
 
 SOLVE ALL AVAILABLE PROBLEMS:
 
+      (run-test-problems)
+      
+      ;; or shorter:
+
       (run-all)
+
+USE MULTIPLE CORES:
+      
+      ;; use 3 cores
+      (setf *threads* 3)
+
+      ;; don't use parallelization
+      (setf *threads* 0) ;; default value
+
+      ;; how many cores are available?
+      (ql:quickload :serapeum) ;; serapeum is the follow up of the alexandria package
+      (serapeum:count-cpus) ;; => will tell you how many cores your computer has
+
 
 ;; --------------------- WOULDWORK (2024) Dave Brown <davypough@gmail.com> ----------------- ;;
 "))
+
 
 (defun %main (argv)
   "Parse CLI args."
@@ -229,29 +247,13 @@ SOLVE ALL AVAILABLE PROBLEMS:
    the content of the correponsing problem file.
    And then reloads the entire package anew (which leads to re-compilation)."
   (exchange-problem-file problem-name problem-file)
-  (asdf:load-system system-name :force t))
+  ;; (asdf:operate 'asdf:load-op :wouldwork :force-not '(:iterate :alexandria :lparallel)))
+  (let ((cores *threads*))
+    (asdf:load-system system-name :force t)
+    (setf *threads* cores)))
 
 
 (declaim (ftype (function () t) solve))  ;function solve located in searcher.lisp
-
-#+NIL ;; is like commenting out, but Emacs will indent correctly - this was the original test function
-(defun solve-all-problems (&optional (problem-file "problem.lisp"))
-  (loop for (problem path) on (list-problem-files-plist) by #'cddr
-	if (y-or-n-p "Proceed with testing ~A?: " path)
-	  do (progn
-	       (copy-file-content path (add-file (make-pathname :directory (pathname-directory path)) problem-file))
-	       (handler-bind ((sb-sys:interactive-interrupt
-				(lambda (c)
-				  (declare (ignore c))
-				  (throw 'my-loop nil))))
-		 (catch 'my-loop
-		   (labels ((my-loop ()
-			      (with-open-stream (*standard-output* (make-broadcast-stream))
-				(asdf:load-system :wouldwork :force t))
-			      (solve)))
-		     (my-loop)))))
-	else do (return))) ;; inactivated
-;; I decided to let it not ask to accelerate the testing procedure.
 
 (defparameter *problem-files*
   '("problem-blocks3.lisp" "problem-blocks4.lisp" "problem-boxes.lisp"
@@ -283,9 +285,10 @@ SOLVE ALL AVAILABLE PROBLEMS:
 						(*print-pretty* . t))))
      ,@body))
 
-(defun run-all (&optional (problem-file "problem.lisp"))
+(defun run-test-problems (&optional (problem-file "problem.lisp"))
   (with-silenced-compilation
-      (let ((problem-names (list-problem-names)))
+      (let ((problem-names (list-problem-names))
+            (cores *threads*))
 	(loop for problem in problem-names
 	      when (member problem *problem-names* :test #'string=)
 		do (progn
@@ -293,6 +296,7 @@ SOLVE ALL AVAILABLE PROBLEMS:
 		     (format t "starting to analyze \"~a\"~%~%" problem)
 		     (format t "=====================================================~%~%")
 		     (reload-with-new-problem problem problem-file)
+                     (setf *threads* cores)
 		     (solve)
 		     (format t "=====================================================~%~%")
 		     (format t "problem \"~a\" successfully solved.~%~%" problem)
@@ -305,6 +309,10 @@ SOLVE ALL AVAILABLE PROBLEMS:
 			      (t
 			       (format t "Error at problem ~a~%~%" problem)
 			       (return nil))))))))
+;; alias:
+(setf (fdefinition 'run-all) #'run-test-problems)
+
+
 
 (defun run (problem-name)
   "Loads, reloads and solves a single problem."
@@ -322,3 +330,5 @@ SOLVE ALL AVAILABLE PROBLEMS:
       (loop for name in (list-problem-names)
             do (format t "~a~%" name))
       (list-problem-names)))
+
+

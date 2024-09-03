@@ -17,6 +17,7 @@
   (:shadowing-import-from :iterate)
   (:export #:main
            #:help
+           #:run-test-problems
            #:run-all
            #:list-all
            #:run
