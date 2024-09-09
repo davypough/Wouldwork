@@ -43,3 +43,135 @@ The Wouldwork Planner is yet one more in a long line of classical planners.  A b
 
 For additional information, please see the Wouldwork user manual.
 Dave Brown, davypough@gmail.com
+
+
+# Quick Usage
+
+## Install Wouldwork
+
+Currently, choose a folder and git clone this repository there:
+
+```
+git clone git@github.com:gwangjinkim/Wouldwork.git
+```
+
+Open your SBCL:
+```
+;; define this function
+(defun add-folder (folder)
+  "Adds the given FOLDER to Quicklisp's local project directories."
+  (let ((absolute-path (uiop:ensure-directory-pathname folder)))
+    (unless (probe-file absolute-path)
+      (error "The folder ~A does not exist." folder))
+    ;; Add folder to *local-project-directories* if it's not already there
+    (unless (member absolute-path ql:*local-project-directories* :test #'equal)
+      (push absolute-path ql:*local-project-directories*)
+      (format t "Added ~A to Quicklisp's local project directories.~%" absolute-path))))
+
+;; and add the folder to your quicklisp *local-project-directories*
+;; by calling:
+(add-folder #P"/path/to/your/folder/containing/Wouldwork/")
+```
+
+Now, `ql:*local-project-directories*` contains this folder too, so that you can run:
+
+```
+(ql:quickload :wouldwork)
+```
+
+Or easier: Just go to `~/quicklisp/local-projects/` and `git clone git@github.com:gwangjinkim/Wouldwork.git`.
+Open then SBCL and run `(ql:quickload :wouldwork)`.
+
+## Run Wouldwork
+
+```
+(ql:quickload :wouldwork)
+(in-package :wouldwork)
+
+(help)  ;; runs (ww:help)
+```
+
+And follow the instructions there!
+
+these are:
+
+```
+;; --------------------- WOULDWORK (2024) Dave Brown <davypough@gmail.com> ----------------- ;;
+
+INSTALLATION AND START:
+
+      ;; when you git-cloned the respository, then you can manually load the asd file
+      ;; to asdf
+      (asdf:load-asd \"/path/to/wouldwork/wouldwork.asd\")
+      ;; after that, you can (ql:quickload :wouldwork) without any problems.
+      ;; you can place this to your personal .sbclrc file so that it asdf and quicklisp always
+      ;; can recognize your package and its position in the system.
+
+      (ql:quickload :wouldwork)  ;; install/load/import wouldwork package
+      (in-package :wouldwork)    ;; enter the namespace
+                                 ;; otherwise you need to prepone 'ww:' to your commands
+
+ADD YOUR PROBLEM FOLDER:
+
+      ;; the problem folder is in the package source folder 'src' in your quicklisp's local-folder
+      ;; to see the exact location of your package, you can run:
+      (ww::get-package-root :wouldwork)
+      (get-src-folder-path)   ;; returns the exact location where you should place your
+                                 ;; problem-<name>.lisp files - replace <name> by your problem name.
+
+      ;; but if you want to add your problem files to a custom folder,
+      ;; add them in this way:
+      (add-problem-folder #P\"/path/to/your/folder/\")
+
+      ;; this returns a list of all folder paths in which wouldwork will search for problem folders
+      ;; this list of folders is saved in the global variable
+      *problem-folder-paths*
+
+      ;; to remove your custom folder, run:
+      (remove-problem-folder #P\"/path/to/your/folder/\")
+
+SOLVE PROBLEMS:
+
+SOLVE A SINGLE PROBLEM:
+
+      (list-all)
+
+      ;; pick one of the listed problems, e.g. \"array-path\" and run (load and solve) the problem:
+
+      (run \"array-path\")
+
+SOLVE ALL AVAILABLE PROBLEMS:
+
+      (run-test-problems)
+      
+      ;; or shorter:
+
+      (run-all)
+
+USE MULTIPLE CORES:
+      
+      ;; use 3 cores
+      (setf *threads* 3)     ;; this doesn't work yet - we are working on it!
+
+      ;; don't use parallelization
+      (setf *threads* 0) ;; default value
+
+      ;; how many cores are available?
+      (ql:quickload :serapeum) ;; serapeum is the follow up of the alexandria package
+      (serapeum:count-cpus) ;; => will tell you how many cores your computer has
+
+
+;; --------------------- WOULDWORK (2024) Dave Brown <davypough@gmail.com> ----------------- ;;
+```
+
+Quickstart Setup:
+
+1. Install (or update) SBCL and Quicklisp
+2. Clone or download the Wouldwork repo (eg, to your local-projects directory under quicklisp)
+3. Start SBCL from the command line
+4. At the SBCL prompt, enter (ql:quickload "wouldwork")
+5. Enter (in-package :ww) to switch from the cl-user package to the wouldwork package
+6. Enter (run-test-problems) to verify everything is loaded & working properly
+7. Enter (list-all) to display all pre-defined problem specifications in the src directory
+8. Create your own problem specification by emulating any of the problem-<label>.lisp files in the src directory
+9. Enter (run "<label>") to let Wouldwork search for a solution to your problem.
