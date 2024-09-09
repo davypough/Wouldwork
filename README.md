@@ -49,6 +49,8 @@ Dave Brown, davypough@gmail.com
 
 ## Install Wouldwork
 
+### Custom Folder
+
 Currently, choose a folder and git clone this repository there:
 
 ```
@@ -72,6 +74,9 @@ Open your SBCL:
 ;; by calling:
 (add-folder #P"/path/to/your/folder/containing/Wouldwork/")
 ```
+Of course, you could do directly `(push your-folder-path ql:*local-project-directories*)`, but the checks ensure 
+that there are no typos and that the format is correct (folders in Common lisp should
+end - like in elisp - with a "/").
 
 Now, `ql:*local-project-directories*` contains this folder too, so that you can run:
 
@@ -79,8 +84,24 @@ Now, `ql:*local-project-directories*` contains this folder too, so that you can 
 (ql:quickload :wouldwork)
 ```
 
+### Easier: using `local-projects` folder of quicklisp
+
 Or easier: Just go to `~/quicklisp/local-projects/` and `git clone git@github.com:gwangjinkim/Wouldwork.git`.
 Open then SBCL and run `(ql:quickload :wouldwork)`.
+
+Be aware: When you are using roswell, then your `local-projects` folder is usually in:
+`~/.roswell/local-projects/` - or wherever you have it. 
+
+That is the reason, why the other method is more robust - you then don't have to search for the `local-projects` folder first.
+
+Another point is - be aware, if you want to use your roswell sbcl, then you have to start with
+`ros run`.
+
+If you just run `sbcl` then check with `which sbcl` where its location is.
+and your `~/.sbclrc` would tell you which quicklisp it is using. And in this case, you have to use mostly
+`~/quicklisp/local-projects/`. But of course this depends on where you installed your `quicklisp` for your global `sbcl`.
+
+
 
 ## Run Wouldwork
 
