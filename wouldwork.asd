@@ -1,12 +1,13 @@
 (in-package :asdf-user)
 
 (defsystem "wouldwork"
-  :author "Dave Brown <davypough@gmail.com>"
+  :author ("Dave Brown <davypough@gmail.com>"
+           "Gwang-Jin Kim <gwang.jin.kim.phd@gmail.com>")
   :version "0.0.1"
   :license "MIT"
   :description "classical planning with the wouldwork planner"
   :homepage "https://github.com/davypough/Wouldwork"
-  :bug-tracker ""
+  :bug-tracker "https://github.com/davypough/Wouldwork/issues"
   :source-control (:git "https://github.com/davypough/Wouldwork.git")
 
   ;; Dependencies.
