@@ -45,8 +45,12 @@
                *item-structures*)))))
 
 
-(create-item-structures (in-src "data-knap19.lisp"))
-;(create-item-structures (in-src "data-knap30.lisp"))  ;name of the data file
+(setq *default-pathname-defaults*  ;point to where knapsack data file is stored
+   #P"D:\\Users Data\\Dave\\SW Library\\AI\\Planning\\Wouldwork Planner\\")
+
+
+(create-item-structures "data-knap19.lisp")  ;name of the data file
+;(create-item-structures "data-knap30.lisp")  ;name of the data file
 
 
 (defparameter *sorted-item-structures*

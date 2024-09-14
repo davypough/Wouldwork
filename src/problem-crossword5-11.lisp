@@ -116,13 +116,15 @@
               (trie-insert *trie-ht* (reverse word-string))
               (trie-insert *trie-ht* word-string))))))
 
+
 (let ((os (software-type)))
-  (encode-dictionary (in-src (cond ((string= os "Linux")
-                                    "English-words-455K.txt")
-                                   ((string= os "Win32")
-                                    "English-words-455K.txt")
-                                   ((string= os "Darwin")
-                                    "English-words-455K.txt")))))
+  (cond ((string= os "Linux")
+         (encode-dictionary
+           "/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-455K.txt"))
+        ((string= os "Win32")
+         (encode-dictionary "English-words-455K.txt"))
+        (t (error "Unknown Operating System in problem.lisp"))))
+
 
 (defun trie-search (trie pattern)
   ;Searches a trie of hts for the first word that matches a pattern.

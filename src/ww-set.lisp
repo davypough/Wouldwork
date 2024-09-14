@@ -18,21 +18,21 @@
   ;Allows resetting of user parameters after loading.
   (case param
     ((*problem* *problem-type* *depth-cutoff* *tree-or-graph* *solution-type* *progress-reporting-interval* *randomize-search* *branch*)
-     `(setq ,param ',val))
+       `(setq ,param ',val))
     (*debug*
-     `(progn (setq *debug* ',val)
-	     (if (or (> *debug* 0) *probe*)
+       `(progn (setq *debug* ',val)
+               (if (or (> *debug* 0) *probe*)
                  (pushnew :ww-debug *features*)  ;allows inserting debug code
                  (setf *features* (delete :ww-debug *features*)))
-	     (with-silenced-compilation (asdf:load-system :wouldwork :force t) (in-package :ww))
-	     ',val))
+               (progn (asdf:load-system "ww-wouldwork-planner" :force t) (in-package :ww))
+               ',val))
     (*probe*
-     `(progn (setq *probe* ',val)
-	     (setf *debug* 0)
-	     (setq *counter* 1)
-	     ',val))
+       `(progn (setq *probe* ',val)
+               (setf *debug* 0)
+               (setq *counter* 1)
+               ',val))
     (*threads*
-     `(progn (format t "~%*threads* cannot be changed with ww-set.")
-	     (format t "~%Instead, set its value in the file settings.lisp, and then exit and restart SBCL.~2%")))
+       `(progn (format t "~%*threads* cannot be changed with ww-set.")
+               (format t "~%Instead, set its value in the file settings.lisp, and then exit and restart SBCL.~2%")))
     (otherwise
-     (format t "~%~A is not a valid parameter name in ww-set.~%" param))))
+       (format t "~%~A is not a valid parameter name in ww-set.~%" param))))
