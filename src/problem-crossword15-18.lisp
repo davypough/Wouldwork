@@ -238,13 +238,12 @@ file        #states     states/sec      time    best
 
 
 (let ((os (software-type)))
-  (cond ((string= os "Linux")
-         (encode-dictionary
-           ;"/media/dave/DATA/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-58K.txt"))
-           "/mnt/d/Users Data/Dave/SW Library/AI/Planning/Wouldwork Planner/English-words-455K.txt"))
-        ((string= os "Win32")
-         (encode-dictionary "English-words-100K.txt"))
-        (t (error "Unknown Operating System detected in problem.lisp"))))
+  (encode-dictionary (in-src (cond ((string= os "Linux")
+                                    "English-words-455K.txt")
+                                   ((string= os "Win32")
+                                    "English-words-100K.txt")
+                                   ((string= os "Darwin")
+                                    "English-words-100K.txt")))))
 
 
 (defun trie-search (trie pattern)
