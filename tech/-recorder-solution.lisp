@@ -349,7 +349,8 @@ state with RECORDING-IN-PROGRESS supplies one legacy implicit open cycle."
                :ending nil)))
          (cycles nil)
          (setup-reversed nil))
-    (when (> cycles-used *max-recorder-cycles*)
+    (when (and *max-recorder-cycles*
+               (> cycles-used *max-recorder-cycles*))
       (return-from parse-recorder-path
         (values nil nil
                 (recorder-boundary-error cycles-used :maximum-exceeded))))
@@ -363,7 +364,8 @@ state with RECORDING-IN-PROGRESS supplies one legacy implicit open cycle."
                         (recorder-path-cycle.number open-cycle)
                         :multiple-starts))))
           (incf cycles-used)
-          (when (> cycles-used *max-recorder-cycles*)
+          (when (and *max-recorder-cycles*
+                     (> cycles-used *max-recorder-cycles*))
             (return-from parse-recorder-path
               (values nil nil
                       (recorder-boundary-error
@@ -604,7 +606,8 @@ an event, so this conservative test retains it."
 
 (defun recorder-boundary-dominance-enabled-p ()
   "Whether this search can safely discard resource-dominated closed boundaries."
-  (and (> *max-recorder-cycles* 1)
+  (and (or (null *max-recorder-cycles*)
+           (> *max-recorder-cycles* 1))
        (eql *tree-or-graph* 'graph)
        (not *hybrid-mode*)
        (null *happening-names*)

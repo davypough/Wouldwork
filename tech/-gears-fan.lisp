@@ -77,7 +77,7 @@
 ;;;               declared has-elevation or 1 (matching transmitter/receiver anchors);
 ;;;               floor/angled drives use their floor elevation
 ;;;               blower-turning-for-object -- ordinary turning state except that recorder
-;;;               ghosts use recording-side wall-gears state
+;;;               ghosts use recording-side state for each recorder-supported blower drive
 ;;;               blower-active-for-object -- presence plus the correct turning view
 ;;;               stack-rider  --  true when a candidate is directly or transitively
 ;;;               stacked above a given base

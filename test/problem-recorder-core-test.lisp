@@ -94,7 +94,7 @@
   (expect-not-registered :update 'update-recording-plate-status!)
   (expect-not-registered :update 'update-recording-receiver-status!)
   (expect-not-registered :update 'update-recording-gate-status!)
-  (expect-not-registered :update 'update-recording-gears-status!)
+  (expect-not-registered :update 'update-recording-blower-status!)
   (expect-registrations :solution-validator nil)
   (expect-registrations :solution-printer nil))
 

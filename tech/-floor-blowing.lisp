@@ -152,32 +152,29 @@
 
 
 (define-update update-floor-blowing-status! ()
-  ;; Pass 1 launches every occupant resting on a blowing floor source.  Pass 2 drops
-  ;; occupants at a destination that no blowing floor drive still sustains.
+  ;; Pass 1 launches each occupant only when its environmental view says the source is
+  ;; active.  In recorder problems, live occupants therefore read playback turning while
+  ;; ghosts read recording turning.  Pass 2 applies the same distinction when deciding
+  ;; whether an unsupported occupant remains sustained at a destination.
   (do (doall (?source (either fan floor-blower wall-blower angled-blower))
-        (if (blowing ?source)
-          (do (assign $drive (blower-drive ?source))
-              (if (or (floor-gears $drive)
-                      (floor-blower $drive))
-                (blow-occupants-away! ?source $drive)))))
+        (do (assign $drive (blower-drive ?source))
+            (if (or (floor-gears $drive)
+                    (floor-blower $drive))
+              (blow-occupants-away! ?source $drive))))
       (doall (?g (either floor-gears floor-blower))
         (do (bind (aimed-at ?g $destination))
-            (if (not (exists (?drive (either floor-gears floor-blower))
-                       (and (blower-present ?drive)
-                            (turning ?drive)
-                            (bind (aimed-at ?drive $f-destination))
-                            (eql $f-destination $destination))))
-              (drop-occupants! ?g $destination))))))
+            (drop-occupants! ?g $destination)))))
 
 
 (define-update blow-occupants-away!
     (?source (either fan floor-blower)
      ?drive (either floor-gears floor-blower))
-  ;; Launch every non-fan occupant resting on the source, preserving any stack above it.
-  ;; A fan is instead toppled onto the ground at the source location.
+  ;; Launch every active-view non-fan occupant resting on the source, preserving any stack
+  ;; above it.  An active-view fan is instead toppled onto the ground at the source.
   (do (bind (aimed-at ?drive $destination))
       (doall (?x support-occupant)
-        (if (on ?x ?source)
+        (if (and (on ?x ?source)
+                 (blower-active-for-object ?x ?drive))
           (do (not (on ?x ?source))
               (if (not (fan ?x))
                 (relocate-stack! ?x $destination)))))))
@@ -185,11 +182,16 @@
 
 (define-update drop-occupants!
     (?drive (either floor-gears floor-blower) ?destination location)
-  ;; When the sustaining stream stops, return each unsupported stack base to the drive.
+  ;; Return each unsupported stack base only when no floor drive aimed at this destination
+  ;; is active in that object's environmental view.
   (do (bind (has-position ?drive $g-location))
       (doall (?x support-occupant)
         (if (and (not (fan ?x))
                  (bind (has-location ?x $x-location))
                  (eql $x-location ?destination)
-                 (not (bind (on ?x $support))))
+                 (not (bind (on ?x $support)))
+                 (not (exists (?active-drive (either floor-gears floor-blower))
+                        (and (blower-active-for-object ?x ?active-drive)
+                             (bind (aimed-at ?active-drive $active-destination))
+                             (eql $active-destination ?destination)))))
           (relocate-stack! ?x $g-location)))))

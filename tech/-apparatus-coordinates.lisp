@@ -17,23 +17,23 @@
 ;;; Self-contained; spliced by (include-tech -apparatus-coordinates).
 ;;;
 ;;; REQUIRES:
-;;;   types     : transmitter, receiver, floor-repeater, wall-repeater, gun  --  all
+;;;   types     : transmitter, receiver, floor-repeater, wall-repeater, gun, switch -- all
 ;;;               optional; a problem declaring none of them gets an empty relation
 ;;; PROVIDES:
 ;;;   relation  : (apparatus-coords>
-;;;                 (either transmitter receiver floor-repeater wall-repeater gun)
+;;;                 (either transmitter receiver floor-repeater wall-repeater gun switch)
 ;;;                 $rational $rational $rational)  --  z optional, defaulting to 1
 ;;;   init      : apparatus-coordinates-init-check
 
 (in-package :ww)
 
 
-(define-optional-types transmitter receiver floor-repeater wall-repeater gun)
+(define-optional-types transmitter receiver floor-repeater wall-repeater gun switch)
 
 
 (define-static-relations
   (apparatus-coords>
-    (either transmitter receiver floor-repeater wall-repeater gun)
+    (either transmitter receiver floor-repeater wall-repeater gun switch)
     $rational $rational $rational))
 
 

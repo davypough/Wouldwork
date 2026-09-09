@@ -122,6 +122,14 @@
     (mapcar (lambda (clause) (cons obstacle clause)) family)))
 
 
+(defun traversal-family-add-obstacles (family obstacles)
+  ;; Path extension by one compound crossing.  Every member of OBSTACLES belongs to the
+  ;; same conjunctive clause; this is distinct from TRAVERSAL-FAMILY-UNION, which joins
+  ;; alternative routes.
+  (traversal-minimize-family
+    (mapcar (lambda (clause) (append obstacles clause)) family)))
+
+
 (defun traversal-minimize-family (family)
   ;; Canonical clauses, duplicates removed, and every nonminimal superset discarded.
   (let* ((clauses (remove-duplicates
@@ -225,7 +233,7 @@
   '(open recording-open      ;-gate / gate.lisp, through GATE-OPEN-FOR-OBJECT
     holding                  ;-holding, through OBSTACLE-CLEAR's screen and ladder arms
     mounted-on               ;-gears-fan, through BLOWER-PRESENT
-    turning recording-turning ;-gears-fan / -recorder-wall-gears-shadow, through
+    turning recording-turning ;-gears-fan / -recorder-blower-shadow, through
                               ;BLOWER-TURNING-FOR-OBJECT
     lethal)                  ;-threat, through SAFE
   "The dynamic relations a traversal builder can read.  Each is commented with the

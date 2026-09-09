@@ -7,12 +7,19 @@
 ;;; Nested-only; included by technologies that call reachable.
 ;;;
 ;;; REQUIRES:
-;;;   type  : location
+;;;   type  : location; switch is optional
 ;;; PROVIDES:
 ;;;   query : reachable  --  identity default, overridden by reachability
 
 (in-package :ww)
 
 
-(define-query reachable (?location1 location ?location2 location)
-  (eql ?location1 ?location2))
+(define-optional-types switch)
+
+
+(define-types
+  reach-target (either location switch))
+
+
+(define-query reachable (?target reach-target ?reacher location)
+  (eql ?target ?reacher))

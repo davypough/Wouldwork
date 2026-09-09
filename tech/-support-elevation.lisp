@@ -39,7 +39,7 @@
   "Maximum elevation gap across which an agent may manipulate, land, or clear a barrier.")
 
 
-(define-optional-types box fan tray)
+(define-optional-types box fan tray switch)
 
 
 (define-query within-agent-vertical-reach (?agent agent ?target-elevation)
@@ -148,6 +148,8 @@
              location-values
              (vertical-reach-object-values state agents 'base)
              (vertical-reach-object-values state cargo 'base)
+             (vertical-reach-object-values
+               state (init-type-instances 'switch) 'base)
              (vertical-reach-gears-values state))))
     (when (vertical-reach-technology-present-p "-placement")
       (setf values
@@ -166,7 +168,8 @@
 
 (define-problem-helper vertical-reach-manipulation-relevant-p (state)
   (and (init-type-instances 'agent)
-       (init-type-instances 'cargo)
+       (or (init-type-instances 'cargo)
+           (init-type-instances 'switch))
        (vertical-reach-values-vary-p
          (vertical-reach-manipulation-values state))))
 

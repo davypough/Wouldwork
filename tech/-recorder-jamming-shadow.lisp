@@ -15,10 +15,11 @@
 (in-package :ww)
 
 
-(define-optional-types gate wall-gears wall-blower jammer)
+(define-optional-types gate floor-blower wall-gears wall-blower jammer)
 
 
-(define-query recording-jammed (?target (either gate wall-gears wall-blower))
+(define-query recording-jammed
+    (?target (either gate floor-blower wall-gears wall-blower))
   ;; Only a mapped ghost jammer existed during the recording, so live-only playback jams
   ;; do not leak into the recording shadow.
   (exists (?jammer jammer)

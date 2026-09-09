@@ -951,8 +951,9 @@
                                 Define patrollers or other happening objects first.~2%"))))
     (*symmetry-pruning* nil)
     (*max-recorder-cycles*
-      (unless (and (typep val 'fixnum) (> val 0))
-        (error "Can't set *max-recorder-cycles* to ~S. Must be a positive integer." val)))
+      (unless (or (null val)
+                  (and (typep val 'fixnum) (> val 0)))
+        (error "Can't set *max-recorder-cycles* to ~S. Must be a positive integer or NIL." val)))
     (*recorder-prefix-pruning*
       (unless (typep val 'boolean)
         (error "Can't set *recorder-prefix-pruning* to ~S. Must be either T or NIL." val)))

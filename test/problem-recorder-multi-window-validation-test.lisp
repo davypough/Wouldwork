@@ -226,7 +226,19 @@
     (and (null diagnostic)
          (null trailing-setup)
          (= (length cycles) 3)
-         (null (recorder-path-cycle.ending (third cycles))))))
+         (null (recorder-path-cycle.ending (third cycles)))))
+  (let ((*max-recorder-cycles* nil))
+    (multiple-value-bind (cycles trailing-setup diagnostic)
+        (parse-recorder-path
+          *start-state*
+          (append
+            (recorder-three-window-path)
+            '((12.0 (start-recorder live-agent)))))
+      (and (null diagnostic)
+           (null trailing-setup)
+           (= (length cycles) 4)
+           (= (recorder-path-cycle.number (fourth cycles)) 4)
+           (null (recorder-path-cycle.ending (fourth cycles)))))))
 
 
 (define-test-claim recorder-valid-multi-window-paths
@@ -381,6 +393,10 @@
           ;; The default one-cycle policy avoids the boundary frontier entirely.
           (let ((*max-recorder-cycles* 1))
             (not (recorder-boundary-dominance-enabled-p)))
+          ;; Unrestricted graph search still uses the frontier to suppress equivalent
+          ;; histories distinguished only by a needlessly larger cycle count.
+          (let ((*max-recorder-cycles* nil))
+            (recorder-boundary-dominance-enabled-p))
           ;; Open states retain their complete identity and never enter this frontier.
           (let* ((start-validation
                    (recorder-path-validation

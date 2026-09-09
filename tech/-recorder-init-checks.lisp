@@ -53,7 +53,7 @@
       (init-check-recording-pairings literals live-objects ghost-objects)
       (init-check-recording-jamming-facts literals live-objects ghost-objects)
       (init-check-recording-mapped-wall-fans live-objects ghost-objects)
-      (init-check-recording-wall-gears-controls literals))))
+      (init-check-recording-blower-controls literals))))
 
 
 (define-init-check-helper init-recording-copy-compatible-p (live ghost)
@@ -178,21 +178,23 @@
                fan)))))
 
 
-(define-init-check-helper init-check-recording-wall-gears-controls (literals)
-  "Rejects control sources that Stage 3's recording shadow cannot derive."
+(define-init-check-helper init-check-recording-blower-controls (literals)
+  "Rejects control sources that the recording shadow cannot derive."
   (when (init-dnf-controls-relation-p)
     (dolist (literal (positive-init-literals-with-relation 'controls literals))
       (destructuring-bind (clauses controlled-object mode)
           (rest (init-literal-proposition literal))
         (declare (ignore mode))
-        (when (or (init-type-member-p controlled-object 'wall-gears)
+        (when (or (init-type-member-p controlled-object 'floor-blower)
+                  (init-type-member-p controlled-object 'wall-gears)
                   (init-type-member-p controlled-object 'wall-blower))
           (dolist (clause clauses)
             (dolist (controller clause)
-              (unless (init-type-member-p controller 'plate)
-                (fail-init-check nil "~%Recording-side wall blower controls support only plates.~%~
+              (unless (or (init-type-member-p controller 'plate)
+                          (init-type-member-p controller 'switch))
+                (fail-init-check nil "~%Recording-side blower controls support only plates and switches.~%~
                         Literal:          ~S~%~
-                        Wall drive:        ~S~%~
+                        Blower drive:      ~S~%~
                         Unsupported item: ~S"
                        literal controlled-object controller)))))))))
 
@@ -239,7 +241,6 @@
 (define-init-check-helper init-check-recorder-supported-scope ()
   "Rejects installed objects and capabilities outside the recorder shadow."
   (init-check-recorder-unsupported-type 'floor-gears "recording-side floor blowers")
-  (init-check-recorder-unsupported-type 'floor-blower "recording-side floor blowers")
   (init-check-recorder-unsupported-type 'angled-gears "recording-side angled blowers")
   (init-check-recorder-unsupported-type 'angled-blower "recording-side angled blowers")
   (init-check-recording-threats)

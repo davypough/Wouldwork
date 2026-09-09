@@ -1,8 +1,8 @@
 ;;; Filename: reachability.lisp
 
-;;; Reachability background capability: whether one location is within placing/picking reach
-;;; of another.  Two locations are in reach iff identical, or a reach edge joins them with
-;;; every barrier gate open.
+;;; Reachability background capability: whether a location or fixed switch is within
+;;; manipulation reach of a location.  Two endpoints are in reach iff identical, or an
+;;; edge joins them with every barrier gate open.
 ;;;
 ;;; REQUIRES:
 ;;;   types     : location
@@ -11,8 +11,8 @@
 ;;;               walkability (via -passability), visibility, beam-direct, and
 ;;;               beam-crossing, which all nest -gate instead of hand-declaring it
 ;;; PROVIDES:
-;;;   relations : (reach-via location $list location),
-;;;               (reach-via> location $list location)
+;;;   relations : (reach-via reach-target $list reach-target),
+;;;               (reach-via> location $list reach-target)
 ;;;   queries   : reachable (overrides -reachability), reachable-clear
 
 (include-tech -reachability)
@@ -22,8 +22,8 @@
 
 
 (define-static-relations
-  (reach-via location $list location)  ;symmetric reach edge (eg through a wall opening); $list = barrier gates that must be open
-  (reach-via> location $list location))  ;directional reach edge, reacher's location first; for one-way openings only, never for a height difference
+  (reach-via reach-target $list reach-target)  ;symmetric manipulation reach; barriers must be open
+  (reach-via> location $list reach-target))  ;directional reach, reacher's location first
 
 
 (define-init-check reachability-init-check (literals)
@@ -34,9 +34,9 @@
     literals 'reach-via> '(gate)))
 
 
-(define-query reachable (?location1 location ?location2 location)
+(define-query reachable (?target reach-target ?reacher location)
   ;; Within reach iff the same location, a symmetric reach edge joins them, or a directional
-  ;; edge runs from the reacher at ?location2 to the target at ?location1 -- every barrier open
+  ;; edge runs from ?REACHER to ?TARGET -- every barrier open
   ;; in either case.  Callers pass the target first and the actor's own location second (see
   ;; PICKUP-CLEAR and the PUT-* actions), so a REACH-VIA> row reads reacher-then-target and
   ;; models an opening that admits an arm one way only: a letterbox slot, an overhang, or a
@@ -47,11 +47,11 @@
   ;; wrongly deny an actor who has climbed onto a box.  Reach itself stays agent-independent:
   ;; WITHIN-AGENT-VERTICAL-REACH bounds lifting in both directions, and
   ;; WITHIN-AGENT-PLACEMENT-REACH bounds only how far above the actor a resting place may be.
-  (or (eql ?location1 ?location2)
-      (and (bind (reach-via ?location1 $barriers ?location2))
+  (or (eql ?target ?reacher)
+      (and (bind (reach-via ?target $barriers ?reacher))
            (ww-loop for $b in $barriers
                     always (reachable-clear $b)))
-      (and (bind (reach-via> ?location2 $directed-barriers ?location1))
+      (and (bind (reach-via> ?reacher $directed-barriers ?target))
            (ww-loop for $b in $directed-barriers
                     always (reachable-clear $b)))))
 

@@ -49,7 +49,7 @@
 
 ;; This characterizes recorder mechanics without installing the public solution policy.
 (include-tech -recorder-gate-shadow)
-(include-tech -recorder-wall-gears-shadow)
+(include-tech -recorder-blower-shadow)
 (include-tech -recorder-init-checks)
 (include-tech plate)
 (include-tech jammer)
@@ -205,7 +205,7 @@
 
 
 (define-query-mutation recording-jammed-uses-all-jammers recording-jammed
-  (?target (either gate wall-gears wall-blower))
+  (?target (either gate floor-blower wall-gears wall-blower))
   (exists (?jammer jammer)
     (jamming ?jammer ?target))
   "Drops RECORDING-JAMMED's ghost filter.  Live jams must not affect recording state.")
@@ -221,14 +221,14 @@
   "Drops the recording gate's jam override.  The ghost-jammed gate must then stay closed.")
 
 
-(define-update-mutation recording-gears-update-ignores-jamming
-    update-recording-gears-status!
+(define-update-mutation recording-blower-update-ignores-jamming
+    update-recording-blower-status!
   ()
-  (doall (?gears (either wall-gears wall-blower))
-    (if (recording-control-on ?gears t)
-      (recording-turning ?gears)
-      (not (recording-turning ?gears))))
-  "Drops recording wall-gears jam suppression.  Ghost-jammed gears must then keep turning.")
+  (doall (?drive recording-blower-drive)
+    (if (recording-control-on ?drive t)
+      (recording-turning ?drive)
+      (not (recording-turning ?drive))))
+  "Drops recording blower jam suppression.  A ghost-jammed drive must then keep turning.")
 
 
 (define-action-precondition-mutation jam-target-uses-playback-visibility jam-target

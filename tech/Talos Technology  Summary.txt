@@ -25,6 +25,7 @@ pressure-plate
 receiver
 recorder
 screen
+switch
 toggle-plate
 transmitter
 tray
@@ -36,12 +37,12 @@ window
 
 2. Composite Types
 
-apparatus (either transmitter receiver floor-repeater wall-repeater gun)
+apparatus (either transmitter receiver floor-repeater wall-repeater gun switch)
 beam-blocker (either agent box jammer connector)
 los-endpoint (either transmitter receiver floor-repeater wall-repeater gun location)
 beam-node (either transmitter receiver floor-repeater wall-repeater location)
 cargo (either box jammer connector fan tray)
-elevated-object (either location gate screen wall edge transmitter receiver gun wall-gears wall-blower floor-repeater wall-repeater)
+elevated-object (either location gate screen wall edge transmitter receiver gun switch wall-gears wall-blower floor-repeater wall-repeater)
 fixed-beam-source (either transmitter floor-repeater wall-repeater)
 fixed-beam-sink (either floor-repeater wall-repeater receiver)
 fixed-position-object (either pressure-plate toggle-plate ladder floor-gears wall-gears angled-gears floor-blower wall-blower angled-blower recorder)
@@ -56,10 +57,11 @@ steppable-object (either pressure-plate toggle-plate fan floor-blower angled-blo
 support (either pressure-plate toggle-plate box fan tray floor-blower angled-blower)
 support-occupant (either agent box jammer connector fan tray)
 target (either gate floor-gears wall-gears floor-blower wall-blower gun)
+reach-target (either location switch)
 terminus (either transmitter receiver connector floor-repeater wall-repeater)
 threat (either gun)
 vaultable-object (either gate screen wall)
-vertical-object (either location agent box connector jammer tray fan gate screen wall edge floor-repeater wall-repeater transmitter receiver gun pressure-plate toggle-plate floor-blower angled-blower)
+vertical-object (either location agent box connector jammer tray fan gate screen wall edge floor-repeater wall-repeater transmitter receiver gun switch pressure-plate toggle-plate floor-blower angled-blower)
 visibility-object (either gate transmitter receiver floor-repeater wall-repeater gun location)
 
 3. Dynamic Relations
@@ -82,12 +84,14 @@ visibility-object (either gate transmitter receiver floor-repeater wall-repeater
 (recorder-cycle-stopped-by-ghost)  ;distinguishes normal ghost STOP from live cancellation
 (recorder-cycles-used $fixnum)  ;planner-state count incremented by start-recorder
 (recording-in-progress)  ;true between start-recorder and either explicit ending
+(recording-switched-on switch)  ;recording-side persistent switch state
+(switched-on switch)  ;persistent ordinary state; absence means off
 (turning (either floor-gears wall-gears angled-gears floor-blower wall-blower angled-blower))
 
 4. Static Relations
 
 (aimed-at (either floor-gears wall-gears angled-gears floor-blower wall-blower angled-blower) $location)
-(apparatus-coords> (either transmitter receiver floor-repeater wall-repeater gun) $rational $rational $rational)  ;third is the mounting level, optional, default 1; a floor-repeater does not read it
+(apparatus-coords> (either transmitter receiver floor-repeater wall-repeater gun switch) $rational $rational $rational)  ;third is the mounting level, optional, default 1; a floor-repeater does not read it
 (beam-crossing> crossing $los-endpoint $los-endpoint $los-endpoint $los-endpoint)
 (beam-via fixed-beam-source $list fixed-beam-sink)
 (boundary-wall $list)  ;axis-aligned point list, explicitly closed by repeating the first point; used by LOS and the walking derivation
@@ -106,8 +110,8 @@ visibility-object (either gate transmitter receiver floor-repeater wall-repeater
 (location-coords> location $rational $rational $rational)  ;third is the location's own level, optional, default 0
 (los-via visibility-object $list visibility-object)  ;symmetric sightline; $list is a flat conjunction of gate and location occluders, all of which must be transparent
 (los-barrier-crossings> los-endpoint $list visibility-object)  ;directed records (:kind identity parameter x1 y1 x2 y2), including fixed couplings and gate targets
-(reach-via location $list location)  ;authorizes manipulation across a barrier, not movement; deliberately not a traversal mode
-(reach-via> location $list location)  ;directional reach, reacher first; for a one-way opening only, never for a height difference
+(reach-via reach-target $list reach-target)  ;authorizes manipulation, including from a location to switch apparatus; not movement
+(reach-via> location $list reach-target)  ;directional reach, reacher first; for a one-way opening only, never for a height difference
 (recording-copy> $mobile-object $mobile-object :bijective)  ;indexed one-to-one live -> ghost mapping
 (screen-segment> screen $rational $rational $rational $rational $rational)  ;x1 y1 x2 y2 base-z; base-z optional, default 0
 (stream-width (either wall-gears wall-blower) $rational)  ;default 3 units
@@ -135,6 +139,7 @@ visibility-object (either gate transmitter receiver floor-repeater wall-repeater
 (put-tray ">" ?agent "puts" ?tray "on" $place "at" ?location)
 (start-recorder ">" ?agent "starts the recorder")
 (stop-recorder ">" ?agent "stops the recorder")
+(toggle-switch ">" ?agent "toggles" ?switch)
 (cancel-playback ">" ?agent "cancels recorder playback")
 
 6. Vertical Type Constants (*vertical-type-constants*, tech/-vertical.lisp)
@@ -165,6 +170,7 @@ level.  Only an object resting on nothing uses the base default below.
   wall-repeater     1       :horizontal  1     ;projection from its wall; descriptive only
   transmitter       0       :none        1
   receiver          0       :none        1
+  switch            0       :none        1
   gun               0       :none        1
 
 A problem overrides any height with has-height, and any base with the level coordinate of
@@ -190,5 +196,5 @@ Technology-owned default (DEFPARAMETER after INCLUDE-TECH to override):
 *vertical-reach-limit* 1  ;tech/-support-elevation.lisp; max elevation gap for manipulation, landing, and barrier clearance
 
 Managed problem parameters (WW-SET, restored on staging):
-*max-recorder-cycles* 1  ;maximum START-RECORDER actions in one planner path; a cycle counts when it starts
+*max-recorder-cycles* 1  ;maximum START-RECORDER actions in one planner path, or NIL for no limit; a cycle counts when it starts
 *max-connector-pairings* 3  ;tech/beam-relay.lisp; max PAIRED termini a connector may hold at once; connector pairings only -- fixed COUPLED corridors are unlimited; a problem may set a smaller value first

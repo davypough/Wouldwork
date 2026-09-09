@@ -24,19 +24,20 @@
 ;;; global claim.
 ;;;
 ;;; The component order preserves the established propagation seed:
-;;; ordinary receiver state, recording plate state, recording receiver state, recording
-;;; gate state, then recording wall-gears state.  The derived propagation driver still
+;;; ordinary receiver state, recording switch and plate state, recording receiver state,
+;;; recording gate state, then recording blower-drive state.  The derived propagation driver still
 ;;; orders the final calls from their actual read/write graph.
 ;;;
 ;;; REQUIRES / PROVIDES VIA COMPONENTS:
 ;;;   -recorder-core               : RECORDING-COPY>, RECORDING-IN-PROGRESS, side identity,
 ;;;                                  object presence, and cross-layer interaction policy
 ;;;   -recorder-plate-shadow       : RECORDING-DEPRESSED / RECORDING-LATCHED
+;;;   -recorder-switch-shadow      : RECORDING-SWITCHED-ON
 ;;;   -recorder-receiver-shadow    : RECORDING-ACTIVE
 ;;;   -recorder-controls-shadow    : recording-side DNF controller evaluation
 ;;;   -recorder-jamming-shadow     : ghost-filtered RECORDING-JAMMED
 ;;;   -recorder-gate-shadow        : RECORDING-OPEN and gate-view hook
-;;;   -recorder-wall-gears-shadow  : RECORDING-TURNING and gears-view hook
+;;;   -recorder-blower-shadow      : RECORDING-TURNING and blower-view hook
 ;;;   -recorder-solution           : multi-window parsing, mandatory ending validation,
 ;;;                                  optional open-prefix validation, interleaving
 ;;;                                  audit/pruning, candidate validation, and report
@@ -49,9 +50,9 @@
 ;;;   -recorder-cycle-chaining     : sequential checkpoints, cumulative replay, final report
 ;;;   -recorder-init-checks        : mapping, isolation, and supported-scope validation
 ;;;
-;;; The supported behavior remains unchanged: plates, direct/relay-fed receivers, gates,
-;;; wall gears, and gate/wall-gears jamming have recording views.  Initialization rejects
-;;; beam crossings, floor and angled blowers, threats, receiver-controlled wall gears,
+;;; The supported behavior includes switches, plates, direct/relay-fed receivers, gates,
+;;; wall drives, fixed floor blowers, and their jamming have recording views.  Initialization rejects
+;;; beam crossings, floor gears, angled blowers, threats, receiver-controlled blower drives,
 ;;; movable wall-fan copies, and any other explicitly unsupported combination rather than
 ;;; approximating it at runtime.
 
@@ -67,7 +68,7 @@
 (include-tech -recorder-controls-shadow)
 (include-tech -recorder-jamming-shadow)
 (include-tech -recorder-gate-shadow)
-(include-tech -recorder-wall-gears-shadow)
+(include-tech -recorder-blower-shadow)
 (include-tech -recorder-solution)
 (include-tech -recorder-session)
 (include-tech -recorder-cycle-boundary)

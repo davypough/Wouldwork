@@ -70,7 +70,7 @@
 (define-optional-types
   agent box connector jammer tray fan
   gate screen wall edge floor-repeater wall-repeater
-  transmitter receiver gun
+  transmitter receiver gun switch
   pressure-plate toggle-plate floor-blower angled-blower)
 
 
@@ -78,7 +78,7 @@
   vertical-object
     (either location agent box connector jammer tray fan
             gate screen wall edge floor-repeater wall-repeater
-            transmitter receiver gun
+            transmitter receiver gun switch
             pressure-plate toggle-plate floor-blower angled-blower))
 
 
@@ -102,6 +102,7 @@
     (wall-repeater     1   :horizontal 1)   ;projection from its wall; descriptive only
     (transmitter       0   :none       1)
     (receiver          0   :none       1)
+    (switch            0   :none       1)
     (gun               0   :none       1))
   "Per-type constants, in (TYPE HEIGHT-DEFAULT AXIS BASE-DEFAULT) form.  The axis says
    whether an object's height raises its top above its base: :VERTICAL does, :HORIZONTAL

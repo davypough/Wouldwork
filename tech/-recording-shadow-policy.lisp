@@ -2,13 +2,13 @@
 
 ;;; Neutral hooks for selecting an object's environmental state view.  Ordinary problems
 ;;; use only shared playback state.  -recorder-core selects the recording objects and their
-;;; presence, while the gate and wall-drive shadow components override their capability
+;;; presence, while the gate and blower-drive shadow components override their capability
 ;;; hooks.  Beam peers consume those selections for recording-side beam state.
 ;;;
 ;;; PROVIDES:
 ;;;   queries : recording-shadow-object          -- object uses recording-side physics
 ;;;             recording-shadow-object-present  -- object exists in recording view
-;;;             recording-shadow-turning         -- wall gears turn in recording-side state
+;;;             recording-shadow-turning         -- a blower drive turns in recording-side state
 ;;;             recording-shadow-gate-open        -- gate is open in recording-side state
 
 (in-package :ww)

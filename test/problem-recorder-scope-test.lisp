@@ -30,7 +30,7 @@
 
 ;; This characterizes recorder mechanics without installing the public solution policy.
 (include-tech -recorder-gate-shadow)
-(include-tech -recorder-wall-gears-shadow)
+(include-tech -recorder-blower-shadow)
 (include-tech -recorder-init-checks)
 (include-tech plate)
 (include-tech wall-blower)
@@ -150,7 +150,7 @@
         '((controls ((receiver1)) wall-gears1 normal))
         :checks '(recorder-init-check)))
     'init-check-failure
-    :containing "wall blower controls support only plates"
+    :containing "blower controls support only plates and switches"
     :check 'recorder-init-check)
 
   (expect-condition

@@ -80,7 +80,8 @@
           (recorder-closed-ghost-free)
           (assign $cycles-used (recorder-cycle-count))
           (assign $objective-value (problem-state.value state))
-          (< $cycles-used *max-recorder-cycles*))
+          (or (not *max-recorder-cycles*)
+              (< $cycles-used *max-recorder-cycles*)))
     '(">" ?agent "starts the recorder")
     `(assert
        (assign $next-cycle (1+ $cycles-used))

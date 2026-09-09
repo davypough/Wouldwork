@@ -166,7 +166,10 @@
     (funcall (symbol-function 'window-segment-records) state)
     (funcall (symbol-function 'screen-segment-records) state)
     (funcall (symbol-function 'walkability-coordinates-stream-specs) state)
-    (car (gethash '(boundary-wall) *static-db*))))
+    (car (gethash '(boundary-wall) *static-db*))
+    (funcall (symbol-function
+               'walkability-coordinates-supported-door-solid-pairs)
+             state)))
 
 
 (defun terrain-edge-complaints (arrangement edges spans zone-levels)

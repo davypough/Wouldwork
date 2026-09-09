@@ -10,7 +10,9 @@
 ;;; families.
 ;;;
 ;;; A room sealed by two walls, one edge, and one window must remain disconnected --
-;;; proving EDGE-SEGMENT> seals a zone exactly like WALL-SEGMENT> does.  Two further
+;;; proving EDGE-SEGMENT> seals a zone exactly like WALL-SEGMENT> does.  A gate begins
+;;; exactly at that edge's top and shares its XY interval; the arrangement accepts the
+;;; supported upper doorway while retaining the edge as a planar walking solid.  Two further
 ;;; locations exercise valid placement exactly on an uncovered induced grid line and
 ;;; at an unambiguous induced grid vertex.  A loft shares LEFT-START's x/y coordinates
 ;;; but remains a distinct, non-walkable location because its elevation is five.  With
@@ -40,7 +42,7 @@
   agent (main-agent holding-agent)
   location (left-start left-loft left-peer middle
             right-goal right-line right-vertex sealed-site)
-  gate (gate-a gate-b gate-c)
+  gate (gate-a gate-b gate-c stacked-gate)
   screen (screen-a)
   connector (carried-connector)
   wall (first-lower first-middle first-upper
@@ -83,10 +85,12 @@
   (wall-segment> island-left 9 5 9 7)
   (wall-segment> island-right 11 5 11 7)
   (edge-segment> island-top 9 7 11 7)  ;an edge seals a zone exactly like a wall
+  (has-height island-top 3/2)
 
   (gate-segment> gate-a 4 1 4 2)
   (gate-segment> gate-b 4 5 4 6)
   (gate-segment> gate-c 8 1 8 2)
+  (gate-segment> stacked-gate 9 7 11 7 3/2)
 
   (screen-segment> screen-a 8 5 8 6)
 
@@ -171,6 +175,32 @@
         '((0 0) (2 0) (1 1) (0 0))))
     'error
     :containing "not axis-aligned"))
+
+
+(define-test-helper overlapping-door-solid-rejected-p ()
+  "The classifier must still reject a hard door without a vertical support exception."
+  (let ((coverage (make-hash-table :test #'equal)))
+    (setf (gethash '(:h 1 1) coverage)
+          '((:gate overlapping-gate) (:wall overlapping-edge)))
+    (expect-condition
+      (lambda ()
+        (walkability-coordinates-classify-coverage coverage))
+      'error
+      :containing "overlap solid")))
+
+
+(define-test-claim supported-door-solid-overlap-contract
+  (member '(stacked-gate island-top)
+          (funcall (symbol-function
+                     'walkability-coordinates-supported-door-solid-pairs)
+                   *start-state*)
+          :test #'equal)
+  (not (member '(gate-a island-top)
+               (funcall (symbol-function
+                          'walkability-coordinates-supported-door-solid-pairs)
+                        *start-state*)
+               :test #'equal))
+  (overlapping-door-solid-rejected-p))
 
 
 ;;;; CHARACTERIZATION QUERY AND GOAL ;;;;

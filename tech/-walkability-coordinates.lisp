@@ -15,11 +15,18 @@
 ;;; caught during initialization validation; the derivation also checks its own
 ;;; invariant).  The segments' own coordinates induce a coordinate-compressed
 ;;; arrangement: a grid of cells whose edge-intervals are each classified from the
-;;; segments covering them -- solid (wall/window/boundary), a single named door
-;;; (gate/screen/stream curtain), or open.  Two doors covering one interval, or a
-;;; gate/screen overlapping a solid, are authoring contradictions and error.  Cells
+;;; segments covering them -- solid (wall/window/boundary), one conjunctive hard-door
+;;; clause (one or more co-located gates/screens), one stream curtain, or open.  A stream
+;;; curtain cannot share an interval with another door because its directional ride
+;;; semantics are not an ordinary conjunction.  A gate/screen whose vertical span
+;;; intersects a coincident solid is likewise an authoring contradiction and error.  Cells
 ;;; united across open intervals form zones; door intervals between distinct zones form
-;;; a labeled zone graph.  For every zone pair, a fixpoint over antichains of door-sets
+;;; a labeled zone graph.  A door may share an XY interval with a wall or edge only when
+;;; the solid's top is at or below the door's base: that is a supported elevated doorway,
+;;; not a doorway cut through the solid.  Its planar interval remains solid for this
+;;; single-layer walking arrangement; an authored jump, climb, or stairway handles access
+;;; at the upper level.  Every genuine vertical overlap remains an authoring error.
+;;; For every zone pair, a fixpoint over antichains of door-sets
 ;;; computes ALL subset-minimal door-sets -- each a set of doors sufficient for some
 ;;; physical route -- and a location pair's traverse-via value is that family in DNF: ()
 ;;; still means direct/unguarded, and a nonempty value is a list of clauses, OR over
@@ -61,8 +68,9 @@
 ;;; Location coordinates never induce grid lines -- they are points looked up in the
 ;;; arrangement afterward, so fractional authoring offsets need no grid alignment.
 ;;;
-;;; The derivation is single-layer: segments are elevation-blind, blocking every walking
-;;; pair that crosses them regardless of level.  Multi-level maps therefore author an
+;;; The derivation is single-layer: after recognizing the supported-door exception above,
+;;; segment coverage is elevation-blind and blocks every walking pair that crosses it
+;;; regardless of level.  Multi-level maps therefore author an
 ;;; elevated platform's ground-level footprint as wall or edge segments (edge is the
 ;;; better fit -- it is precisely the vertical surface between two different-elevation
 ;;; regions), keep the platform's own locations inside that footprint, and connect the
@@ -87,7 +95,8 @@
 ;;;               requires; screen declared optional by nested -passability, spliced by
 ;;;               walkability.lisp before this file
 ;;;   nested    : -traversal (traverse-via/traverse-via> and the DNF family algebra);
-;;;               -location-coordinates (LOCATION-COORDS>)
+;;;               -location-coordinates (LOCATION-COORDS>); -vertical (BASE and TOP,
+;;;               used only to recognize a door supported above a coincident wall/edge)
 ;;; PROVIDES:
 ;;;   relations : wall-segment>, edge-segment>, gate-segment>, window-segment>,
 ;;;               screen-segment>, boundary-wall  --  default to no facts; a problem
@@ -95,6 +104,8 @@
 ;;;               WALKING traversal edges derived automatically rather than authored
 ;;;   queries   : walkability-coordinates-stream-specs  --  default no streams;
 ;;;               redefined by -stream-passability where wall blowers exist;
+;;;               walkability-coordinates-supported-door-solid-pairs -- vertical
+;;;               support exceptions for otherwise contradictory planar overlaps;
 ;;;               terrain-complaints  --  default no complaints; redefined by
 ;;;               -terrain-consistency, which nests this file and -vertical, to
 ;;;               check the universal edge-span invariant against the arrangement below
@@ -103,6 +114,7 @@
 (include-tech -traversal)
 (include-tech -location-coordinates)
 (include-tech -segment-geometry)
+(include-tech -vertical)
 
 (in-package :ww)
 
@@ -112,7 +124,22 @@
 ;;;; database access, so no WW query wrapper is needed for these.  High-level first.
 
 
-(defun walkability-coordinates-build-arrangement (positions walls gates windows screens stream-specs boundary-points)
+(define-query walkability-coordinates-supported-door-solid-pairs ()
+  ;; Pair every gate/screen with each wall/edge whose top does not enter the door's
+  ;; vertical span.  Geometry filtering stays in the coverage classifier: carrying the
+  ;; complete, usually tiny relation here keeps the planar segment records shared with
+  ;; LOS unchanged.
+  (do (assign $pairs nil)
+      (doall (?door (either gate screen))
+        (doall (?solid (either wall edge))
+          (if (<= (top ?solid) (base ?door))
+            (push (list ?door ?solid) $pairs))))
+      $pairs))
+
+
+(defun walkability-coordinates-build-arrangement
+    (positions walls gates windows screens stream-specs boundary-points
+     &optional supported-door-solid-pairs)
   ;; Computes the full walking arrangement once: solids, derived stream bands with their
   ;; curtain segments, coordinate-compressed cells, per-interval coverage
   ;; classification, flood-filled zones, the door-labeled zone graph, every location's
@@ -132,7 +159,8 @@
          (xs (walkability-coordinates-axis-coordinates tagged :x))
          (ys (walkability-coordinates-axis-coordinates tagged :y))
          (coverage (walkability-coordinates-coverage-table tagged xs ys))
-         (classified (walkability-coordinates-classify-coverage coverage))
+         (classified (walkability-coordinates-classify-coverage
+                       coverage supported-door-solid-pairs))
          (zones (walkability-coordinates-flood-fill (length xs) (length ys) classified))
          (edges (walkability-coordinates-door-edges classified zones))
          (memberships (walkability-coordinates-memberships
@@ -364,11 +392,11 @@
         ((eql cover :solid)
          (error "Location ~A (~A ~A) lies inside a wall, window, or boundary segment."
                 location x y))
-        ((member (third cover) '(:gate :screen))
-         (error "Location ~A (~A ~A) lies inside doorway ~A."
+        ((some (lambda (kind) (member kind '(:gate :screen))) (third cover))
+         (error "Location ~A (~A ~A) lies inside doorway clause ~A."
                 location x y (second cover)))
         (t  ;a stream curtain: the outside flank only
-         (let ((band (find (second cover) bands :key #'first)))
+         (let ((band (find (first (second cover)) bands :key #'first)))
            (if (eql axis :v)
              (list (if (= x (fourth band)) near-zone far-zone))
              (list (if (= y (sixth band)) near-zone far-zone)))))))
@@ -385,7 +413,7 @@
         (let ((class (gethash key classified)))
           (when (and (listp class)
                      (eql (first class) :door)
-                     (eql (second class) (first band)))
+                     (member (first band) (second class)))
             (destructuring-bind (axis line cross) key
               (if (eql axis :v)
                 (progn (push (aref zones line cross) neighbors)
@@ -403,7 +431,8 @@
 (defun walkability-coordinates-family-table (edges sources)
   ;; For every source zone in SOURCES, relaxes families over the door-labeled zone graph
   ;; to a fixpoint: the source starts at the family of one empty clause; each edge
-  ;; extends the near side's family by its door and merges into the far side.  Families
+  ;; extends the near side's family by its conjunctive obstacle clause and merges into
+  ;; the far side.  Families
   ;; only ever gain shorter/incomparable clauses, so the fixpoint terminates.  Returns a
   ;; hash of (source zone) -> family; a zone never reached from a source has no entry
   ;; (blocked).  A family exceeding 32 clauses signals a pathological door layout.
@@ -422,15 +451,16 @@
 
 
 (defun walkability-coordinates-relax-edge (edge fams)
-  ;; Relaxes one undirected door edge (zone-a zone-b door) in both directions.  Returns
-  ;; true if either endpoint's family changed.
+  ;; Relaxes one undirected door edge (zone-a zone-b obstacle-clause) in both directions.
+  ;; Returns true if either endpoint's family changed.
   (let ((changed nil))
-    (destructuring-bind (zone-a zone-b door) edge
+    (destructuring-bind (zone-a zone-b obstacles) edge
       (dolist (direction (list (list zone-a zone-b) (list zone-b zone-a)))
         (let ((from-family (gethash (first direction) fams)))
           (when from-family
             (let* ((to (second direction))
-                   (candidate (traversal-family-add-obstacle from-family door))
+                   (candidate (traversal-family-add-obstacles
+                                from-family obstacles))
                    (merged (traversal-family-union
                              (gethash to fams) candidate)))
               (when (> (length merged) 32)
@@ -517,12 +547,38 @@
     coverage))
 
 
-(defun walkability-coordinates-classify-coverage (coverage)
+(defun walkability-coordinates-supported-overlap-p
+    (doors solids supported-door-solid-pairs)
+  ;; A compound hard door is supported only when every one of its fixtures is above
+  ;; every coincident solid.  Boundary and window entries can never appear in the pair
+  ;; list, so either still makes this test fail.
+  (every (lambda (door)
+           (every (lambda (solid)
+                    (member (list (second door) (second solid))
+                            supported-door-solid-pairs
+                            :test #'equal))
+                  solids))
+         doors))
+
+
+(defun walkability-coordinates-door-class (doors)
+  ;; Canonical parallel name/kind lists.  Names form the conjunctive obstacle clause;
+  ;; kinds retain the distinction needed by doorway-location and stream-band handling.
+  (let ((ordered (sort (copy-list doors) #'string<
+                       :key (lambda (entry) (symbol-name (second entry))))))
+    (list :door (mapcar #'second ordered) (mapcar #'first ordered))))
+
+
+(defun walkability-coordinates-classify-coverage
+    (coverage &optional supported-door-solid-pairs)
   ;; Classifies each covered interval: :solid when any wall/window/boundary covers it,
-  ;; or (:door name kind) for a single gate/screen/stream curtain.  A stream curtain
-  ;; overlapping a solid is silently clipped -- the solid wins; a gate or screen
-  ;; overlapping a solid, or two differently-named doors covering one interval, are
-  ;; authoring contradictions.
+  ;; or (:door obstacle-clause kind-list) for co-located gates/screens or one stream.
+  ;; A stream curtain
+  ;; overlapping a solid is silently clipped -- the solid wins.  A gate or screen above
+  ;; every coincident solid is likewise clipped in this single-layer projection; its
+  ;; upper-level crossing must be authored separately.  Any other hard-door/solid overlap
+  ;; is contradictory.  Stream curtains retain a one-per-interval rule because riding is
+  ;; directional rather than ordinary conjunctive passability.
   (let ((classified (make-hash-table :test 'equal)))
     (loop for key being the hash-keys of coverage using (hash-value entries)
           for solids = (remove-if-not (lambda (entry)
@@ -533,19 +589,28 @@
                                      (member (first entry) '(:wall :window :boundary)))
                                    entries)
                         :key #'second)
-          do (cond (solids
-                    (let ((hard-doors (remove :stream doors :key #'first)))
-                      (when hard-doors
-                        (error "Door segment(s) ~A overlap solid segment(s) ~A on one ~
-                                interval; a doorway cannot coincide with a solid partition."
-                               (mapcar #'second hard-doors) (mapcar #'second solids))))
+          for streams = (remove-if-not (lambda (entry) (eql (first entry) :stream)) doors)
+          for hard-doors = (remove :stream doors :key #'first)
+          do (when (and streams hard-doors)
+               (error "Stream curtain(s) ~A share an interval with hard door(s) ~A; ~
+                       directional stream riding cannot be combined with an ordinary ~
+                       doorway clause."
+                      (mapcar #'second streams) (mapcar #'second hard-doors)))
+             (when (rest streams)
+               (error "Stream curtains ~A cover the same interval; a crossing there ~
+                       has no single ride direction."
+                      (mapcar #'second streams)))
+             (cond (solids
+                    (when (and hard-doors
+                               (not (walkability-coordinates-supported-overlap-p
+                                      hard-doors solids supported-door-solid-pairs)))
+                      (error "Door segment(s) ~A overlap solid segment(s) ~A on one ~
+                              interval; a doorway cannot coincide with a solid partition."
+                             (mapcar #'second hard-doors) (mapcar #'second solids)))
                     (setf (gethash key classified) :solid))
-                   ((rest doors)
-                    (error "Doors/stream curtains ~A cover the same interval; a ~
-                            crossing there has no single door."
-                           (mapcar #'second doors)))
-                   (doors (setf (gethash key classified)
-                                (list :door (second (first doors)) (first (first doors)))))))
+                   (doors
+                    (setf (gethash key classified)
+                          (walkability-coordinates-door-class doors)))))
     classified))
 
 
@@ -586,8 +651,8 @@
 
 
 (defun walkability-coordinates-door-edges (classified zones)
-  ;; The labeled zone graph: one (zone-a zone-b door-name) edge per door that joins two
-  ;; distinct zones somewhere, deduplicated; a door interval interior to one zone (a
+  ;; The labeled zone graph: one (zone-a zone-b obstacle-clause) edge per door interval
+  ;; that joins two distinct zones, deduplicated; an interval interior to one zone (a
   ;; walkaround exists) contributes nothing.
   (let ((edges nil))
     (loop for key being the hash-keys of classified using (hash-value class)
@@ -676,9 +741,12 @@
         (assign $screens (screen-segment-records))
         (assign $boundary (if (bind (boundary-wall $boundary-points)) $boundary-points))
         (assign $stream-specs (walkability-coordinates-stream-specs))
+        (assign $supported-door-solids
+                (walkability-coordinates-supported-door-solid-pairs))
         (assign $positions (walkability-coordinates-location-coords))
         (assign $arrangement (walkability-coordinates-build-arrangement
-                               $positions $walls $gates $windows $screens $stream-specs $boundary))
+                               $positions $walls $gates $windows $screens $stream-specs
+                               $boundary $supported-door-solids))
         (assign $terrain-complaints (terrain-complaints $arrangement))
         (if $terrain-complaints
           (report-terrain-complaints $terrain-complaints))

@@ -3,10 +3,10 @@
 ;;; Focused characterization of planner-native recorder cycle state.  The test applies the
 ;;; real START-RECORDER and STOP-RECORDER actions to small states, without asking search to
 ;;; parse multiple windows (that is Stage 2).  It verifies count materialization, maximum
-;;; enforcement, physical cross-layer boundary rejection, nonphysical cross-layer link
-;;; removal, ghost disappearance, persistent ordinary latch state, recording-shadow
-;;; reseeding, and a second clean fork from a changed live baseline.  Expected ordinary
-;;; harness path length: zero.
+;;; enforcement, unrestricted-cycle operation, physical cross-layer boundary rejection,
+;;; nonphysical cross-layer link removal, ghost disappearance, persistent ordinary latch
+;;; state, recording-shadow reseeding, and a second clean fork from a changed live baseline.
+;;; Expected ordinary harness path length: zero.
 
 (in-package :ww)
 
@@ -177,18 +177,30 @@
          (= (funcall (symbol-function 'recorder-cycle-count) legacy-open) 1))))
 
 
+(define-test-claim recorder-cycle-unrestricted-count
+  (let ((*max-recorder-cycles* nil))
+    (let* ((opened-1
+             (recorder-cycle-apply *start-state* '(start-recorder live-agent)))
+           (closed-1
+             (recorder-cycle-apply opened-1 '(stop-recorder ghost-agent)))
+           (opened-2
+             (recorder-cycle-apply closed-1 '(start-recorder live-agent)))
+           (closed-2
+             (recorder-cycle-apply opened-2 '(stop-recorder ghost-agent)))
+           (opened-3
+             (recorder-cycle-apply closed-2 '(start-recorder live-agent))))
+      (= (funcall (symbol-function 'recorder-cycle-count) opened-3) 3))))
+
+
 (define-test-claim recorder-cycle-parameter-validation
   (progn
     (check-problem-parameter '*max-recorder-cycles* 1)
+    (check-problem-parameter '*max-recorder-cycles* nil)
     t)
   (expect-condition
     (lambda () (check-problem-parameter '*max-recorder-cycles* 0))
     'error
-    :containing "positive integer")
-  (expect-condition
-    (lambda () (check-problem-parameter '*max-recorder-cycles* nil))
-    'error
-    :containing "positive integer"))
+    :containing "positive integer or NIL"))
 
 
 (define-goal

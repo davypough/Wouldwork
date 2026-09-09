@@ -98,7 +98,8 @@ THE LIST OF WOULDWORK COMMANDS RECOGNIZED IN THE REPL:
                                5 (step through search)>)
        (ww-set *symmetry-pruning* <t (prune symmetric states) or
                                     nil (don't prune symmetric states>)
-       (ww-set *max-recorder-cycles* <positive integer limiting recorder starts per path>)
+       (ww-set *max-recorder-cycles* <positive integer limiting recorder starts per path,
+                                      or nil for no limit>)
        (ww-set *recorder-prefix-pruning* <t (also prune unplayable open recording prefixes) or
                                           nil (validate only completed recorder cycles)>)
        (ww-set *max-connector-pairings* <positive integer limiting pairings per connector>)

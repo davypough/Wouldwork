@@ -35,7 +35,7 @@
 
 ;; This characterizes shadow preparation without installing the public solution policy.
 (include-tech -recorder-gate-shadow)
-(include-tech -recorder-wall-gears-shadow)
+(include-tech -recorder-blower-shadow)
 (include-tech -recorder-cycle-boundary)
 (include-tech -recorder-init-checks)
 (include-tech plate)
@@ -135,8 +135,9 @@
   (equal *recorder-shadow-lifecycles*
          '((plate reset-recording-plate-shadow! seed-recording-plate-shadow!)
            (receiver reset-recording-receiver-shadow! nil)
+           (switch reset-recording-switch-shadow! seed-recording-switch-shadow!)
            (gate reset-recording-gate-shadow! nil)
-           (wall-blower-drive reset-recording-wall-gears-shadow! nil)))
+           (blower-drive reset-recording-blower-shadow! nil)))
   (let* ((open-state (open-recorder-cycle-boundary))
          (before (list-database (problem-state.idb open-state))))
     (and (not (recorder-cycle-boundary-closed-p open-state))

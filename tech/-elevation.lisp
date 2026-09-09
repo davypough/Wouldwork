@@ -20,7 +20,7 @@
 ;;; PROVIDES:
 ;;;   nested   : -height, -location-coordinates
 ;;;   types    : elevated-object (either location gate screen wall edge transmitter
-;;;              receiver gun wall-gears wall-blower floor-repeater wall-repeater)
+;;;              receiver gun switch wall-gears wall-blower floor-repeater wall-repeater)
 ;;;   relation : (has-elevation elevated-object $rational)
 ;;;   queries  : none.  OBJECT-ELEVATION and LOCATION-ELEVATION are gone with the anchor
 ;;;              queries; -vertical's BASE reads this relation directly, and owns
@@ -33,12 +33,12 @@
 
 
 (define-optional-types
-  gate screen wall edge transmitter receiver gun wall-gears wall-blower)
+  gate screen wall edge transmitter receiver gun switch wall-gears wall-blower)
 
 
 (define-types
   elevated-object
-    (either location gate screen wall edge transmitter receiver gun
+    (either location gate screen wall edge transmitter receiver gun switch
             wall-gears wall-blower
             floor-repeater wall-repeater))
 

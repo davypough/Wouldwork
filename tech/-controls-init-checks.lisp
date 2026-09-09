@@ -7,7 +7,7 @@
 
 
 (define-init-check controls-init-check (literals)
-  (:consumes receiver plate)
+  (:consumes receiver plate switch)
   (when (init-dnf-controls-relation-p)
     (check-init-controls-list-contents literals))
   (check-init-controls-modes literals))
@@ -25,7 +25,7 @@
               Literal: ~S~%~
               Clause:  ~S"
              literal clause))
-    (init-check-list-items-have-types literal clause '(receiver plate))))
+    (init-check-list-items-have-types literal clause '(receiver plate switch))))
 
 
 (define-init-check-helper check-init-controls-list-contents (literals)
@@ -50,4 +50,3 @@
                   Unsupported mode: ~S~%~
                   Supported modes:  (NORMAL INVERTED)"
                  literal mode))))))
-

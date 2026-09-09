@@ -120,7 +120,8 @@ must return unknown rather than :IMPOSSIBLE.")
     (format t "~&  *AUTO-WAIT* => ~A" *auto-wait*))
   (when (and (member "recorder" *spliced-tech-names* :test #'string=)
              (gethash 'recorder *types*))
-    (format t "~&  *MAX-RECORDER-CYCLES* => ~D" *max-recorder-cycles*)
+    (format t "~&  *MAX-RECORDER-CYCLES* => ~A"
+            (or *max-recorder-cycles* 'unlimited))
     (format t "~&  *RECORDER-PREFIX-PRUNING* => ~A" *recorder-prefix-pruning*))
   (when (and (member "beam-relay" *spliced-tech-names* :test #'string=)
              (gethash 'connector *types*))
@@ -655,7 +656,7 @@ treat their arguments as read-only and be safe to call concurrently."
   "When T, detect symmetry families and prune symmetric actions or states.")
 
 (defvar *max-recorder-cycles* 1
-  "Maximum number of START-RECORDER actions permitted in one search path.")
+  "Maximum START-RECORDER actions in one search path, or NIL for no limit.")
 
 (defvar *recorder-prefix-pruning* nil
   "Whether search pruning also rejects an open recording prefix that can no longer be

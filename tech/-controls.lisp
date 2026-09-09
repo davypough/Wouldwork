@@ -25,9 +25,10 @@
 ;;;               even in a receiver-free problem (e.g. blower-only or gun-only, reached
 ;;;               through -gears-fan); harmless and expected, since update-receiver-status!
 ;;;               quantifies over an empty receiver type there and report-inert-techs names it
-;;;   conditional relations, owned by plate.lisp:
+;;;   conditional relations, owned by plate.lisp and -switch.lisp:
 ;;;               depressed (pressure-plate), guarded by pressure-plate
 ;;;               latched (toggle-plate), guarded by toggle-plate
+;;;               switched-on (switch), guarded by switch
 ;;;               Translation removes either guarded reference when its leaf type is empty.
 ;;; PROVIDES:
 ;;;   types     : mode (normal inverted), owned here; plate comes from -plate-types;
@@ -40,18 +41,19 @@
 ;;;   relations : (controls $list (either gate floor-gears wall-gears angled-gears
 ;;;               floor-blower wall-blower angled-blower gun)
 ;;;               $mode)  --  $list = DNF OR-list of AND-lists of controllers
-;;;               (receiver/plate); mode: normal | inverted
+;;;               (receiver/plate/switch); mode: normal | inverted
 ;;;   queries   : energized, control-on
 ;;;
 ;;; DEFINE-INIT VALIDATION:
 ;;;   - the DNF value and every clause must be lists
-;;;   - every clause member must be a receiver or plate
+;;;   - every clause member must be a receiver, plate, or switch
 ;;;   - a controlled device may have only one CONTROLS fact
 ;;;   - only NORMAL and INVERTED modes are supported
 ;;;   - () and (()) are both valid and intentionally distinct
 
 (include-tech -plate-types)
 (include-tech -beam-substrate)
+(include-tech -switch)
 (include-tech -controls-init-checks)
 
 (in-package :ww)
@@ -59,7 +61,7 @@
 
 (define-optional-types
   gate floor-gears wall-gears angled-gears
-  floor-blower wall-blower angled-blower receiver gun)
+  floor-blower wall-blower angled-blower receiver gun switch)
 
 
 (define-types
@@ -76,15 +78,18 @@
 
 
 (define-query energized
-    (?controller (either receiver pressure-plate toggle-plate))
+    (?controller (either receiver pressure-plate toggle-plate switch))
   ;; A receiver follows its beam state.  A pressure plate follows current physical pressure;
-  ;; a toggle plate follows its remembered latch instead.
+  ;; a toggle plate follows its remembered latch, and a wall switch follows its persistent
+  ;; on/off state.
   (or (and (receiver ?controller)
            (active ?controller))
       (and (pressure-plate ?controller)
            (depressed ?controller))
       (and (toggle-plate ?controller)
-           (latched ?controller))))
+           (latched ?controller))
+      (and (switch ?controller)
+           (switched-on ?controller))))
 
 
 (define-query control-on (?device ?uncontrolled-default)
