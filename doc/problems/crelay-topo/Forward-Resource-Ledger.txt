@@ -1,0 +1,416 @@
+CRELAY-TOPO FORWARD RESOURCE LEDGER
+===================================
+
+Purpose
+-------
+
+This is a bookkeeping aid for constructing and checking a forward solution.  It
+does not assert an exact action order.  Its main job is to prevent a locally
+useful placement from quietly consuming something that is needed later.
+
+The problem contains two coupled executions once the recorder starts:
+
+  live side       agent1, box1, connector1, tray1, ordinary gate states
+  recording side  ghost-agent1, ghost-box1, ghost-connector1, ghost-tray1,
+                  recording gate states
+
+The shadows begin at the corresponding live objects' locations when
+START-RECORDER is performed.  A forward candidate must therefore record both
+where each resource is and which side of the playback it belongs to.
+
+
+Notation
+--------
+
+  A    agent1                         A*   ghost-agent1
+  B    box1                           B*   ghost-box1
+  C    connector1                     C*   ghost-connector1
+  T    tray1                          T*   ghost-tray1
+
+  held     committed to a plate, beam station, support, or carried load
+  free     recoverable without first undoing another required condition
+  across   already beyond the named gate before that gate is allowed to close
+
+For every proposed action, record its effect separately in the live and
+recording views.  In particular, an ordinary OPEN fact is not automatically a
+RECORDING-OPEN fact, and a beam arrangement must activate the receiver in the
+view used by the agent that is to pass gate8.  The validator, rather than this
+ledger, is the final authority on cross-side effects.
+
+
+Initial inventory
+-----------------
+
+Before START-RECORDER:
+
+  resource  initial location  notes
+  --------  ----------------  -----------------------------------------------
+  A         location1         at the recorder
+  B         location6         elevated box ledge; recover while gate2 is open
+  C         location9         candidate beam-station connector
+  T         location7         on plate2; plate2 is depressed
+
+  gate2 is open
+  gate3 is open because tray1 is on plate2
+  gate5 is open
+  all other controlled gates are closed
+  no shadow resource exists yet
+
+Immediately after START-RECORDER:
+
+  A* is at location1
+  B* is at location6
+  C* is at location9
+  T* is at location7 and is forked onto plate2 in the recording view
+  ordinary gate3 and recording gate3 are open in the checked opening state
+
+The opening prefix checked against the staged problem is:
+
+  START-RECORDER by A
+  A* moves from location1 to location2
+  A* steps onto plate1
+
+This opens gate1 in both views in that tested state and permits A to leave the
+starting enclosure.  The full first-cycle closure below now establishes how A*
+is released and how C permanently replaces it at this checkpoint.
+
+
+First closed-cycle subgoal -- validated
+---------------------------------------
+
+Target checkpoint:
+
+  one recorder cycle has ended by a normal ghost STOP
+  A is back at recorder1 at location1
+  C is on plate1 at location2 and gate1 is open
+  T is free on the ground at location5 for the box1 subgoal
+  B remains at elevated location6 and gate2 remains open
+
+Exact action sequence accepted by VALIDATE-SOLUTION:
+
+   1. START-RECORDER A
+   2. A* walks location1 -> location2
+   3. A* steps from ground onto plate1
+   4. A walks location1 -> location9 through gates1 and 3
+   5. A picks up C at location9
+   6. A walks location9 -> location2 through gates3 and 1
+   7. A* steps from plate1 to ground
+   8. A puts C on plate1
+   9. A walks location2 -> location7 through gate1
+  10. A picks up T from plate2 at location7
+  11. A walks location7 -> location5
+  12. A puts T on the ground at location5
+  13. A walks location5 -> location1 through gate1
+  14. A* walks location2 -> location1
+  15. STOP-RECORDER A*
+
+Validated final facts include DEPRESSED plate1, ON C plate1, OPEN gate1,
+HAS-LOCATION T location5, HAS-LOCATION B location6, RECORDER-CYCLES-USED 1,
+RECORDER-CYCLE-CLOSED, and RECORDER-CYCLE-STOPPED-BY-GHOST.  Gate3 is closed
+because the cycle deliberately reclaims T from plate2 after C has crossed it.
+The recorder-specific whole-cycle validator also returned VALID T with no
+diagnostic.
+
+The explicit pickup and placement of T are important.  A shorter 11-action
+candidate that left T untouched also executed, but recorder forking had already
+displaced the live ON T plate2 fact when T* was forked onto that same fixed
+support.  The 15-action sequence gives T's final ground state a real live-side
+cause instead of relying on that representation defect.
+
+A 17-action continuation probe (the 15 actions above, then a second
+START-RECORDER and A* walking location1 -> location5 through gate1) was fully
+executable.  It confirms that the next ghost can reach the tray/box area.
+Nevertheless, the second start similarly replaces live ON C plate1 with ON C*
+plate1.  This is an unresolved interaction between recorder forking and ON's
+bijective fixed-support index.  Do not yet assume that C remains physically on
+plate1 after the second cycle closes.
+
+
+Gate and station ledger
+-----------------------
+
+  gate/site  requirement                    persistence needed
+  ---------  -----------------------------  ---------------------------------
+  gate1      plate1 occupied                until start-side resources are out
+  gate2      switch1 off                    while recovering elevated boxes
+  blower1    switch1 on                     only if a deliberate blow is needed
+  gate3      plate2 occupied                until all mid-puzzle resources pass
+  gate4      plate3 occupied                while transmitter sightline is used
+  gate5      switch2 off                    until post-switch staging is done
+  gate6      plates4 and 5 both occupied    for the empty-handed switch2 trip
+  screen1    crossed empty-handed           same trip as gate6
+  gate7      switch2 on                     after the one-way phase change
+  gate8      receiver1 active               until every required resource passes
+  gate9      plates6, 7, and 8 occupied     while A walks to location19
+
+Switch2 is the principal phase boundary:
+
+  switch2 off  -> gate5 open, gate7 closed
+  switch2 on   -> gate5 closed, gate7 open
+
+Before turning switch2 on, everything that will be needed on its far side must
+already be staged beyond gate5.  Treat the switch as irreversible for planning
+purposes unless a complete and validated return route proves otherwise.
+
+
+Commitment register
+-------------------
+
+  id  commitment                         release condition
+  --  ---------------------------------  -------------------------------------
+  K1  one occupant on plate1             A and needed cargo are beyond gate1
+  K2  one occupant on plate2             all beam/post-switch cargo is past gate3
+  K3  one occupant on plate3             all intended gate8 crossings are done
+  K4  box plus connector at location9,   all intended gate8 crossings are done
+      with connector paired to both
+      transmitter1 and receiver1
+  K5  two occupants on plates4 and 5     switch2 operator has returned through
+                                         screen1 and gate6
+  K6  three non-A occupants on plates6,  A has crossed gate9 to location19
+      7, and 8
+
+K3 and K4 together are the known candidate beam installation.  In a constructed
+staged state, tray1 on plate3 at location10 opened gate4, while connector1 on
+box1 at location9 and paired to transmitter1 and receiver1 activated receiver1
+and opened gate8.  A ground-level connector at location9 was too low.
+
+The item occupying plate3 need not literally be T; the exact live/ghost
+allocation remains to be discovered.  Likewise, B and C may have to be replaced
+by their shadow counterparts for a recording-side crossing.  Do not transfer
+the checked geometry from one view to the other without replay validation.
+
+
+Resource arithmetic
+-------------------
+
+After the recorder starts there are eight mobile resources:
+
+  A, A*, B, B*, C, C*, T, T*
+
+At the late peak, a conservative reservation is:
+
+  1  A, free to make the goal move
+  2  a box and connector committed to the beam station
+  1  an occupant committed to plate3
+  3  occupants committed to plates6, 7, and 8
+  1  remaining mobile resource
+  -  --------------------------------------------
+  8  total
+
+So the raw count is sufficient, but only by respecting location, side, carrying,
+height, and reachability constraints.  This count is a necessary check, not a
+proof of feasibility.
+
+If the final goal is reached during the last recording cycle, that cycle may
+remain open: the present problem goal does not require GHOST-STOPS-RECORDER.
+This makes A* available as a possible final plate occupant.  If an intermediate
+cycle is ended, however, its ghost must return to a valid recorder boundary or
+the cycle must otherwise close cleanly and validate.
+
+
+Provisional forward phases
+--------------------------
+
+PHASE 0 -- Fork the execution and open gate1
+
+  Validated full cycle:
+    A* opens gate1 from plate1.
+    A retrieves C through initially open gate3 and puts C on plate1.
+    A frees T from plate2 and stages it at location5.
+    A and A* return to recorder1 and A* stops the recorder.
+
+  Exit condition:
+    C holds plate1, gate1 is open, T is free at location5, A is at recorder1,
+    and the first recorder cycle is normally closed.
+
+
+PHASE 1 -- Recover the elevated box resources
+
+  Keep switch1 off and gate2 open.  Use the now-free T at location5 as the
+  candidate standing support for reaching location6 and recovering B.  Determine
+  separately whether B* must also be recovered.  Do not toggle switch1 merely
+  because it is accessible.  Blower1 is useful only if the forward plan identifies
+  an exact resource, source, and destination for the blow.
+
+  Exit condition:
+    The required box or boxes are recoverable on the intended side of gate2.
+
+
+PHASE 2 -- Open gate3 and stage the middle resources
+
+  T no longer occupies plate2 after Phase 0, so recommit one resource to plate2.
+  Move every resource needed for the beam,
+  plates3-5, the switch2 trip, and the final plate allocation beyond gate3 before
+  releasing plate2.
+
+  Exit condition:
+    The complete post-gate3 inventory has crossed in the necessary view or views.
+
+
+PHASE 3 -- Establish the beam station
+
+  Candidate live-side installation:
+    support box at location9
+    connector on the box
+    connector paired with transmitter1 and receiver1
+    plate3 occupied so gate4 is open
+
+  Record separately whether ordinary receiver1, recording receiver1, or both are
+  active.  Hold K3 and K4 until every planned gate8 crossing in the corresponding
+  view has occurred.
+
+  Exit condition:
+    The receiver state needed later has been demonstrated by replay, not inferred.
+
+
+PHASE 4 -- Stage everything beyond gate5
+
+  Gate5 begins open.  Move all agents and cargo required for plates4-8, gate8,
+  and the goal into the post-gate5 region before operating switch2.
+
+  Exit condition:
+    The pre-switch inventory audit has no required item left behind gate5.
+
+
+PHASE 5 -- Make the switch2 phase change
+
+  Occupy plates4 and 5 to open gate6.  The switch operator crosses gate6 and
+  screen1 empty-handed, reaches switch2 at location14, turns switch2 on, and
+  returns while both plates remain held.  Reclaim the two plate occupants only
+  after the operator is back on the useful side of gate6.
+
+  Expected result:
+    gate5 closed
+    gate7 open
+    both K5 occupants free again
+
+  Exit condition:
+    The operator and reusable resources are correctly placed for gate7.
+
+
+PHASE 6 -- Transfer through gates7 and 8
+
+  Pass gate7 under switch2.  Keep the appropriate receiver active while every
+  agent and resource needed for the final plate arrangement passes gate8.
+
+  Exit condition:
+    A and three suitable non-A plate occupants are beyond gate8, and abandoning
+    the beam cannot strand anything still required for the goal.
+
+
+PHASE 7 -- Pay the final three-occupant cost
+
+  Put three non-A resources on plates6, 7, and 8.  Confirm that gate9 is open in
+  the view used by A.  A steps off any support or plate it occupies, walks through
+  gate9, and reaches location19.
+
+  Exit condition:
+    The declared problem goal is true.
+
+
+PHASE 8 -- Close an intermediate recording cycle, if one is used
+
+  This phase is not required after a final open cycle that already reaches the
+  goal.  It is required whenever the proposed solution ends an earlier cycle.
+
+  With early gates closed and the ghost empty-handed, the checked directed ladder
+  return is:
+
+    location11 --ladder3--> location10
+    location10 --walk-----> location8
+    location8  --ladder2--> location5
+    location5  --walk-----> location3
+    location3  --ladder1--> location1
+
+  The three ladders therefore remain reserved as an empty-handed recorder-return
+  chain rather than being treated as decorative props.
+
+
+Allocation worksheet
+--------------------
+
+Fill one row after each important action or short verified block.  Use exact
+locations rather than descriptions such as "left side" or "near gate8."
+
+  step/phase:
+  action or verified block:
+
+  resource  location/support  carrying/on-top-of  commitment  side/view
+  --------  ----------------  ------------------  ----------  ---------
+  A
+  A*
+  B
+  B*
+  C
+  C*
+  T
+  T*
+
+  plate1:             plate2:             plate3:
+  plate4:             plate5:
+  plate6:             plate7:             plate8:
+
+  ordinary open gates:
+  recording open gates:
+  active receiver view:
+  switch1 state:      switch2 state:
+
+  newly committed resources:
+  newly released resources:
+  resources that must cross before the next closure:
+  reason this state remains recoverable:
+
+
+Open allocation decisions
+-------------------------
+
+  1. How should recorder ON-forking be corrected so C remains on plate1 across
+     later cycle starts and endings?
+  2. Must both B and B* be recovered, or can one remain unused?
+  3. Which side supplies the box, connector, and plate3 occupant for gate8?
+  4. Which exact resources are staged beyond gate5 before switch2 is turned on?
+  5. Which three non-A resources occupy plates6, 7, and 8?
+  6. Is one final open recording cycle sufficient, or are intermediate closed
+     cycles useful enough to justify the return cost?
+  7. Does any proposed cross-side handoff actually validate under the recorder
+     rules, or has it only been assumed in the paper plan?
+
+
+Known non-resources and non-pruning conclusions
+-----------------------------------------------
+
+  repeater1
+    Keep it because it is part of the given problem.  No useful route has been
+    found.  Among the authored locations, only elevated location9 can see both
+    repeater1 and receiver1, and it can also see transmitter1 directly.  A real
+    repeater route would appear to require a second elevated connector and a new
+    receiver-side location, making it strictly more expensive than the direct
+    candidate.
+
+  ladders1-3
+    Keep all three.  They form the checked one-way return chain above.
+
+  locations1-20
+    Keep all for now.  Each currently has a distinct fixture, cargo, traversal,
+    phase-boundary, or goal role.  Prune a location only after a complete forward
+    allocation shows that its role is dominated by another reachable location.
+
+
+Validation checkpoints
+----------------------
+
+For a candidate forward solution, validate in this order:
+
+  [x] The exact 15-action first recorder cycle succeeds and reaches its checkpoint.
+  [ ] Each release of plates1 and 2 leaves no required resource behind.
+  [ ] Every box required by the allocation is actually recoverable before gate2
+      can close.
+  [ ] The beam station opens gate8 in the required live/recording view.
+  [ ] Every post-switch resource is beyond gate5 before switch2 is turned on.
+  [ ] The plate4/plate5 operator returns before either occupant is reclaimed.
+  [ ] All final resources pass gate8 before the beam is abandoned.
+  [ ] Three independent occupants remain on plates6-8 while A reaches location19.
+  [ ] Every completed recorder cycle validates independently.
+  [ ] The complete playback path reaches the problem goal.
+
+No full solve was run in preparing this ledger.

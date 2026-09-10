@@ -86,6 +86,7 @@
   (has-position ladder3 location11)
   (has-position recorder1 location1)
   (has-position blower1 location4)
+  (on tray1 plate2)
   (aimed-at blower1 location20)
 
   ;; Representative location coordinates.  The optional third coordinate is the
