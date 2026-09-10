@@ -5,7 +5,7 @@
 ;;;
 ;;; REQUIRES:
 ;;;   types  : pressure-plate, toggle-plate, and their plate union, from -plate-types
-;;;   nested : -support-occupancy (support-occupant, support, on, cleartop)
+;;;   nested : -support-occupancy (support-occupant, support, on, support-occupied)
 ;;;   special: *applying-init-action* (engine) distinguishes initial-state construction
 ;;;            from transitions during search
 ;;;   driver : the master propagate-consequences! must call update-plate-status!
@@ -37,15 +37,17 @@
   ;; plate's authored latch state.  Thereafter a toggle plate flips its latch only on the
   ;; physical transition from clear to depressed.  Additional occupants arriving while
   ;; it remains depressed, and occupants leaving while another remains, do not flip the
-  ;; latch.  Occupancy is delegated to CLEARTOP, keeping this update independent of the
-  ;; problem's support-occupant roster.
+  ;; latch.  Occupancy is delegated to SUPPORT-OCCUPIED, keeping this update independent
+  ;; of the problem's support-occupant roster.  SUPPORT-OCCUPIED rather than CLEARTOP
+  ;; because weight is layer-blind: a ghost standing on a plate depresses it exactly as a
+  ;; live occupant does, and a plate under one of each is depressed by both.
   (doall (?p plate)
-    (if (cleartop ?p)
-      (not (depressed ?p))
+    (if (support-occupied ?p)
       (do (if (and (not *applying-init-action*)
                    (toggle-plate ?p)
                    (not (depressed ?p)))
             (if (latched ?p)
               (not (latched ?p))
               (latched ?p)))
-          (depressed ?p)))))
+          (depressed ?p))
+      (not (depressed ?p)))))

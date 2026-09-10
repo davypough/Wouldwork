@@ -569,6 +569,25 @@
     (list :door (mapcar #'second ordered) (mapcar #'first ordered))))
 
 
+(defun walkability-coordinates-check-stream-contention (streams hard-doors)
+  ;; The two contention rules for stream curtains, asked only of an interval no solid
+  ;; covers.  Riding is directional rather than ordinary conjunctive passability, so a
+  ;; curtain can neither share an interval with a hard door nor with a second curtain --
+  ;; a crossing there would have no single ride direction.  Both are properties of what
+  ;; the projection actually contains, which is why the caller applies the solid clip
+  ;; first: curtains that meet only underneath a wall are both clipped away and never
+  ;; reach a crossing, so they are not in contention at all.
+  (when (and streams hard-doors)
+    (error "Stream curtain(s) ~A share an interval with hard door(s) ~A; ~
+            directional stream riding cannot be combined with an ordinary ~
+            doorway clause."
+           (mapcar #'second streams) (mapcar #'second hard-doors)))
+  (when (rest streams)
+    (error "Stream curtains ~A cover the same interval; a crossing there ~
+            has no single ride direction."
+           (mapcar #'second streams))))
+
+
 (defun walkability-coordinates-classify-coverage
     (coverage &optional supported-door-solid-pairs)
   ;; Classifies each covered interval: :solid when any wall/window/boundary covers it,
@@ -577,8 +596,9 @@
   ;; overlapping a solid is silently clipped -- the solid wins.  A gate or screen above
   ;; every coincident solid is likewise clipped in this single-layer projection; its
   ;; upper-level crossing must be authored separately.  Any other hard-door/solid overlap
-  ;; is contradictory.  Stream curtains retain a one-per-interval rule because riding is
-  ;; directional rather than ordinary conjunctive passability.
+  ;; is contradictory.  Because the solid wins, clipping is decided before contention is:
+  ;; the stream rules in WALKABILITY-COORDINATES-CHECK-STREAM-CONTENTION apply to the
+  ;; open-interval branch only, where every entry survives into the projection.
   (let ((classified (make-hash-table :test 'equal)))
     (loop for key being the hash-keys of coverage using (hash-value entries)
           for solids = (remove-if-not (lambda (entry)
@@ -591,16 +611,7 @@
                         :key #'second)
           for streams = (remove-if-not (lambda (entry) (eql (first entry) :stream)) doors)
           for hard-doors = (remove :stream doors :key #'first)
-          do (when (and streams hard-doors)
-               (error "Stream curtain(s) ~A share an interval with hard door(s) ~A; ~
-                       directional stream riding cannot be combined with an ordinary ~
-                       doorway clause."
-                      (mapcar #'second streams) (mapcar #'second hard-doors)))
-             (when (rest streams)
-               (error "Stream curtains ~A cover the same interval; a crossing there ~
-                       has no single ride direction."
-                      (mapcar #'second streams)))
-             (cond (solids
+          do (cond (solids
                     (when (and hard-doors
                                (not (walkability-coordinates-supported-overlap-p
                                       hard-doors solids supported-door-solid-pairs)))
@@ -609,6 +620,7 @@
                              (mapcar #'second hard-doors) (mapcar #'second solids)))
                     (setf (gethash key classified) :solid))
                    (doors
+                    (walkability-coordinates-check-stream-contention streams hard-doors)
                     (setf (gethash key classified)
                           (walkability-coordinates-door-class doors)))))
     classified))

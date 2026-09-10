@@ -127,7 +127,7 @@
     ;; depression.
     (has-location boarding-agent boarding-site)
     (on boarding-agent boarding-plate)
-    (not (cleartop boarding-plate))
+    (support-occupied boarding-plate)
     (depressed boarding-plate)
 
     ;; Dismounting removes the only support fact, leaves location unchanged, and
@@ -135,7 +135,7 @@
     (has-location leaving-agent leaving-site)
     (not (exists (?support support)
            (on leaving-agent ?support)))
-    (cleartop leaving-plate)
+    (not (support-occupied leaving-plate))
     (not (depressed leaving-plate))
     (step-transition-available-p
       state 'leaving-agent
@@ -145,7 +145,7 @@
     ;; A fixed floor blower is steppable while a clear control keeps it stopped.
     (has-location fan-agent fan-site)
     (on fan-agent floor-gears1)
-    (not (cleartop floor-gears1))
+    (support-occupied floor-gears1)
     (not (depressed fan-control-plate))
     (not (turning floor-gears1))
     (not (blowing floor-gears1))
@@ -153,10 +153,10 @@
       state 'fan-agent
       '(step (fan-site floor-gears1) nil (fan-site ground)))
 
-    ;; An occupied plate is geometrically eligible but fails CLEARTOP.
+    ;; An occupied plate is geometrically eligible but fails CLEARTOP for the agent.
     (has-location occupied-agent occupied-site)
     (on plate-blocker occupied-plate)
-    (not (cleartop occupied-plate))
+    (support-occupied occupied-plate)
     (depressed occupied-plate)
     (not (step-transition-available-p
            state 'occupied-agent
@@ -166,9 +166,9 @@
     ;; An agent already on a plate cannot transfer directly to another clear plate.
     (has-location supported-agent supported-site)
     (on supported-agent current-plate)
-    (not (cleartop current-plate))
+    (support-occupied current-plate)
     (depressed current-plate)
-    (cleartop alternate-plate)
+    (not (support-occupied alternate-plate))
     (not (depressed alternate-plate))
     (not (step-transition-available-p
            state 'supported-agent
@@ -177,7 +177,7 @@
 
     ;; Mounting requires exact colocation.
     (has-location loose-agent loose-site)
-    (cleartop remote-plate)
+    (not (support-occupied remote-plate))
     (not (step-transition-available-p
            state 'loose-agent
            '(step (loose-site ground) nil
@@ -187,7 +187,7 @@
     (has-location loose-fan loose-site)
     (not (exists (?gears gears)
            (mounted-on loose-fan ?gears)))
-    (cleartop loose-fan)
+    (not (support-occupied loose-fan))
     (not (step-transition-available-p
            state 'loose-agent
            '(step (loose-site ground) nil
@@ -195,7 +195,7 @@
 
     ;; A box is a support but not a steppable fixture.
     (has-location nonsteppable-box loose-site)
-    (cleartop nonsteppable-box)
+    (not (support-occupied nonsteppable-box))
     (not (step-transition-available-p
            state 'loose-agent
            '(step (loose-site ground) nil

@@ -68,10 +68,11 @@
   "Physical relations whose live/ghost dependencies cannot cross a disappearing boundary."
   ;; A PAIRED link may safely disappear with its ghost endpoint; it neither supports nor
   ;; relocates the surviving live connector.  HOLDING and ON would leave physical state
-  ;; undefined, so those dependencies must be resolved before STOP-RECORDER.
+  ;; undefined, so those dependencies must be resolved before STOP-RECORDER.  HOLDING is
+  ;; bijective and stores its facts under generated index names rather than its own, so
+  ;; those names are added too; ON is an ordinary relation and needs no such expansion.
   (append '(holding on)
-          (copy-list (gethash 'holding *bijective-relations*))
-          (copy-list (gethash 'on *bijective-relations*))))
+          (copy-list (gethash 'holding *bijective-relations*))))
 
 
 (defun recorder-cross-layer-boundary-reference-p (state)

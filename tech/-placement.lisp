@@ -2,8 +2,11 @@
 
 ;;; Placement substrate: where a carried object may be set down -- a plate, a floor-mounted
 ;;; fan, a fixed floor/angled blower, a clear box top, another agent's currently-held tray,
-;;; or bare ground -- gated by cleartop and the agent's placement reach, which bounds how far
-;;; above the agent a resting place may be but never how far below it.  A fan qualifies as
+;;; or bare ground -- gated by CLEARTOP for the object being placed, and by the agent's
+;;; placement reach, which bounds how far
+;;; above the agent a resting place may be but never how far below it.  A support already
+;;; carrying an occupant of the other recorder layer still counts as clear: the layers are
+;;; superimposed, so a live box may be set down on a plate a ghost box already stands on.  A fan qualifies as
 ;;; a support only while mounted on gears: a loose fan is mere cargo, like a connector, and
 ;;; a wall-mounted fan has no has-location.  A fixed floor/angled blower exposes the same
 ;;; flush support surface through its fixed position.  A tray qualifies as a support only
@@ -72,7 +75,7 @@
   (do (assign $places nil)
       (doall (?plate plate)
         (if (and (has-position ?plate ?location)
-                 (cleartop ?plate)
+                 (cleartop ?plate ?self)
                  (placement-choice-allowed ?agent ?self ?plate)
                  (within-agent-placement-reach ?agent (top ?plate)))
           (assign $places (cons ?plate $places))))
@@ -80,14 +83,14 @@
         (if (and (different ?fan ?self)
                  (bind (mounted-on ?fan $gears))  ;a fan supports only while gears-mounted; a loose fan is mere cargo
                  (has-location ?fan ?location)  ;and a wall-mounted fan has no has-location, so floor-mounted only
-                 (cleartop ?fan)
+                 (cleartop ?fan ?self)
                  (placement-choice-allowed ?agent ?self ?fan)
                  (within-agent-placement-reach ?agent (top ?fan)))
           (assign $places (cons ?fan $places))))
       (doall (?fixed (either floor-blower angled-blower))
         (if (and (different ?fixed ?self)
                  (has-position ?fixed ?location)
-                 (cleartop ?fixed)
+                 (cleartop ?fixed ?self)
                  (placement-choice-allowed ?agent ?self ?fixed)
                  (within-agent-placement-reach ?agent
                                                  (top ?fixed)))
@@ -95,7 +98,7 @@
       (doall (?support-box box)
         (if (and (different ?support-box ?self)
                  (has-location ?support-box ?location)
-                 (cleartop ?support-box)
+                 (cleartop ?support-box ?self)
                  (placement-choice-allowed ?agent ?self ?support-box)
                  (within-agent-placement-reach ?agent (top ?support-box)))
           (assign $places (cons ?support-box $places))))
@@ -103,7 +106,7 @@
         (if (and (different ?tray ?self)
                  (bind (holding $holder ?tray))  ;a tray supports only while held; grounded, it is inert
                  (has-location ?tray ?location)  ;co-located with ?agent (synced to the holder's location)
-                 (cleartop ?tray)
+                 (cleartop ?tray ?self)
                  (placement-choice-allowed ?agent ?self ?tray)
                  (within-agent-placement-reach ?agent (top ?tray)))
           (assign $places (cons ?tray $places))))
@@ -124,8 +127,10 @@
 (define-update place-held-object!
     (?agent agent ?object cargo ?location location ?place)
   ;; ?place is either a support object or the Lisp marker GROUND, so it remains untyped.
-  ;; A tray stops being a support as soon as its holder releases it, so its direct rider's
-  ;; ON link is retracted here, and any stack above that rider stays intact.  The riders
+  ;; A tray stops being a support as soon as its holder releases it, so its direct riders'
+  ;; ON links are retracted here, and any stack above each rider stays intact.  Riders is
+  ;; plural because a ghost-held tray may carry one rider per recorder layer -- its own
+  ;; ghost rider and, under rule 19, a live one -- and both must come off together.  The riders
   ;; travel with the tray first.  -configuration-transition syncs a held tray's stack to its
   ;; holder only as the holder moves, and PUT-TRAY reaches across REACHABLE: ?location may
   ;; be somewhere the holder never walked, so no sync ran for that hop.  Relocating before
@@ -137,8 +142,9 @@
         (if (tray ?object)
           (relocate-tray-and-riders! ?object ?location))
         (if (tray ?object)
-          (if (bind (on $rider ?object))
-            (not (on $rider ?object))))
+          (doall (?rider support-occupant)
+            (if (on ?rider ?object)
+              (not (on ?rider ?object)))))
         (if (not (eql ?place 'ground))
           (on ?object ?place)))
     (inconsistent-state)))

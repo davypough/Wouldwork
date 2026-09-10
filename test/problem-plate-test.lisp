@@ -11,7 +11,7 @@
 ;;; a sixth, clear plate immediately before propagation, which must retract it.  A seventh
 ;;; plate begins clear and undepressed, checking the already-consistent negative case.
 ;;;
-;;; The goal directly verifies every ON fact, exact single-support ownership, CLEARTOP,
+;;; The goal directly verifies every ON fact, exact single-support ownership, SUPPORT-OCCUPIED,
 ;;; and DEPRESSED result after the ordinary propagation init action.  No manipulation
 ;;; action is involved because normalization of the derived plate state is the behavior
 ;;; under test.  Expected minimum path length: zero.
@@ -93,30 +93,30 @@
   (and
     ;; Every support-occupant leaf independently depresses its plate.
     (occupies-only agent-occupant agent-plate)
-    (not (cleartop agent-plate))
+    (support-occupied agent-plate)
     (depressed agent-plate)
 
     (occupies-only box-occupant box-plate)
-    (not (cleartop box-plate))
+    (support-occupied box-plate)
     (depressed box-plate)
 
     (occupies-only jammer-occupant jammer-plate)
-    (not (cleartop jammer-plate))
+    (support-occupied jammer-plate)
     (depressed jammer-plate)
 
     (occupies-only connector-occupant connector-plate)
-    (not (cleartop connector-plate))
+    (support-occupied connector-plate)
     (depressed connector-plate)
 
     (occupies-only fan-occupant fan-plate)
-    (not (cleartop fan-plate))
+    (support-occupied fan-plate)
     (depressed fan-plate)
 
     ;; Zero occupants is the exact negative boundary.  Propagation must retract
     ;; the authored stale fact and leave the already-consistent clear plate alone.
-    (cleartop stale-clear-plate)
+    (not (support-occupied stale-clear-plate))
     (not (depressed stale-clear-plate))
-    (cleartop ordinary-clear-plate)
+    (not (support-occupied ordinary-clear-plate))
     (not (depressed ordinary-clear-plate))))
 
 

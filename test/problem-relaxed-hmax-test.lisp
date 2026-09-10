@@ -22,9 +22,12 @@
   location
     (hmax-origin hmax-box-site hmax-goal-site
      hmax-reach-site hmax-directed-site)
-  gate (hmax-gate hmax-controlled-gate hmax-inverted-gate)
+  gate
+    (hmax-gate hmax-controlled-gate hmax-inverted-gate
+     hmax-switch-controlled-gate hmax-switch-inverted-gate)
   pressure-plate (hmax-plate hmax-plate2)
   receiver (hmax-receiver)
+  switch (hmax-off-switch hmax-on-switch)
   box (hmax-box hmax-target-box))
 
 
@@ -32,6 +35,7 @@
 (include-tech plate)
 (include-tech gate)
 (include-tech reachability)
+(include-tech switch)
 (include-tech walkability)
 (include-tech topo-lower-bound)
 
@@ -42,11 +46,18 @@
   (has-location hmax-target-box hmax-goal-site)
   (has-position hmax-plate hmax-reach-site)
   (has-position hmax-plate2 hmax-directed-site)
+  (apparatus-coords> hmax-off-switch 0 0)
+  (apparatus-coords> hmax-on-switch 1 0)
+  (switched-on hmax-on-switch)
   (controls (()) hmax-gate normal)
   (controls ((hmax-plate hmax-plate2)) hmax-controlled-gate normal)
   (controls (()) hmax-inverted-gate inverted)
+  (controls ((hmax-off-switch)) hmax-switch-controlled-gate normal)
+  (controls ((hmax-on-switch)) hmax-switch-inverted-gate inverted)
   (reach-via hmax-origin (hmax-gate) hmax-reach-site)
   (reach-via> hmax-origin () hmax-directed-site)
+  (reach-via hmax-origin () hmax-off-switch)
+  (reach-via hmax-origin () hmax-on-switch)
   (traverse-via walking hmax-origin () hmax-box-site)
   (traverse-via walking hmax-box-site ((hmax-gate)) hmax-goal-site))
 
@@ -1040,6 +1051,12 @@
   (= (funcall (symbol-function 'topo-finite-resource-bound) *start-state*) 4)
   (= (funcall (symbol-function 'topo-finite-beam-resource-bound) *start-state*) 4)
   (= (funcall (symbol-function 'topo-lm-cut-resource-bound) *start-state*) 4)
+  (let ((controllers
+          (topo-resource-gate-controllers
+            'hmax-switch-controlled-gate
+            (topo-relaxed-state-facts *start-state*))))
+    (and (= (length controllers) 1)
+         (member 'hmax-off-switch controllers :test #'eq)))
   (equal (relaxed-hmax-test-plan-bounds 'topo-finite-resource-bound)
          '(4 3 2 1 0))
   (equal (relaxed-hmax-test-plan-bounds 'topo-finite-beam-resource-bound)
@@ -1113,6 +1130,25 @@
   (= (relaxed-topo-test-bound-for-goal
        'relaxed-lm-cut-cost '(open hmax-inverted-gate))
      1)
+  (= (relaxed-topo-test-bound-for-goal
+       'relaxed-hmax-cost '(open hmax-switch-controlled-gate))
+     1)
+  (= (relaxed-topo-test-bound-for-goal
+       'relaxed-lm-cut-cost '(open hmax-switch-controlled-gate))
+     1)
+  (= (relaxed-topo-test-bound-for-goal
+       'relaxed-lm-cut-cost '(open hmax-switch-inverted-gate))
+     1)
+  (equal (topo-relaxed-controller-fact 'hmax-off-switch)
+         '(switched-on hmax-off-switch))
+  (some
+    (lambda (operator)
+      (and (equal (relaxed-hmax-operator.name operator)
+                  '(relaxed-toggle-switch hmax-off-switch))
+           (member '(switched-on hmax-off-switch)
+                   (relaxed-hmax-operator.effects operator)
+                   :test #'equal)))
+    *topo-relaxed-all-operators*)
   (= (relaxed-topo-test-bound-for-goal
        'relaxed-lm-cut-cost
        '(and (depressed hmax-plate) (active hmax-receiver)))

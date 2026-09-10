@@ -157,4 +157,4 @@
     (has-location boundary-agent location11)
     (not (on boundary-agent box2))
     (has-location box2 location10)
-    (cleartop box2)))
+    (not (support-occupied box2))))

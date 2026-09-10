@@ -204,7 +204,7 @@
       (doall (?box box)
         (if (and (has-location ?box $source-location)
                  (different ?box $source-place)
-                 (cleartop ?box)
+                 (cleartop ?box ?agent)
                  (support-use-allowed ?agent ?box)
                  (jump-elevation-reachable
                    ?agent $source-elevation (top ?box)))
@@ -229,7 +229,7 @@
       (doall (?landing-box box)
         (if (and (bind (has-location ?landing-box $destination))
                  (different $source-location $destination)
-                 (cleartop ?landing-box)
+                 (cleartop ?landing-box ?agent)
                  (support-use-allowed ?agent ?landing-box))
           (do (assign $destination-configuration
                       (list $destination ?landing-box))

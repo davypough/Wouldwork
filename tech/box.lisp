@@ -32,11 +32,14 @@
 
 
 (define-action pickup-box
+  ;; CLEARTOP's reference occupant is the box itself: it is same-layer weight resting on
+  ;; the box that pins it down, whoever does the lifting.  A ghost box superimposed on a
+  ;; live one is not weight the live agent has to lift.
   1
   (?agent agent ?box box)
   (and (bind (has-location ?agent $a-location))
        (bind (has-location ?box $box-location))
-       (cleartop ?box)
+       (cleartop ?box ?box)
        (pickup-clear ?agent $a-location ?box $box-location))
   (">" ?agent "picks up" ?box "at" $box-location "from" $a-location)
   (assert (holding ?agent ?box)

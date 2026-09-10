@@ -114,7 +114,7 @@
     (not (exists (?support support)
            (on box1 ?support)))
     (on box2 box1)
-    (cleartop active-blower)
+    (not (support-occupied active-blower))
 
     ;; A loose fan is toppled but not launched or made into a blowing source.
     (turning fan-blower)
@@ -123,7 +123,7 @@
     (not (has-location loose-fan loft2))
     (not (on loose-fan fan-blower))
     (not (blowing loose-fan))
-    (cleartop fan-blower)
+    (not (support-occupied fan-blower))
 
     ;; The controlled-off unit cannot sustain its destination, so BOX3 falls home.
     (not (depressed off-plate))

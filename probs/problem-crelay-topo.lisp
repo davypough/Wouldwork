@@ -47,7 +47,6 @@
 (include-tech box)
 (include-tech switch)
 (include-tech floor-blower)
-(include-tech recorder)
 (include-tech ladder)
 (include-tech step)
 (include-tech jump)
@@ -56,6 +55,7 @@
 (include-tech visibility)
 (include-tech reachability)
 (include-tech topo-lower-bound)  ;admissible finite-resource bound; prunes on the cutoff before any solution exists
+(include-tech recorder)
 
 
 ;;;; INITIALIZATION ;;;;

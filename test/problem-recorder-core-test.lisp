@@ -1,7 +1,8 @@
 ;;; Filename: problem-recorder-core-test.lisp
 
 ;;; Zero-action characterization of the private recorder core.  Identity, recording-side
-;;; object presence, and cross-layer interaction policy are active, while every
+;;; object presence, and both cross-layer policy hooks -- who may use a support, and which
+;;; pairs of occupants contend for one -- are active, while every
 ;;; capability-specific shadow relation, query, and update remains absent.  This keeps the
 ;;; public recorder assembly extensible without letting apparatus state drift back into its
 ;;; identity layer.  Expected minimum path length: zero.
@@ -81,6 +82,7 @@
   (expect-registered :query 'same-recording-side)
   (expect-registered :query 'recording-shadow-object)
   (expect-registered :query 'recording-shadow-object-present)
+  (expect-registered :query 'support-occupancy-conflict-p)
 
   (expect-relation-absent 'recording-depressed :dynamic)
   (expect-relation-absent 'recording-latched :dynamic)
@@ -131,6 +133,18 @@
     (not (support-use-allowed ghost-connector live-held-tray))
     (not (support-use-allowed ghost-agent live-connector))
     (not (support-use-allowed live-agent unmapped-fan))
+
+    ;; Occupancy contention is the capacity question, and is separate from the
+    ;; SUPPORT-USE-ALLOWED policy above: it asks whether two occupants can share one
+    ;; support top rather than whether either may use the support at all.  Playback
+    ;; superimposes the layers, so a live and a ghost object share a top; same-layer pairs
+    ;; do not, and anything unmapped contends with everything.
+    (not (support-occupancy-conflict-p live-agent ghost-connector))
+    (not (support-occupancy-conflict-p ghost-connector live-agent))
+    (support-occupancy-conflict-p live-agent live-connector)
+    (support-occupancy-conflict-p ghost-agent ghost-connector)
+    (support-occupancy-conflict-p live-agent unmapped-fan)
+    (support-occupancy-conflict-p unmapped-fan ghost-agent)
 
     (connector-pairing-allowed live-agent live-connector ghost-connector)
     (connector-pairing-allowed ghost-agent ghost-connector ghost-connector)

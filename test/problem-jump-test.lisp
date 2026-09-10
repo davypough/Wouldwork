@@ -301,22 +301,22 @@
     (has-location vault-agent vault-goal)
     (not (on vault-agent vault-box))
     (has-location vault-box vault-start)
-    (cleartop vault-box)
+    (not (support-occupied vault-box))
     (not (traverse-via> jumping vault-goal ((vault-wall)) vault-start))
 
     ;; Planned lane 2 dropped locally without relocating either participant.
     (has-location drop-agent drop-site)
     (has-location drop-box drop-site)
     (not (on drop-agent drop-box))
-    (cleartop drop-box)
+    (not (support-occupied drop-box))
 
     ;; Planned lane 3 used the symmetric edge's reverse authored direction and transferred
     ;; support directly; the source top is now clear and the target top occupied.
     (has-location transfer-agent transfer-goal)
     (on transfer-agent transfer-target-box)
     (not (on transfer-agent transfer-source-box))
-    (cleartop transfer-source-box)
-    (not (cleartop transfer-target-box))
+    (not (support-occupied transfer-source-box))
+    (support-occupied transfer-target-box)
     (on transfer-target-box transfer-base-box)
     (= (top transfer-target-box) 4)
     (traverse-via jumping transfer-start () transfer-goal)
@@ -362,7 +362,7 @@
     ;; duplicate authored destination was checked against the initial state above.
     (has-location remote-mount-agent remote-mount-goal)
     (on remote-mount-agent remote-target-box)
-    (not (cleartop remote-target-box))
+    (support-occupied remote-target-box)
 
     ;; Barrier default, explicit override, top elevation, feature typing, and maximum
     ;; non-passable height.  The passable screen contributes nothing to the mixed list.
@@ -387,9 +387,9 @@
     (has-location unsafe-probe-agent unsafe-start)
     (has-location occupied-probe-agent occupied-start)
     (on blocking-connector occupied-target-box)
-    (not (cleartop occupied-target-box))
+    (support-occupied occupied-target-box)
     (has-location tall-box-probe-agent tall-box-site)
-    (cleartop tall-local-box)
+    (not (support-occupied tall-local-box))
 
     ;; One MOVE action owns both grounded routes and explicit support changes.
     (find 'move *actions* :key #'action.name)

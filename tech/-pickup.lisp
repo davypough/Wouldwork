@@ -6,7 +6,9 @@
 ;;; technology's pickup action: box, jammer, and beam-relay.  Each caller still binds
 ;;; its own agent/object has-location facts locally (needed downstream for its own
 ;;; message and effect), and box alone adds its own cleartop check on top of this,
-;;; since only box is itself a valid support for another object.
+;;; since only box is itself a valid support for another object.  That check names the box
+;;; as CLEARTOP's reference occupant, not the agent: what blocks a lift is same-layer
+;;; weight resting on the box.
 ;;;
 ;;; REQUIRES:
 ;;;   types     : agent, location

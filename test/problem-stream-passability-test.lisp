@@ -134,7 +134,7 @@
     (has-location test-agent upper-side)
     (not (exists (?support support)
            (on test-agent ?support)))
-    (cleartop upper-control-plate)
+    (not (support-occupied upper-control-plate))
     (not (depressed upper-control-plate))
 
     ;; The permanently-live lower stream remains the negative reference.

@@ -96,7 +96,7 @@
   (holding holding-agent held-box)
   (has-location available-connector holding-site)
 
-  ;; Occupied-box policy boundary.  The shared role ignores CLEARTOP; PICKUP-BOX
+  ;; Occupied-box policy boundary.  The shared role ignores occupancy; PICKUP-BOX
   ;; adds that public action-specific precondition.
   (has-location occupancy-agent occupied-site)
   (has-location box-rider occupied-site)
@@ -172,7 +172,7 @@
     (not (exists (?cargo cargo)
            (holding occupancy-agent ?cargo)))
     (on box-rider occupied-box)
-    (not (cleartop occupied-box))
+    (support-occupied occupied-box)
     (reachable occupied-site occupied-site)
     (within-agent-vertical-reach
       occupancy-agent (base occupied-box))

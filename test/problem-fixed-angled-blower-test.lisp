@@ -127,7 +127,7 @@
     (not (has-location box1 source1))
     (on box1 landing-box)
     (on box2 box1)
-    (cleartop support-blower)
+    (not (support-occupied support-blower))
 
     ;; Bare-ground fallback.
     (turning bare-blower)
@@ -136,7 +136,7 @@
     (not (has-location box3 source2))
     (not (exists (?support support)
            (on box3 ?support)))
-    (cleartop bare-blower)
+    (not (support-occupied bare-blower))
 
     ;; Loose fan toppling.
     (turning fan-blower)
@@ -145,7 +145,7 @@
     (not (has-location loose-fan ignored3))
     (not (on loose-fan fan-blower))
     (not (blowing loose-fan))
-    (cleartop fan-blower)
+    (not (support-occupied fan-blower))
 
     ;; One-shot delivery persists after the controlling transition stops the blower.
     (on agent1 plate1)

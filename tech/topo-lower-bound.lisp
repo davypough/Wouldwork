@@ -11,7 +11,8 @@
 ;;;   - placement keeps direct reach and support location, but ignores clearance and height;
 ;;;   - one beam-affecting action may activate every receiver;
 ;;;   - without blower propagation, normally controlled gates retain their positive DNF
-;;;     plate/receiver dependencies and one action may newly depress only one plate;
+;;;     plate/receiver/switch dependencies, one action may newly depress only one plate,
+;;;     and each switch may be turned on by one relaxed toggle;
 ;;;   - inverted gates, jammer bypasses, and blower cascades keep one-action fallbacks;
 ;;;   - acquiring cargo costs one action without modeling the trip to it;
 ;;;   - tray placement propagates location only through the retained ON support chain;
@@ -224,10 +225,11 @@ One preserves eager evaluation; values above one enable adaptive sampling.")
 
 
 (define-problem-helper topo-relaxed-normalize-state-proposition (proposition)
-  "Map indexed HOLDING/ON storage relations back to their public abstract facts."
+  "Map indexed HOLDING storage relations back to their public abstract fact.  ON needs no
+   entry: it is an ordinary fluent relation stored under its own name, since a support may
+   carry one occupant per recorder layer and so cannot be bijective."
   (case (first proposition)
     ((holding holding1 holding2) (cons 'holding (rest proposition)))
-    ((on on1 on2) (cons 'on (rest proposition)))
     (otherwise proposition)))
 
 
@@ -252,9 +254,9 @@ One preserves eager evaluation; values above one enable adaptive sampling.")
 LIST-DATABASE is a diagnostic printer: it conses one format string per proposition in order
 to sort the whole database by relation name, and no consumer of these facts reads them in
 order.  A bijective relation stores both of its indexes, so normalizing HOLDING1/HOLDING2
-and ON1/ON2 back to their public form is the only source of duplicates here -- a static
-relation such as HAS-POSITION cannot also appear in a state's own database -- and a hash
-table removes them in linear time."
+back to its public form is the only source of duplicates here -- a static relation such as
+HAS-POSITION cannot also appear in a state's own database -- and a hash table removes them
+in linear time."
   (let ((seen (make-hash-table :test #'equal))
         (facts nil))
     (maphash
@@ -1694,6 +1696,8 @@ not an admissible bound, until the concrete capability proves that separation."
          (list 'depressed controller))
         ((topo-relaxed-object-of-type-p controller 'toggle-plate)
          (list 'latched controller))
+        ((topo-relaxed-object-of-type-p controller 'switch)
+         (list 'switched-on controller))
         (t
          (error "Unsupported relaxed gate controller: ~S" controller))))
 
@@ -1733,7 +1737,7 @@ not an admissible bound, until the concrete capability proves that separation."
 
 
 (define-problem-helper topo-relaxed-device-operators
-    (plates receivers gates)
+    (plates receivers switches gates)
   (let ((operators (topo-relaxed-gate-control-operators gates)))
     (if (topo-relaxed-independent-plate-changes-p)
       (dolist (plate plates)
@@ -1762,6 +1766,15 @@ not an admissible bound, until the concrete capability proves that separation."
           :preconditions (list '(:topo-action-taken))
           :effects (list (list 'active receiver)))
         operators))
+    ;; A wall switch starts either on or off and one real TOGGLE-SWITCH action can establish
+    ;; its positive state.  Reach and agent availability are deliberately omitted, as with
+    ;; the other relaxed device changes; doing so can only weaken the lower bound.
+    (dolist (switch switches)
+      (push
+        (make-relaxed-hmax-operator
+          :name (list 'relaxed-toggle-switch switch)
+          :effects (list (list 'switched-on switch)))
+        operators))
     (push
       (make-relaxed-hmax-operator
         :name 'relaxed-any-action
@@ -1771,12 +1784,12 @@ not an admissible bound, until the concrete capability proves that separation."
 
 
 (define-problem-helper topo-relaxed-manipulation-operators
-    (agents cargo supports plates receivers gates locations)
+    (agents cargo supports plates receivers switches gates locations)
   (let ((operators
           (append
             (topo-relaxed-placement-operators
               agents cargo supports locations)
-            (topo-relaxed-device-operators plates receivers gates))))
+            (topo-relaxed-device-operators plates receivers switches gates))))
     (dolist (agent agents)
       (dolist (object cargo)
         ;; The relaxation deliberately omits the acquisition trip and reach test.
@@ -1869,12 +1882,13 @@ not an admissible bound, until the concrete capability proves that separation."
         (supports (topo-relaxed-type-instances 'support))
         (plates (topo-relaxed-type-instances 'plate))
         (receivers (topo-relaxed-type-instances 'receiver))
+        (switches (topo-relaxed-type-instances 'switch))
         (gates (topo-relaxed-type-instances 'gate)))
     (topo-relaxed-add-action-triggers!
       (append
         (topo-relaxed-movement-operators agents cargo locations)
         (topo-relaxed-manipulation-operators
-          agents cargo supports plates receivers gates locations)
+          agents cargo supports plates receivers switches gates locations)
         (topo-relaxed-recorder-operators)))))
 
 

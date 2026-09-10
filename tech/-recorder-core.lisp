@@ -43,8 +43,8 @@
 ;;;              recording-shadow-view-object;
 ;;;              recorder-cycle-count;
 ;;;              overrides recording-shadow-object, recording-shadow-object-present,
-;;;              object-manipulation-allowed, support-use-allowed, and
-;;;              connector-pairing-allowed
+;;;              object-manipulation-allowed, support-use-allowed,
+;;;              support-occupancy-conflict-p, and connector-pairing-allowed
 ;;;   functions: register-recorder-shadow-lifecycle,
 ;;;              clear-recorder-shadow-relation!
 
@@ -218,6 +218,20 @@
            (exists (?holder agent)
              (and (ghost-recording-object ?holder)
                   (holding ?holder ?support))))))
+
+
+(define-query support-occupancy-conflict-p (?occupant ?other)
+  ;; Two occupants contend for one support top unless they belong to opposite recorder
+  ;; layers.  Playback superimposes the live and ghost worlds rather than stacking them,
+  ;; so a live box and a ghost box share a plate; two live or two ghost occupants do not.
+  ;; Written as a negated opposite-layer test rather than as
+  ;; (not (same-recording-side ...)) on purpose: an unmapped object -- one the recorder
+  ;; does not replay at all -- is on neither layer, and must keep the ordinary
+  ;; single-occupant rule instead of falling through the negation into a free pass.
+  (not (or (and (live-recording-object ?occupant)
+                (ghost-recording-object ?other))
+           (and (ghost-recording-object ?occupant)
+                (live-recording-object ?other)))))
 
 
 (define-query connector-pairing-allowed (?actor ?connector ?terminus)

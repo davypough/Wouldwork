@@ -46,7 +46,7 @@
   ;; cargo, a tray keeps its has-location fact even while held (synced to its holder's
   ;; location by apply-agent-configuration!'s relocation cascade), so a tray already held
   ;; by someone else must be excluded explicitly instead of relying on a missing
-  ;; has-location to rule it out.  A grounded tray is always cleartop by construction --
+  ;; has-location to rule it out.  A grounded tray is always clear by construction --
   ;; nothing can rest on a tray unless it is held -- so no cleartop check is needed here.
   1
   (?agent agent ?tray tray)

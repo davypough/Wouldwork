@@ -1,6 +1,14 @@
 ;;; Filename: -physical-init-checks.lisp
 
 ;;; Initialization validation for shared physical placement facts and live-cargo presence.
+;;;
+;;; A support top holds at most one occupant per recorder layer, not at most one occupant:
+;;; the live and ghost worlds are superimposed during playback, so a live object and a
+;;; ghost object may rest on the same support.  With no recorder in the problem nothing is
+;;; on either layer, and the check reduces to the familiar single-occupant rule.  The
+;;; RECORDING-COPY> literals are already complete here -- DERIVE-RECORDING-COPY-LITERALS
+;;; runs as an initialization literal generator, ahead of every init check -- so
+;;; asterisk-named ghosts are classified alongside authored ones.
 
 
 (in-package :ww)
@@ -63,6 +71,13 @@
     (dolist (literal (positive-init-literals-with-relation 'recording-copy> literals)
                      ghost-objects)
       (setf (gethash (third (init-literal-proposition literal)) ghost-objects) t))))
+
+
+(define-init-check-helper init-recording-live-objects (literals)
+  (let ((live-objects (make-hash-table :test #'equal)))
+    (dolist (literal (positive-init-literals-with-relation 'recording-copy> literals)
+                     live-objects)
+      (setf (gethash (second (init-literal-proposition literal)) live-objects) t))))
 
 
 (define-init-check-helper check-init-live-cargo-physical-state (literals)
@@ -180,16 +195,29 @@
           literal holder object on-map)))))
 
 
-(define-init-check-helper init-check-support-has-one-object (literal object support support-occupants)
-  (let ((occupant (gethash support support-occupants)))
-    (when occupant
-      (fail-init-check nil "~%DEFINE-INIT places multiple objects on the same support.~%~
+(define-init-check-helper init-occupants-may-share-p (object other live-objects ghost-objects)
+  "True when OBJECT and OTHER sit on opposite recorder layers.  That is the one case in
+   which two occupants share a support top: playback superimposes the live and ghost
+   worlds rather than stacking them.  An object on neither layer contends with everything,
+   which keeps the ordinary single-occupant rule for problems with no recorder."
+  (or (and (gethash object live-objects)
+           (gethash other ghost-objects))
+      (and (gethash object ghost-objects)
+           (gethash other live-objects))))
+
+
+(define-init-check-helper init-check-support-occupants-compatible
+    (literal object support support-occupants live-objects ghost-objects)
+  (dolist (occupant (gethash support support-occupants))
+    (unless (init-occupants-may-share-p object occupant live-objects ghost-objects)
+      (fail-init-check nil "~%DEFINE-INIT places contending objects on the same support.~%~
               Literal:          ~S~%~
               Existing object:  ~S~%~
               New object:       ~S~%~
-              Support:          ~S"
-             literal occupant object support))
-    (setf (gethash support support-occupants) object)))
+              Support:          ~S~%~
+              Only a live object and its recorder ghost may share a support top."
+             literal occupant object support)))
+  (push object (gethash support support-occupants)))
 
 
 (define-init-check-helper init-check-on-location-consistency
@@ -241,6 +269,8 @@
         (positions (init-literal-map 'has-position literals 1 2))
         (on-map (init-literal-map 'on literals 1 2))
         (held-objects (init-held-objects literals))
+        (live-objects (init-recording-live-objects literals))
+        (ghost-objects (init-recording-ghost-objects literals))
         (support-occupants (make-hash-table :test #'equal)))
     (init-check-object-not-held-and-has-location literals locations)
     (init-check-held-tray-location-consistency literals locations)
@@ -258,8 +288,8 @@
             literal object support held-objects)
           (init-check-tray-support-held literal support held-objects)
           (when location-consistency-required-p
-            (init-check-support-has-one-object
-              literal object support support-occupants)
+            (init-check-support-occupants-compatible
+              literal object support support-occupants live-objects ghost-objects)
             (init-check-on-location-consistency
               literal object support locations positions)))
         (init-check-on-cycle literal object on-map)))

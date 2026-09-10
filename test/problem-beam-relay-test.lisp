@@ -160,7 +160,7 @@
     ;; Reconnection propagates the unique incoming hue to the matching receiver.
     (color lifecycle-connector red)
     (active new-receiver)
-    (cleartop old-plate)
+    (not (support-occupied old-plate))
     (not (depressed old-plate))
 
     ;; PUT-CONNECTOR releases the independent hold, places on the chosen support, and

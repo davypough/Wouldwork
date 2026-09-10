@@ -2,8 +2,11 @@
 
 ;;; Recorder Stage 3 characterization.  Eight phase-gated physical occupancy transitions
 ;;; exercise two toggle plates -- CONTROL-PLATE, wired to the wall fan, and an
-;;; independent CONTROL-PLATE-2 -- in both environmental views.  ON is bijective, so a
-;;; support holds at most one direct occupant; a "first" agent presses CONTROL-PLATE,
+;;; independent CONTROL-PLATE-2 -- in both environmental views.  A support top holds at
+;;; most one occupant per recorder layer, and this problem deliberately keeps each plate to
+;;; one occupant at a time so every depressed/latched edge has an unambiguous cause; the
+;;; superimposed live-and-ghost case is characterized separately by
+;;; problem-recorder-occupancy-test.  A "first" agent presses CONTROL-PLATE,
 ;;; which alone drives the fan, while the corresponding "second" agent presses the
 ;;; independent CONTROL-PLATE-2, exercising the identical depressed/latched (and
 ;;; recording-side) mechanics on a second fixture without either plate displacing the

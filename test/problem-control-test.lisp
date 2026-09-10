@@ -185,7 +185,7 @@
     ;; plate, so the shared source clears and the two gate modes swap.
     (has-location lifecycle-weight lifecycle-site)
     (not (on lifecycle-weight lifecycle-plate))
-    (cleartop lifecycle-plate)
+    (not (support-occupied lifecycle-plate))
     (not (depressed lifecycle-plate))
     (not (energized lifecycle-plate))
     (not (open lifecycle-normal-gate))

@@ -110,7 +110,11 @@
        ;; on: the support itself may or may not be a mapped mobile object, and is
        ;; quantified for the same reason as the cargo above.  A support with no ghost keeps
        ;; its live value, which covers every fixed support -- a plate, a gears-mounted fan,
-       ;; a fixed blower.
+       ;; a fixed blower.  In that case the new ghost joins the live occupant already
+       ;; resting there rather than replacing it, which is what the fork must produce:
+       ;; playback superimposes the two layers.  ON is deliberately not bijective for
+       ;; exactly this reason -- a bijective reverse index would evict the live occupant
+       ;; here silently, dropping it off its plate the moment recording began.
        (doall (?live mobile-object)
          (doall (?support support)
            (if (on ?live ?support)

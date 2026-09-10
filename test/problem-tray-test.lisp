@@ -241,7 +241,7 @@
     (not (holding loader-agent cascade-box))
     (not (exists (?support support)
            (on cascade-box ?support)))
-    (cleartop cascade-tray)
+    (not (support-occupied cascade-tray))
     (has-location cascade-box cascade-destination)
     (= (base bearer-agent) 3)
     (= (top cascade-tray) 3)

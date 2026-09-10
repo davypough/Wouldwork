@@ -117,8 +117,8 @@
       (has-location moving-box target-site)
       (on moving-box target-box)
       (not (on moving-box source-box))
-      (cleartop source-box)
-      (not (cleartop target-box))
+      (not (support-occupied source-box))
+      (support-occupied target-box)
       (= (top source-box) 1)
       (= (top target-box) 1)
       (= (base moving-box) 1)
@@ -128,18 +128,18 @@
       (has-location plate-box plate-site)
       (on plate-box put-plate)
       (depressed put-plate)
-      (not (cleartop put-plate))
+      (support-occupied put-plate)
 
       ;; BLOCKED-BOX is geometrically reachable, but its rider makes the box
       ;; itself unavailable to PICKUP-BOX.
-      (not (cleartop blocked-box))
+      (support-occupied blocked-box)
       (pickup-clear occupied-agent occupied-site blocked-box occupied-site)
       (not (box-action-applicable-p
              state 'pickup-box '(occupied-agent blocked-box)))
 
       ;; HIGH-BOX is clear, but elevation two is just beyond the fixed unit
       ;; vertical reach, regardless of the agent's explicit height two.
-      (cleartop high-box)
+      (not (support-occupied high-box))
       (= (top high-support) 2)
       (= (base high-box) 2)
       (not (within-agent-vertical-reach high-agent 2))
@@ -149,7 +149,7 @@
       ;; An otherwise available loose box remains unavailable while the agent
       ;; already holds a different box.
       (holding holding-agent already-held-box)
-      (cleartop loose-box)
+      (not (support-occupied loose-box))
       (not (pickup-clear holding-agent holding-site loose-box holding-site))
       (not (box-action-applicable-p
              state 'pickup-box '(holding-agent loose-box)))

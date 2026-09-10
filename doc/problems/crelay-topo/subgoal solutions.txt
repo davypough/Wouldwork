@@ -1,0 +1,63 @@
+Crelay-Topo Subgoal Solutions
+=============================
+
+This is the cumulative record of validated subgoal solutions.  Append each new
+subgoal after it has been found and validated; do not replace earlier entries.
+
+
+Subgoal 1 -- Hold gate1 open with connector1
+------------------------------------------------
+
+Subgoal:
+
+  (and (on connector1 plate1)
+       (ghost-stops-recorder))
+
+Status: validated, 10 actions
+
+Purpose:
+
+  Complete one normal recorder cycle with connector1 left on plate1 so that
+  gate1 remains open.  Agent1 ends at location2.  Tray1 remains on plate2 at
+  location7, keeping gate3 open, and box1 remains at location6.
+
+Integrated WouldWork action sequence:
+
+   1. (START-RECORDER AGENT1)
+   2. (MOVE AGENT1* ((WALK LOCATION1 NIL LOCATION2)))
+   3. (MOVE AGENT1* ((STEP (LOCATION2 GROUND) NIL
+                                  (LOCATION2 PLATE1))))
+   4. (MOVE AGENT1 ((WALK LOCATION1 (GATE1 GATE3) LOCATION9)))
+   5. (PICKUP-CONNECTOR AGENT1 CONNECTOR1 LOCATION9)
+   6. (MOVE AGENT1 ((WALK LOCATION9 (GATE1 GATE3) LOCATION2)))
+   7. (PUT-CONNECTOR AGENT1 CONNECTOR1 LOCATION2 PLATE1)
+   8. (MOVE AGENT1* ((STEP (LOCATION2 PLATE1) NIL
+                                  (LOCATION2 GROUND))))
+   9. (MOVE AGENT1* ((WALK LOCATION2 NIL LOCATION1)))
+  10. (STOP-RECORDER AGENT1*)
+
+Setup phase:
+
+  No preliminary actions are required.  Initially agent1 is at recorder1 at
+  location1, connector1 is at location9, tray1 is on plate2 at location7, and
+  box1 is at location6.  Gates2, gate3, and gate5 are open.
+
+Recording phase:
+
+  (START-RECORDER AGENT1)
+  (MOVE AGENT1* ((WALK LOCATION1 NIL LOCATION2)))
+  (MOVE AGENT1* ((STEP (LOCATION2 GROUND) NIL
+                              (LOCATION2 PLATE1))))
+  (PAUSE)
+  (MOVE AGENT1* ((STEP (LOCATION2 PLATE1) NIL
+                              (LOCATION2 GROUND))))
+  (MOVE AGENT1* ((WALK LOCATION2 NIL LOCATION1)))
+  (STOP-RECORDER AGENT1*)
+
+Playback phase during the pause:
+
+  (MOVE AGENT1 ((WALK LOCATION1 (GATE1 GATE3) LOCATION9)))
+  (PICKUP-CONNECTOR AGENT1 CONNECTOR1 LOCATION9)
+  (MOVE AGENT1 ((WALK LOCATION9 (GATE1 GATE3) LOCATION2)))
+  (PUT-CONNECTOR AGENT1 CONNECTOR1 LOCATION2 PLATE1)
+  (RESUME)

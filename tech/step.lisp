@@ -8,7 +8,8 @@
 ;;; (box tops) and authored jump edges.  A fan is steppable only while mounted on gears: a
 ;;; fan lying on the ground or resting on a box top cannot be stepped on (nor jumped to).
 ;;; Stepping on a plate depresses it (plate's update-plate-status! derives depression from
-;;; cleartop), so an agent can hold a gate or gears control active with its own weight;
+;;; support-occupied), so an agent can hold a gate or gears control active with its own
+;;; weight;
 ;;; stepping on a fan whose gears are turning launches the agent to the gears' aimed-at
 ;;; destination during the ensuing propagation.
 ;;;
@@ -75,7 +76,7 @@
       (if (step-source-can-mount $source-place)
         (doall (?fixture steppable-object)
           (if (and (steppable-fixture-at ?fixture $location)
-                   (cleartop ?fixture)
+                   (cleartop ?fixture ?agent)
                    (support-use-allowed ?agent ?fixture))
             (assign $transitions
                     (cons

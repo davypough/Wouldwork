@@ -173,7 +173,7 @@
                 (on lifecycle-box ?support))))
     (mounted-on lifecycle-fan lifecycle-gears)
     (has-location lifecycle-fan lifecycle-target)
-    (not (cleartop lifecycle-fan))
+    (support-occupied lifecycle-fan)
     (= (base lifecycle-agent) 1)
     (= (top lifecycle-fan) 0)
     (within-agent-vertical-reach lifecycle-agent 0)
@@ -232,14 +232,14 @@
 
     ;; The negative support facts are explicit, so a missing option cannot pass
     ;; merely because its fixture was initialized incorrectly.
-    (cleartop clear-matrix-plate)
-    (not (cleartop occupied-matrix-plate))
-    (cleartop clear-support-box)
-    (not (cleartop occupied-support-box))
+    (not (support-occupied clear-matrix-plate))
+    (support-occupied occupied-matrix-plate)
+    (not (support-occupied clear-support-box))
+    (support-occupied occupied-support-box)
     (mounted-on clear-floor-fan clear-fan-gears)
-    (cleartop clear-floor-fan)
+    (not (support-occupied clear-floor-fan))
     (mounted-on occupied-floor-fan occupied-fan-gears)
-    (not (cleartop occupied-floor-fan))
+    (support-occupied occupied-floor-fan)
     (not (exists (?gears gears)
            (mounted-on loose-fan ?gears)))
     (has-location loose-fan matrix-site)
@@ -286,7 +286,7 @@
              (member 'too-low-plate $too-low)))
 
     ;; The shared clear control remains inert, keeping every fan fixture stopped.
-    (cleartop control-plate)
+    (not (support-occupied control-plate))
     (not (depressed control-plate))
     (not (turning lifecycle-gears))
     (not (blowing lifecycle-fan))

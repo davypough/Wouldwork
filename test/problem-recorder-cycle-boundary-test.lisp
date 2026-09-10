@@ -175,7 +175,7 @@
       (not (recorder-state-contains-ghost-reference-p prepared))
       (not (recorder-boundary-fact-p
              prepared '(has-location ghost-agent recorder-site)))
-      (not (recorder-boundary-fact-p prepared '(on1 ghost-agent cycle-plate)))
+      (not (recorder-boundary-fact-p prepared '(on ghost-agent cycle-plate)))
       (not (state-is-inconsistent prepared))
       (equal (getf report :recording)
              '((start-recorder) (stop-recorder))))))

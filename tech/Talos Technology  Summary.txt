@@ -77,7 +77,7 @@ visibility-object (either gate transmitter receiver floor-repeater wall-repeater
 (latched toggle-plate)
 (lethal threat)
 (mounted-on fan $gears)
-(on $support-occupant $support :bijective)  ;reverse lookup via cleartop
+(on $support-occupant $support)  ;occupant-keyed; a support carries one occupant per recorder layer
 (open gate)
 (paired connector terminus)  ;undirected; stored connector-first
 (recorder-cycle-closed)  ;set by a normalized stop-recorder or cancel-playback boundary

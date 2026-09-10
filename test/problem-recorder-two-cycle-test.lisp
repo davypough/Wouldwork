@@ -115,9 +115,9 @@
 
 
 (define-test-helper recorder-two-cycle-open-checkpoint-p ()
-  ;; ON is bijective, so the database stores its ON1/ON2 index pair rather than a plain
-  ;; (ON ...) tuple; check ON1 (keyed by the occupant) directly.
-  (and (recorder-two-cycle-fact-p *start-state* '(on1 live-agent cycle-plate))
+  ;; ON is an ordinary occupant-keyed fluent relation, stored and printed under its own
+  ;; name -- a support may carry one occupant per recorder layer, so it cannot be bijective.
+  (and (recorder-two-cycle-fact-p *start-state* '(on live-agent cycle-plate))
        (recorder-two-cycle-fact-p *start-state* '(depressed cycle-plate))
        (recorder-two-cycle-fact-p *start-state* '(latched cycle-plate))
        (recorder-two-cycle-fact-p *start-state* '(open cycle-gate))

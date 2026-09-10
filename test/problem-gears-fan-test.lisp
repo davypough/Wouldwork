@@ -322,14 +322,14 @@
 
     ;; A fixed combined blower has no independently actionable fan identity.
     (blowing fixed-floor-blower)
-    (cleartop fixed-floor-blower)
+    (not (support-occupied fixed-floor-blower))
     (not (fan-action-applicable-p
            state 'pickup-fan '(placing-agent fixed-floor-blower)))
 
     ;; Occupancy independently blocks pickup.
     (mounted-on occupied-fan occupied-fan-gears)
     (on occupant-box occupied-fan)
-    (not (cleartop occupied-fan))
+    (support-occupied occupied-fan)
     (not (depressed off-plate))
     (not (turning occupied-fan-gears))
     (not (blowing occupied-fan))
