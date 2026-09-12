@@ -37,72 +37,81 @@
 
 (defun compile-all-functions ()
   "Compile all action preconditions/effects, queries, updates, goal, and constraint functions.
-   Should only be called once during initialization."
-  (format t "~&Optimizing lambda expressions and compiling...")
-  ;; Compile action preconditions and effects
-  (iter (for action in *actions*)
-        (format t "~&  ~A...~%" (action.name action))
-        (finish-output)
-        (with-slots (pre-defun-name eff-defun-name precondition-lambda effect-lambda) action
-          (compile pre-defun-name (subst-int-code precondition-lambda))
-          (compile eff-defun-name (subst-int-code effect-lambda))))
-  ;; Compile query and update functions
-  (iter (for fname in (append *query-names* *update-names*))
-        (format t "~&  ~A...~%" fname)
-        (finish-output)
-        (compile fname (subst-int-code (symbol-value fname))))
-  ;; Compile base filter if present
-  (if *enumerator-base-filter-form*
-      (progn
-        (format t "~&  ~A (base-filter)...~%" *enumerator-base-filter-name*)
-        (finish-output)
-        (setf *enumerator-prefilter*
-              (compile nil (subst-int-code *enumerator-base-filter-form*))))
-      ;; Ensure old filter state does not leak when a problem defines no base filter.
-      (setf *enumerator-prefilter* nil))
-  ;; Compile enum :REQUIRES predicates if the enumerator module is loaded.
-  (when (fboundp 'compile-enum-relation-requires-predicates)
-    (format t "~&  enum relation requires predicates...~%")
-    (finish-output)
-    (compile-enum-relation-requires-predicates))
-  ;; Compile happening interrupt functions
-  (iter (for obj in *happening-names*)
-        (format t "~&  ~A...~%" obj)
-        (finish-output)
-        (when (get obj :interrupt)
-          (setf (get obj :interrupt)
-                (compile nil (subst-int-code (get obj :interrupt-lambda))))))
-  ;; Compile happening rebound functions
-  (iter (for obj in *happening-names*)
-        (when (get obj :rebound-lambda)
-          (format t "~&  ~A rebound...~%" obj)
+   Should only be called once during initialization.
+   Optimization notes are muffled across the whole pass.  Every lambda compiled here was
+   generated rather than authored -- spliced in from the tech files, then specialized by the
+   translator against this problem's own type declarations -- so a note about one describes
+   that machinery working as designed and names nothing an author can act on.  A problem
+   declaring no TRAY, for instance, reduces PLACE-HELD-OBJECT!'s tray branch to dead code,
+   and SBCL reports each dropped form as \"deleting unreachable code\" on every (stage ...).
+   Warnings and errors are deliberately left alone: only notes are suppressed, and only over
+   generated code -- the hand-written sources in src/ and tech/ still report theirs."
+  (handler-bind (#+sbcl (sb-ext:compiler-note #'muffle-warning))
+    (format t "~&Optimizing lambda expressions and compiling...")
+    ;; Compile action preconditions and effects
+    (iter (for action in *actions*)
+          (format t "~&  ~A...~%" (action.name action))
           (finish-output)
-          (setf (get obj :rebound)
-                (compile nil (subst-int-code (get obj :rebound-lambda))))))
-  ;; Compile happening kill functions
-  (iter (for obj in *happening-names*)
-        (when (get obj :kill-lambda)
-          (format t "~&  ~A kill...~%" obj)
+          (with-slots (pre-defun-name eff-defun-name precondition-lambda effect-lambda) action
+            (compile pre-defun-name (subst-int-code precondition-lambda))
+            (compile eff-defun-name (subst-int-code effect-lambda))))
+    ;; Compile query and update functions
+    (iter (for fname in (append *query-names* *update-names*))
+          (format t "~&  ~A...~%" fname)
           (finish-output)
-          (setf (get obj :kill)
-                (compile nil (subst-int-code (get obj :kill-lambda))))))
-  ;; Compile happening aftereffect functions
-  (iter (for obj in *happening-names*)
-        (when (get obj :aftereffect-lambda)
-          (format t "~&  ~A aftereffect...~%" obj)
+          (compile fname (subst-int-code (symbol-value fname))))
+    ;; Compile base filter if present
+    (if *enumerator-base-filter-form*
+        (progn
+          (format t "~&  ~A (base-filter)...~%" *enumerator-base-filter-name*)
           (finish-output)
-          (setf (get obj :aftereffect)
-                (compile nil (subst-int-code (get obj :aftereffect-lambda))))))
-  ;; Compile goal function
-  (when (boundp 'goal-fn)
-    (format t "~&  ~A...~%" 'goal-fn)
-    (finish-output)
-    (compile 'goal-fn (subst-int-code (symbol-value 'goal-fn))))
-  ;; Compile constraint function
-  (when (boundp 'constraint-fn)
-    (format t "~&  ~A...~%" 'constraint-fn)
-    (finish-output)
-    (compile 'constraint-fn (subst-int-code (symbol-value 'constraint-fn)))))
+          (setf *enumerator-prefilter*
+                (compile nil (subst-int-code *enumerator-base-filter-form*))))
+        ;; Ensure old filter state does not leak when a problem defines no base filter.
+        (setf *enumerator-prefilter* nil))
+    ;; Compile enum :REQUIRES predicates if the enumerator module is loaded.
+    (when (fboundp 'compile-enum-relation-requires-predicates)
+      (format t "~&  enum relation requires predicates...~%")
+      (finish-output)
+      (compile-enum-relation-requires-predicates))
+    ;; Compile happening interrupt functions
+    (iter (for obj in *happening-names*)
+          (format t "~&  ~A...~%" obj)
+          (finish-output)
+          (when (get obj :interrupt)
+            (setf (get obj :interrupt)
+                  (compile nil (subst-int-code (get obj :interrupt-lambda))))))
+    ;; Compile happening rebound functions
+    (iter (for obj in *happening-names*)
+          (when (get obj :rebound-lambda)
+            (format t "~&  ~A rebound...~%" obj)
+            (finish-output)
+            (setf (get obj :rebound)
+                  (compile nil (subst-int-code (get obj :rebound-lambda))))))
+    ;; Compile happening kill functions
+    (iter (for obj in *happening-names*)
+          (when (get obj :kill-lambda)
+            (format t "~&  ~A kill...~%" obj)
+            (finish-output)
+            (setf (get obj :kill)
+                  (compile nil (subst-int-code (get obj :kill-lambda))))))
+    ;; Compile happening aftereffect functions
+    (iter (for obj in *happening-names*)
+          (when (get obj :aftereffect-lambda)
+            (format t "~&  ~A aftereffect...~%" obj)
+            (finish-output)
+            (setf (get obj :aftereffect)
+                  (compile nil (subst-int-code (get obj :aftereffect-lambda))))))
+    ;; Compile goal function
+    (when (boundp 'goal-fn)
+      (format t "~&  ~A...~%" 'goal-fn)
+      (finish-output)
+      (compile 'goal-fn (subst-int-code (symbol-value 'goal-fn))))
+    ;; Compile constraint function
+    (when (boundp 'constraint-fn)
+      (format t "~&  ~A...~%" 'constraint-fn)
+      (finish-output)
+      (compile 'constraint-fn (subst-int-code (symbol-value 'constraint-fn))))))
 
 
 (defun do-integer-conversion ()

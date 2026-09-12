@@ -4,26 +4,32 @@
 ;;; manipulation reach of a location.  Two endpoints are in reach iff identical, or an
 ;;; edge joins them with every barrier gate open.
 ;;;
+;;; The reach edges themselves may be hand-authored or derived.  -reachability-coordinates
+;;; owns both the relations and the coordinate derivation that fills them, the way
+;;; -traversal owns TRAVERSE-VIA for walkability: a problem carrying raw segment geometry
+;;; gets its REACH-VIA edges computed from that geometry and subtracts the ones its design
+;;; withholds with REACH-DISALLOWED>, while a problem carrying no geometry authors every
+;;; edge itself and the derivation stays inert.  This file owns what reach *means* once the
+;;; edges exist -- the query, its barrier predicate, and the barrier-type validation.
+;;;
 ;;; REQUIRES:
 ;;;   types     : location
-;;;   nested    : -reachability (identity-default reachable query overridden here);
+;;;   nested    : -reachability (identity-default reachable query overridden here,
+;;;               reach-target);
+;;;               -reachability-coordinates (reach-via, reach-via>, reach-disallowed>, and
+;;;               the coordinate derivation that fills them);
 ;;;               -gate (gate optional type, (open gate) relation) -- shared with gate,
 ;;;               walkability (via -passability), visibility, beam-direct, and
 ;;;               beam-crossing, which all nest -gate instead of hand-declaring it
 ;;; PROVIDES:
-;;;   relations : (reach-via reach-target $list reach-target),
-;;;               (reach-via> location $list reach-target)
 ;;;   queries   : reachable (overrides -reachability), reachable-clear
+;;;   init      : reachability-init-check
 
 (include-tech -reachability)
+(include-tech -reachability-coordinates)
 (include-tech -gate)
 
 (in-package :ww)
-
-
-(define-static-relations
-  (reach-via reach-target $list reach-target)  ;symmetric manipulation reach; barriers must be open
-  (reach-via> location $list reach-target))  ;directional reach, reacher's location first
 
 
 (define-init-check reachability-init-check (literals)

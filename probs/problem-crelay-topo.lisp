@@ -25,7 +25,7 @@
   location (location1 location2 location3 location4 location5
             location6 location7 location8 location9 location10
             location11 location12 location13 location14 location15 location16 location17
-            location18 location19 location20)
+            location18 location19 location20 location21)
   pressure-plate (plate1 plate2 plate3 plate4 plate5 plate6 plate7 plate8)
   box (box1 box1*)
   connector (connector1 connector1*)
@@ -111,6 +111,7 @@
   (location-coords> location18 11 25)
   (location-coords> location19 10 20)
   (location-coords> location20 75/10 1 3/2)
+  (location-coords> location21 165/10 27)
 
   ;; Exact fixture coordinates.  The 1/10 offsets place each fixture
   ;; unambiguously on the intended side of its adjacent boundary.
@@ -187,6 +188,7 @@
   (reach-via location4 () switch1)
   (reach-via location5 () switch1)
   (reach-via location20 () switch1)
+  (reach-via location20 () location5)
   (reach-via location6 (gate2) switch1)
   (reach-via location14 () switch2)
 )

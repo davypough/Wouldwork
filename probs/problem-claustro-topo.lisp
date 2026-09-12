@@ -2,8 +2,8 @@
 
 ;;; Coordinate-driven version of Talos 'Claustrophobia'.
 ;;; The fixed BEAM-VIA corridor remains authored, while raw planar geometry derives its
-;;; finite-barrier crossings, the visibility tables, and walking topology.  Jumping, climbing,
-;;; reachability, and directional jamming exclusions remain explicitly authored
+;;; finite-barrier crossings, the visibility tables, walking topology, and manipulation
+;;; reach.  Jumping, climbing, and directional jamming exclusions remain explicitly authored
 ;;; because they are not determined by planar geometry alone.
 
 
@@ -179,8 +179,6 @@
   (traverse-via> climbing location7 ((ladder1)) location1)
   (traverse-via jumping location10 () location12)  ;authorized elevation change
   (traverse-via stairway location13 () location11)  ;authorized elevation change, unrestricted both ways
-  (reach-via location1 () location7)  ;authorizes manipulation
-  (reach-via location2 (gate2 gate3) location3)
   (beam-via transmitter1 (gate1 location2) receiver1)  ;authorizes direct beam
 )
 

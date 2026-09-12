@@ -1,3 +1,8 @@
+CURRENT CHECKPOINT -- 2026-09-12
+Subgoal 2: 20 actions, 30 cumulative. Box1 on plate2, tray1 unheld and
+grounded at location7. Both integrated replay and recorder-cycle validation pass.
+The earlier location9/location5 results below are historical.
+
 Crelay-Topo Subgoal 2 replay -- 2026-09-12
 
 Replayed the 27 integrated actions from subgoal solutions.txt against the current
@@ -320,3 +325,46 @@ Final state:
 Cleaning up resources and shutting down threads...
 Cleanup completed.
 
+
+Plate2 replacement endpoint -- 2026-09-12
+Goal checked in memory only; puzzle source unchanged.
+PLATE2-REVISED-REPLAY
+
+Validating 30 actions...
+
+
+VALIDATION SUCCESSFUL
+
+All 30 actions executed successfully.
+Goal satisfied.
+
+Final state:
+  Time: 30.0
+  Value: 0.0
+  Propositions:
+    (DEPRESSED PLATE1)
+    (DEPRESSED PLATE2)
+    (HAS-LOCATION AGENT1 LOCATION7)
+    (HAS-LOCATION TRAY1 LOCATION7)
+    (HAS-LOCATION CONNECTOR1 LOCATION2)
+    (HAS-LOCATION BOX1 LOCATION7)
+    (ON CONNECTOR1 PLATE1)
+    (ON BOX1 PLATE2)
+    (OPEN GATE5)
+    (OPEN GATE1)
+    (OPEN GATE2)
+    (OPEN GATE3)
+    (RECORDER-CYCLE-CLOSED)
+    (RECORDER-CYCLE-STOPPED-BY-GHOST)
+    (RECORDER-CYCLES-USED 2)
+    (RECORDING-DEPRESSED PLATE2)
+    (RECORDING-DEPRESSED PLATE1)
+    (RECORDING-OPEN GATE1)
+    (RECORDING-OPEN GATE2)
+    (RECORDING-OPEN GATE5)
+    (RECORDING-OPEN GATE3)
+
+
+PLATE2-RECORDER-VALIDATION: T NIL
+Cleaning up resources and shutting down threads...
+Cleanup completed.

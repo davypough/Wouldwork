@@ -1,3 +1,22 @@
+CURRENT CHECKPOINT UPDATE -- 2026-09-12
+-------------------------------------
+The retained Subgoal 3 is now 64 actions (94 cumulative). Agent1 is
+empty-handed at location14 and switch2 is on. Live tray1 is on plate4 at
+location13; live box1 is on plate5 at location12 with live connector1 on top,
+still paired with repeater1 and receiver1. Agent1* is empty-handed at
+location12 and tray1* is on recording plate5. Box1* remains on plate1 and
+connector1* remains unpaired on plate2. Ordinary gates1, 2, 3, 6, and 7 are
+open while ordinary gate5 is closed; recording gates1, 2, 3, and 5 are open
+while recording gates6 and 7 are closed. The fourth recorder cycle remains
+deliberately open for Subgoal 4. Integrated replay and all four recorder-cycle
+validations passed.
+
+The location9 recovery checkpoint and its 17-action continuation discussed
+below are superseded historical analysis. Later location9 beam arrangements
+are not the current retained endpoint. Use subgoal solutions.txt for the
+current retained action sequence; subgoal2-validation.txt remains the evidence
+for the preceding closed checkpoint.
+
 Filename: Working-Backwards-from-Goal.txt
 
 ;;; This is a backward analysis of the crelay-topo problem defined in
@@ -99,7 +118,7 @@ Required:
 * A connector placed directly on the ground at location9 is too low to reach receiver1
   across the two one-unit walls.  Raising the connector is required.
 
-Likely arrangement, checked directly in a constructed state:
+Previously checked direct arrangement:
 
 * Move box1 to location9.
 * Place connector1 on box1, giving the connector a beam height of 2.
@@ -107,27 +126,25 @@ Likely arrangement, checked directly in a constructed state:
 * Keep plate3 depressed so gate4 remains open.
 
 That arrangement colors connector1 red, activates receiver1, and opens gate8 in the
-current model.  A held tray is now a validated temporary mobility support in the box-recovery
-cycle, but using the grounded box as the later connector support remains the clearer working
-hypothesis because it does not tie up an agent.
+current model.  It remains a valid constructed-state alternative, but the current carrier
+handoff candidate instead splits the relay across recorder layers as described below.
 
 
 REPEATER1
 
-No useful role for repeater1 is currently apparent.
+Subgoal 3 deliberately stops after switch2 is turned on but before the recording-side
+upstream relay is prepared. Connector1* is unpaired on plate2, and agent1* has not yet
+stepped on plate3. Subgoal 4 owns both actions: pair connector1* with transmitter1 and
+repeater1, then arrange for agent1* to occupy plate3 when gate4 must be open.
 
-With every gate treated as open and movable occluders removed, location9 is the only
-authored location at a feasible connector height that can see both repeater1 and receiver1.
-At that same elevated location the connector can also see transmitter1 and can connect
-directly to receiver1.  Adding repeater1 to the pairing graph therefore adds no reach and
-does not avoid opening gate4 or raising the connector.
-
-A genuine repeater route would need another elevated connector at a new, useful location
-on the receiver side of the blocking walls.  That would consume more live/ghost resources
-than the direct location9 arrangement and has no identified advantage.  Repeater1 should
-be treated as an available but probably unused apparatus, not as a backward prerequisite.
-As a declared problem object it should remain in the model unless the problem definition
-itself is intentionally changed.
+An earlier continuation was replayed beyond that boundary and found that a particular
+split-relay placement did not activate receiver1.  That probe is useful historical
+evidence that pairings alone do not guarantee an operational, height-compatible beam,
+but it is not a Subgoal 3 obstruction and does not establish that every Subgoal 4 relay
+arrangement fails. The exact beam geometry must be rechecked in Subgoal 4 after the
+upstream pairing and plate3 occupancy are established. Switch2 is already on at that
+boundary, so agent1 must return through still-open gate6 before either switch-plate
+occupant is reclaimed.
 
 
 BOX1, SWITCH1, BLOWER1, AND GATE2
@@ -151,6 +168,19 @@ VALIDATE-SOLUTION.  At its endpoint connector1 remains on plate1, tray1 remains 
 box1 is free at location9, switch1 and blower1 are off, gates1, 2, 3, and 5 are open, and all
 ghost-object state has been removed.  This continuation was inferred and replay-validated;
 no minimum-length search was run.
+
+The later blower-loading question is also resolved.  The approved
+`(reach-via location20 () location5)` relation is now authored.  From the validated
+preparatory checkpoint, agent1 can ride the blower with box1, put it on agent1*'s held
+tray1* at location5, retrieve connector1, ride again, and connect it on the box.  Full
+replay validates the first location13 transfer: agent1* carries tray1*, box1, and
+connector1 to location13, where releasing tray1* settles the live box and connector onto
+the live tray held by agent1. A second local transfer then leaves live tray1 on plate4
+and settles the intact live box/connector stack onto plate5. The empty-handed trip through
+screen1 and the switch2 toggle are validated as the end of Subgoal 3. Returning agent1,
+the upstream connector1* pairing, plate3 occupancy, and the gate8 beam are Subgoal 4 work.
+This removes the former Subgoal 3 manipulation-reach obstruction without claiming that
+the later relay phase is already solved.
 
 
 THE LADDERS
