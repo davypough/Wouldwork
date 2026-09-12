@@ -305,6 +305,9 @@ must return unknown rather than :IMPOSSIBLE.")
 (sb-ext:defglobal *solution-validators* nil
   "Problem-local functions that must accept a candidate path before it is a solution.")
 
+(defvar *replay-action* nil
+  "Dynamically bound supplied action during replay; NIL during search.")
+
 
 (defstruct (search-prefix-validator (:conc-name search-prefix-validator.))
   "A path-prefix validator, its enabling predicate, optional newest-move trigger, and

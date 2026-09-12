@@ -7,8 +7,9 @@
 ;;; place an object on any currently-held tray (see -placement's held-tray clause), and
 ;;; that object's has-location tracks the holder's as it moves (see
 ;;; -configuration-transition's relocation cascade).  A tray resting on the ground is
-;;; inert: putting it down unloads its rider onto the ground at the tray's current
-;;; location, and nothing can be placed on it there.  A tray keeps its has-location fact
+;;; inert: a local release settles riders onto the highest unique eligible surface
+;;; at or below their previous base, with ground fallback. Across-reach releases retain
+;;; ground unloading. Nothing can be placed on an unheld tray.  A tray keeps its has-location fact
 ;;; even while held, the one deviation from held cargo having no location, so that its
 ;;; occupant's has-location consumers (beam-relay, visibility, etc.) keep working
 ;;; unchanged while the tray is held.
@@ -65,9 +66,8 @@
 (define-action put-tray
   ;; Place a held tray on the ground or on a clear support at a reachable location
   ;; (including the agent's own): one successor per legal placement-options result.
-  ;; PLACE-HELD-OBJECT! unloads any rider because a tray is a support only while held; the
-  ;; relocation cascade has already kept the rider at the release location, where it lands
-  ;; on the ground.
+  ;; PLACE-HELD-OBJECT! resolves local rider catches before propagation. Remote
+  ;; placement keeps the existing relocation and ground-unloading convention.
   1
   (?agent agent ?tray tray ?location location)
   (and (holding ?agent ?tray)

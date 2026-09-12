@@ -24,9 +24,6 @@
 ;;;               -position (has-position); -holding (cargo, holding);
 ;;;               -interaction-policy (object-manipulation-allowed,
 ;;;               support-use-allowed)
-;;;   conditional relation:
-;;;               mounted-on (-gears-fan), guarded by a DOALL over optional FAN;
-;;;               a problem with fans must include a gears/fan technology
 ;;; PROVIDES:
 ;;;   queries   : placement-choice-allowed -- shared policy gate used by both option
 ;;;               generation and the placement update
@@ -35,15 +32,14 @@
 ;;;               candidate support; only a floor-mounted fan and only a currently-held
 ;;;               tray are ever offered
 ;;;               placement-elevation -- the resting base elevation produced by an option
-;;;   update    : place-held-object!  --  releases ?agent's hold, sets ?object's location,
-;;;               carries a tray's riders to that location and unloads them there, and
-;;;               rests ?object on ?place unless ?place is 'ground
-;;;   nested    : -configuration-transition, for relocate-tray-and-riders!.  That file is
-;;;               where a held tray's stack is kept synced to its holder during movement;
-;;;               the same rule has to hold when the tray is set down, so the two share one
-;;;               relocation update rather than each carrying its own
+;;;   update    : place-held-object! -- releases the object at the chosen destination.
+;;;               Local tray releases settle riders through -support-settling before
+;;;               propagation; remote releases retain relocation and ground unloading.
+;;;   nested    : -support-motion via -configuration-transition, shared surface
+;;;               enumeration and stack relocation; -support-settling, release selection.
 
 (include-tech -configuration-transition)
+(include-tech -support-settling)
 (include-tech -vertical)
 (include-tech -support-elevation)
 (include-tech -support-occupancy)
@@ -67,52 +63,17 @@
 
 
 (define-query placement-options (?agent agent ?location location ?self cargo)
-  ;; Every plate/fan/box/ground placement at ?location currently legal for ?agent,
-  ;; excluding ?self as a candidate support (relevant only when ?self can itself be a box
-  ;; or fan; harmless otherwise, since ?self can never be eql to a differently-typed
-  ;; candidate).  Each candidate resting place is gated by WITHIN-AGENT-PLACEMENT-REACH, so
-  ;; a place below the agent is always offered and one above it only within reach.
   (do (assign $places nil)
-      (doall (?plate plate)
-        (if (and (has-position ?plate ?location)
-                 (cleartop ?plate ?self)
-                 (placement-choice-allowed ?agent ?self ?plate)
-                 (within-agent-placement-reach ?agent (top ?plate)))
-          (assign $places (cons ?plate $places))))
-      (doall (?fan fan)
-        (if (and (different ?fan ?self)
-                 (bind (mounted-on ?fan $gears))  ;a fan supports only while gears-mounted; a loose fan is mere cargo
-                 (has-location ?fan ?location)  ;and a wall-mounted fan has no has-location, so floor-mounted only
-                 (cleartop ?fan ?self)
-                 (placement-choice-allowed ?agent ?self ?fan)
-                 (within-agent-placement-reach ?agent (top ?fan)))
-          (assign $places (cons ?fan $places))))
-      (doall (?fixed (either floor-blower angled-blower))
-        (if (and (different ?fixed ?self)
-                 (has-position ?fixed ?location)
-                 (cleartop ?fixed ?self)
-                 (placement-choice-allowed ?agent ?self ?fixed)
-                 (within-agent-placement-reach ?agent
-                                                 (top ?fixed)))
-          (assign $places (cons ?fixed $places))))
-      (doall (?support-box box)
-        (if (and (different ?support-box ?self)
-                 (has-location ?support-box ?location)
-                 (cleartop ?support-box ?self)
-                 (placement-choice-allowed ?agent ?self ?support-box)
-                 (within-agent-placement-reach ?agent (top ?support-box)))
-          (assign $places (cons ?support-box $places))))
-      (doall (?tray tray)
-        (if (and (different ?tray ?self)
-                 (bind (holding $holder ?tray))  ;a tray supports only while held; grounded, it is inert
-                 (has-location ?tray ?location)  ;co-located with ?agent (synced to the holder's location)
-                 (cleartop ?tray ?self)
-                 (placement-choice-allowed ?agent ?self ?tray)
-                 (within-agent-placement-reach ?agent (top ?tray)))
-          (assign $places (cons ?tray $places))))
+      (assign $surfaces (physical-supports-at ?location t))
+      (ww-loop for $surface in $surfaces
+        do (if (and (not (support-dependent-p $surface ?self nil))
+                    (cleartop $surface ?self)
+                    (placement-choice-allowed ?agent ?self $surface)
+                    (within-agent-placement-reach ?agent (top $surface)))
+             (push $surface $places)))
       (if (and (placement-choice-allowed ?agent ?self 'ground)
                (within-agent-placement-reach ?agent (location-elevation ?location)))
-        (assign $places (cons 'ground $places)))
+        (push 'ground $places))
       $places))
 
 
@@ -126,25 +87,22 @@
 
 (define-update place-held-object!
     (?agent agent ?object cargo ?location location ?place)
-  ;; ?place is either a support object or the Lisp marker GROUND, so it remains untyped.
-  ;; A tray stops being a support as soon as its holder releases it, so its direct riders'
-  ;; ON links are retracted here, and any stack above each rider stays intact.  Riders is
-  ;; plural because a ghost-held tray may carry one rider per recorder layer -- its own
-  ;; ghost rider and, under rule 19, a live one -- and both must come off together.  The riders
-  ;; travel with the tray first.  -configuration-transition syncs a held tray's stack to its
-  ;; holder only as the holder moves, and PUT-TRAY reaches across REACHABLE: ?location may
-  ;; be somewhere the holder never walked, so no sync ran for that hop.  Relocating before
-  ;; retracting sets the whole stack down at ?location; retracting first stranded it at the
-  ;; location the tray came from, with its ON link already gone.
+  ;; Snapshot before releasing HOLDING: BASE must still see the original support.
+  ;; Remote releases retain legacy unloading; only local releases select catches.
   (if (placement-choice-allowed ?agent ?object ?place)
-    (do (not (holding ?agent ?object))
+    (do (assign $riders nil)
+        (assign $local nil)
+        (if (tray ?object)
+          (do (bind (has-location ?agent $holder-location))
+              (assign $local (eql $holder-location ?location))
+              (assign $riders (tray-release-riders ?object $local))))
+        (not (holding ?agent ?object))
         (has-location ?object ?location)
         (if (tray ?object)
           (relocate-tray-and-riders! ?object ?location))
-        (if (tray ?object)
-          (doall (?rider support-occupant)
-            (if (on ?rider ?object)
-              (not (on ?rider ?object)))))
-        (if (not (eql ?place 'ground))
-          (on ?object ?place)))
+        (ww-loop for $entry in $riders
+          do (assign $rider (first $entry))
+             (not (on $rider ?object)))
+        (if (not (eql ?place 'ground)) (on ?object ?place))
+        (if $local (settle-released-riders! $riders ?location)))
     (inconsistent-state)))

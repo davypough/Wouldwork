@@ -64,14 +64,14 @@ Playback phase during the pause:
 
 
 ------------------------------------------------
-Subgoal 2 -- Recover box1 to location9
+Subgoal 2 -- Recover box1 to location5
 ------------------------------------------------
 
 Subgoal:
 
   (and (on connector1 plate1)
        (on tray1 plate2)
-       (has-location box1 location9)
+       (has-location box1 location5)
        (ghost-stops-recorder))
 
 Status: validated, 17 actions (27 cumulative)
@@ -81,7 +81,7 @@ Purpose:
   Complete a second normal recorder cycle while preserving connector1 on plate1
   and tray1 on plate2.  Use the ghost-held tray and blower1 to let agent1 reach
   box1 at elevated location6, then bring box1 down and leave it grounded at
-  location9 for the later beam-support subgoal.
+  location5 for the later beam-support subgoal.
 
 Integrated WouldWork action sequence from the Subgoal 1 endpoint:
 
@@ -100,9 +100,8 @@ Integrated WouldWork action sequence from the Subgoal 1 endpoint:
   11. (MOVE AGENT1 ((JUMP (LOCATION5 TRAY1*) (GATE2)
                                   (LOCATION6 GROUND))))
   12. (PICKUP-BOX AGENT1 BOX1 LOCATION6 LOCATION6)
-  13. (MOVE AGENT1 ((JUMP LOCATION6 (GATE2) LOCATION4)
-                     (WALK LOCATION4 (GATE3) LOCATION9)))
-  14. (PUT-BOX AGENT1 BOX1 GROUND LOCATION9)
+  13. (MOVE AGENT1 ((JUMP LOCATION6 (GATE2) LOCATION5)))
+  14. (PUT-BOX AGENT1 BOX1 GROUND LOCATION5)
   15. (MOVE AGENT1* ((WALK LOCATION5 (GATE1) LOCATION1)))
   16. (PUT-TRAY AGENT1* TRAY1* GROUND LOCATION1)
   17. (STOP-RECORDER AGENT1*)
@@ -136,106 +135,6 @@ Playback phase during the pause:
   (MOVE AGENT1 ((JUMP (LOCATION5 TRAY1*) (GATE2)
                              (LOCATION6 GROUND))))
   (PICKUP-BOX AGENT1 BOX1 LOCATION6 LOCATION6)
-  (MOVE AGENT1 ((JUMP LOCATION6 (GATE2) LOCATION4)
-                (WALK LOCATION4 (GATE3) LOCATION9)))
-  (PUT-BOX AGENT1 BOX1 GROUND LOCATION9)
+  (MOVE AGENT1 ((JUMP LOCATION6 (GATE2) LOCATION5)))
+  (PUT-BOX AGENT1 BOX1 GROUND LOCATION5)
   (RESUME)
-
-Validated endpoint:
-
-  Agent1 and box1 are at location9, with box1 grounded and free.  Connector1
-  remains on plate1, tray1 remains on plate2, switch1 and blower1 are off, and
-  gates1, gate2, gate3, and gate5 are open.  Two recorder cycles have been used;
-  the second is closed normally and all ghost-object state has been removed.
-
-
-------------------------------------------------
-Subgoal 3 -- Assemble the live beam station and close cycle 3
-------------------------------------------------
-
-Subgoal:
-
-  (and (has-location agent1 location1)
-       (has-location box1 location9)
-       (on connector1 box1)
-       (paired connector1 transmitter1)
-       (paired connector1 receiver1)
-       (on tray1 plate2)
-       (ghost-stops-recorder))
-
-Status: validated, 8 actions (35 cumulative)
-
-Purpose:
-
-  Assemble the live beam station during the third recorder cycle, return agent1
-  to recorder1, and close the cycle normally.  Agent1* remains empty-handed at
-  recorder1 throughout: its copied connector on plate1 is sufficient to hold
-  gate1 open while agent1 relocates the live connector.  The live box, connector
-  support, and pairings survive the closure, leaving a clean checkpoint from
-  which a later START-RECORDER can fork the complete arrangement into the
-  recording layer.
-
-Integrated WouldWork action sequence from the Subgoal 2 endpoint:
-
-   1. (MOVE AGENT1 ((WALK LOCATION9 (GATE1 GATE3) LOCATION1)))
-   2. (START-RECORDER AGENT1)
-   3. (MOVE AGENT1 ((WALK LOCATION1 NIL LOCATION2)))
-   4. (PICKUP-CONNECTOR AGENT1 CONNECTOR1 LOCATION2)
-   5. (MOVE AGENT1 ((WALK LOCATION2 (GATE1 GATE3) LOCATION9)))
-   6. (CONNECT-CONNECTOR
-         AGENT1 CONNECTOR1 LOCATION9 BOX1 (RECEIVER1 TRANSMITTER1))
-   7. (MOVE AGENT1 ((WALK LOCATION9 (GATE1 GATE3) LOCATION1)))
-   8. (STOP-RECORDER AGENT1*)
-
-Setup phase:
-
-  Agent1 walks from the Subgoal 2 endpoint at location9 back to recorder1 at
-  location1.  Connector1 remains on plate1 and tray1 remains on plate2, holding
-  gates1 and gate3 open.
-
-Recording phase:
-
-  (START-RECORDER AGENT1)
-  (PAUSE)
-  (STOP-RECORDER AGENT1*)
-
-  Agent1* takes no movement or manipulation action.  It begins at recorder1,
-  remains there empty-handed, and stops the recorder after playback.
-
-Playback phase during the pause:
-
-  (MOVE AGENT1 ((WALK LOCATION1 NIL LOCATION2)))
-  (PICKUP-CONNECTOR AGENT1 CONNECTOR1 LOCATION2)
-  (MOVE AGENT1 ((WALK LOCATION2 (GATE1 GATE3) LOCATION9)))
-  (CONNECT-CONNECTOR
-    AGENT1 CONNECTOR1 LOCATION9 BOX1 (RECEIVER1 TRANSMITTER1))
-  (MOVE AGENT1 ((WALK LOCATION9 (GATE1 GATE3) LOCATION1)))
-  (RESUME)
-
-Validated endpoint:
-
-  Agent1 is empty-handed at recorder1 at location1.  Box1 remains grounded at
-  location9 and supports connector1, which remains paired with receiver1 and
-  transmitter1.  Tray1 remains on plate2 at location7.  Recorder cycle 3 has
-  closed normally, and all ghost-object state has been removed.
-
-  Ordinary gates2, gate3, and gate5 are open.  Gate1 closes when connector1*
-  disappears at the cycle boundary.  Gate4 remains closed because plate3 was
-  not occupied, so receiver1 is inactive and gate8 is closed.  The live beam
-  hardware is assembled even though its path is not currently active.
-
-Separate beam-activation evidence:
-
-  A previous replay of the longer candidate moved agent1* to plate3 before the
-  live connector was installed.  At that open-cycle checkpoint, ordinary
-  gates1, gate2, gate3, gate4, gate5, and gate8 were open; recording gate8 was
-  closed because the beam existed only in the ordinary view.  That replay
-  established that this box-supported connector arrangement can activate
-  receiver1 when plate3 opens gate4.  The plate3 trip was removed from the
-  retained solution because it contributed no fact to the closed endpoint.
-
-Validation note:
-
-  The simplified complete 35-action prefix was accepted by validate-solution
-  with the closed Subgoal 3 condition installed as the goal.  This is a
-  replay-validated continuation; no search or minimum-length claim was made.

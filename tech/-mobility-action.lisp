@@ -52,6 +52,40 @@
       transitions)))
 
 
+(define-problem-helper replay-grounded-movement-result
+    (state agent source route)
+  "Check every supplied transparent segment before constructing its endpoint."
+  (unless (and route (eql (second source) 'ground))
+    (return-from replay-grounded-movement-result nil))
+  (let ((location (first source)))
+    (dolist (segment route)
+      (unless (member segment (mobility-provider-segments state agent location)
+                      :test #'equal)
+        (return-from replay-grounded-movement-result nil))
+      (setf location (fourth segment)))
+    (unless (eql location (first source))
+      (list (list location 'ground) route))))
+
+
+(define-problem-helper replay-movement-results (state agent source route)
+  "Accept legal transparent routes or one explicit support transition."
+  (let ((grounded (replay-grounded-movement-result state agent source route)))
+    (cond (grounded (list grounded))
+          ((and (= (length route) 1)
+                (member (first route)
+                        (configuration-provider-transitions state agent source)
+                        :test #'equal))
+           (list (list (fourth (first route)) route))))))
+
+
+(define-problem-helper action-movement-results (state agent source)
+  "Use supplied MOVE routes during replay and canonical routes during search."
+  (if (eq (first *replay-action*) 'move)
+    (when (eq agent (second *replay-action*))
+      (replay-movement-results state agent source (third *replay-action*)))
+    (movement-results-in-state state agent source)))
+
+
 (define-query movement-results (?agent agent)
   ;; A mapped ghost has no HAS-LOCATION until START-RECORDER forks it (rule 5), and an
   ;; agent that does not exist yet has no mobility.  Without this guard
@@ -71,7 +105,7 @@
   (and (bind (has-location ?agent $agent-location))
        (assign $source-configuration (agent-configuration ?agent))
        (assign $movement-results
-               (movement-results-in-state
+               (action-movement-results
                  state ?agent $source-configuration)))
   (">" ?agent "moves via" $route)
   (ww-loop for $result in $movement-results

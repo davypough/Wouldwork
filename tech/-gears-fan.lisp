@@ -79,14 +79,10 @@
 ;;;               blower-turning-for-object -- ordinary turning state except that recorder
 ;;;               ghosts use recording-side state for each recorder-supported blower drive
 ;;;               blower-active-for-object -- presence plus the correct turning view
-;;;               stack-rider  --  true when a candidate is directly or transitively
-;;;               stacked above a given base
-;;;               landing-support  --  the first clear plate/floor-mounted-fan/box at a
-;;;               location whose top matches a required elevation (nil accepts any),
-;;;               excluding the relocated base and its riders; no agent or reach gate
-;;;   updates   : update-blower-status! (state only), relocate-stack!, land-on-support!
-;;;               (rests a relocated object on its destination's landing-support match;
-;;;               read by wall-blower's sweep and angled-blower's arc)
+;;;   updates   : update-blower-status! (state only)
+;;;   shared    : -support-motion (nested through -placement) owns dependency checks,
+;;;               relocate-stack!, landing-support, and land-on-support!. Blower
+;;;               landings retain their support kinds, ordering, and height contract.
 ;;;   actions   : pickup-fan, put-fan, mount-fan
 
 (include-tech -vertical)
@@ -347,108 +343,6 @@
         (if (turning ?fixed)
           (blowing ?fixed)
           (not (blowing ?fixed))))))
-
-
-(define-update relocate-stack! (?base support-occupant ?destination location)
-  ;; Move ?base and, transitively, every occupant stacked above it to ?destination.
-  ;; Breadth-first over the (on ...) links, so arbitrary stack depth needs no recursion.
-  (do (assign $moving (list ?base))
-      (ww-loop while $moving
-               do (assign $next nil)
-                  (ww-loop for $object in $moving
-                           do (has-location $object ?destination)
-                              (doall (?y support-occupant)
-                                (if (on ?y $object)
-                                  (push ?y $next))))
-                  (assign $moving $next))))
-
-
-(define-query stack-rider (?candidate support-occupant ?base support-occupant)
-  ;; True when ?candidate's downward support chain reaches ?base.  Landing selection
-  ;; uses this after relocate-stack!, while every original (on ...) link within the moved
-  ;; stack is still intact.  Delegates to stack-rider-hop, which recurses one link per
-  ;; call so the walked object is always a bound query parameter and $support a fresh
-  ;; unbound target: the bind direction is then fixed at compile time, with nothing
-  ;; stale left over between hops.
-  (stack-rider-hop ?candidate ?base nil))
-
-
-(define-query stack-rider-hop (?current support-occupant ?base support-occupant ?seen)
-  ;; One link of stack-rider's downward walk.  An already-cyclic authored chain is an
-  ;; inconsistent state, not a search condition to tolerate.
-  (cond
-    ((member ?current ?seen)
-     (error "~%Support cycle encountered while checking landing support.~%~
-             Repeated object: ~S~%Base: ~S"
-            ?current ?base))
-    ((not (bind (on ?current $support))) nil)
-    ((eql $support ?base) t)
-    ((support-occupant $support) (stack-rider-hop $support ?base (cons ?current ?seen)))
-    (t nil)))
-
-
-(define-query landing-support (?location location ?self support-occupant ?required-elevation)
-  ;; The first clear plate, floor-mounted fan, or box at ?location whose top matches
-  ;; ?required-elevation, excluding ?self and every object stacked above it, scanned in
-  ;; plate/fan/box order, or nil if none does -- nil for ?required-elevation accepts any
-  ;; candidate's elevation.  relocate-stack! has already moved the entire stack here but
-  ;; preserved its internal (on ...) links; without stack-rider's exclusion a clear rider
-  ;; could be selected under its own base, creating a support cycle.  Shared by
-  ;; wall-blower's flush-only landing and angled-blower's any-elevation landing, via
-  ;; land-on-support!.  Unlike -placement's placement-options, this carries no agent or
-  ;; vertical-reach gate: it is read by a physical consequence, not an agent's
-  ;; manipulation choice.
-  (do (assign $landing nil)
-      (doall (?plate plate)
-        (if (and (not $landing)
-                 (different ?plate ?self)
-                 (has-position ?plate ?location)
-                 (cleartop ?plate ?self)
-                 (support-use-allowed ?self ?plate)
-                 (or (not ?required-elevation)
-                     (eql (top ?plate) ?required-elevation)))
-          (assign $landing ?plate)))
-      (doall (?fan fan)
-        (if (and (not $landing)
-                 (different ?fan ?self)
-                 (not (stack-rider ?fan ?self))
-                 (bind (mounted-on ?fan $gears))
-                 (has-location ?fan ?location)
-                 (cleartop ?fan ?self)
-                 (support-use-allowed ?self ?fan)
-                 (or (not ?required-elevation)
-                     (eql (top ?fan) ?required-elevation)))
-          (assign $landing ?fan)))
-      (doall (?fixed (either floor-blower angled-blower))
-        (if (and (not $landing)
-                 (different ?fixed ?self)
-                 (has-position ?fixed ?location)
-                 (cleartop ?fixed ?self)
-                 (support-use-allowed ?self ?fixed)
-                 (or (not ?required-elevation)
-                     (eql (top ?fixed) ?required-elevation)))
-          (assign $landing ?fixed)))
-      (doall (?box box)
-        (if (and (not $landing)
-                 (different ?box ?self)
-                 (not (stack-rider ?box ?self))
-                 (has-location ?box ?location)
-                 (cleartop ?box ?self)
-                 (support-use-allowed ?self ?box)
-                 (or (not ?required-elevation)
-                     (eql (top ?box) ?required-elevation)))
-          (assign $landing ?box)))
-      $landing))
-
-
-(define-update land-on-support!
-    (?base support-occupant ?destination location ?required-elevation)
-  ;; Rest ?base, already moved to ?destination by relocate-stack!, on the first
-  ;; landing-support match there (excluding ?base itself), or leave it resting on bare
-  ;; ground (relocate-stack!'s default) if none matches.
-  (do (assign $support (landing-support ?destination ?base ?required-elevation))
-      (if $support
-        (on ?base $support))))
 
 
 (define-action pickup-fan

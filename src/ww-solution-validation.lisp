@@ -236,6 +236,12 @@ to the search's candidate-validation diagnostics."
 
 
 (defun apply-action-to-state (action-form state next-action-form &optional verbose)
+  "Replay ACTION-FORM with its supplied arguments available to action providers."
+  (let ((*replay-action* action-form))
+    (%apply-action-to-state action-form state next-action-form verbose)))
+
+
+(defun %apply-action-to-state (action-form state next-action-form &optional verbose)
   "Apply a single action form to state.
    Returns (values new-state success-p failure-reason).
    
@@ -250,7 +256,7 @@ to the search's candidate-validation diagnostics."
     
     ;; Check if action exists
     (unless action
-      (return-from apply-action-to-state
+      (return-from %apply-action-to-state
         (values nil nil (format nil "Action ~A not found in problem specification" action-name))))
     
     ;; WAIT action special handling: duration in solution output is informational,
@@ -262,12 +268,13 @@ to the search's candidate-validation diagnostics."
     ;; Strip any display connectives from a path pasted off annotated solution output,
     ;; so the count check and matching see the pure value list.
     (setf provided-args (strip-display-connectives action provided-args))
+    (setf *replay-action* (cons action-name provided-args))
     
     ;; Check argument count matches effect variables
     (let ((expected-count (length (action.effect-variables action)))
           (provided-count (length provided-args)))
       (unless (= expected-count provided-count)
-        (return-from apply-action-to-state
+        (return-from %apply-action-to-state
           (values nil nil (format nil "Wrong number of arguments: expected ~D, got ~D"
                                   expected-count provided-count)))))
     
@@ -330,11 +337,11 @@ to the search's candidate-validation diagnostics."
                       (when *happening-names*
                         (let ((net-state (amend-happenings state new-state)))
                           (unless net-state
-                            (return-from apply-action-to-state
+                            (return-from %apply-action-to-state
                               (values nil nil "Happening violation (kill condition)")))
                           (setf new-state net-state)))
                       
-                      (return-from apply-action-to-state
+                      (return-from %apply-action-to-state
                         (values new-state t nil))))))))))
       
       ;; No matching update found - determine failure type

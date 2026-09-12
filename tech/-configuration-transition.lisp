@@ -8,9 +8,9 @@
 ;;; where each configuration is (location ground-or-support).  Unlike mobility, these
 ;;; transitions are never transitively closed: changing support is a planning boundary
 ;;; because it can clear or occupy supports and trigger propagation.  This is also the
-;;; sole place any agent's has-location is ever asserted, so it is the single insertion
-;;; point for a held tray to follow its holder: apply-agent-configuration! relocates a
-;;; held tray, and everything riding on it, to the agent's destination.
+;;; entry point for voluntary agent movement. Shared -support-motion also relocates
+;;; supported agents and their held trays during physical transport; both use the
+;;; same dependency traversal.
 ;;;
 ;;; REQUIRES:
 ;;;   types     : agent, location
@@ -22,11 +22,10 @@
 ;;;   functions : register-configuration-transition-provider and canonical selection helpers
 ;;;   update    : apply-agent-configuration!  --  also relocates a held tray and its
 ;;;               riders, keeping the tray's has-location synced to its holder's
-;;;               relocate-tray-and-riders!  --  breadth-first (on ...)-chain relocation,
-;;;               modeled on -gears-fan's relocate-stack!; kept local so agent movement
-;;;               never depends on optional blower technology.  -placement nests this file
-;;;               to reuse it when a held tray is released away from where it was picked up
+;;;               relocate-tray-and-riders! -- typed entry to -support-motion's shared
+;;;               relocation, including nested held trays and their riders.
 
+(include-tech -support-motion)
 (include-tech -support-occupancy)
 (include-tech -location)
 (include-tech -propagation)
@@ -129,21 +128,7 @@
 
 
 (define-update relocate-tray-and-riders! (?tray tray ?destination location)
-  ;; Move ?tray and, transitively, every occupant riding on it to ?destination, keeping a
-  ;; held tray's has-location synced to its holder's as the holder moves, and carrying the
-  ;; same stack to the release location when -placement puts the tray down.  Breadth-first
-  ;; over the (on ...) links, modeled on -gears-fan's relocate-stack!, so arbitrary stack
-  ;; depth needs no recursion.  Kept local rather than calling -gears-fan's version so
-  ;; agent movement never depends on optional blower technology.
-  (do (assign $moving (list ?tray))
-      (ww-loop while $moving
-               do (assign $next nil)
-                  (ww-loop for $object in $moving
-                           do (has-location $object ?destination)
-                              (doall (?y support-occupant)
-                                (if (on ?y $object)
-                                  (push ?y $next))))
-                  (assign $moving $next))))
+  (relocate-stack! ?tray ?destination))
 
 
 (define-update apply-agent-configuration!
