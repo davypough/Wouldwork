@@ -61,36 +61,31 @@ HARD BACKWARD CHAIN
 6. Reach the location8/location9/location10 area through gate3.
 
    Plate2, at location7, controls gate3.  Tray1 starts on plate2, so plate2 is initially
-   depressed and gate3 is initially open.  Once tray1 is reclaimed, some occupant must be
-   returned to plate2 before later agents and resources can cross.  The earlier sketch's
-   reference to gate7 here was a name error: plate2 controls gate3; switch2 controls gate7.
+   depressed and gate3 is initially open.  The first two validated checkpoints preserve
+   live tray1 on plate2 while a later ghost copy is temporarily used elsewhere.  Before
+   live tray1 is eventually reclaimed, everything still needing gate3 must cross or another
+   occupant must replace it.  The earlier sketch's reference to gate7 here was a name error:
+   plate2 controls gate3; switch2 controls gate7.
 
 7. Leave the starting area through gate1.
 
    Plate1, at location2, controls gate1.  No cargo starts on the location1/location2 side,
-   so the recorder supplies the initial cooperation.  A complete 15-action first cycle has
-   now been checked with VALIDATE-SOLUTION and the recorder-cycle validator:
+   so the recorder supplies the initial cooperation.  A complete 10-action first cycle has
+   been checked and recorded:
 
    * agent1 starts the recorder;
    * agent1* moves to location2 and steps onto plate1;
    * agent1 crosses gates1 and 3, retrieves connector1 from location9, and returns;
-   * agent1* steps off plate1 and agent1 puts connector1 on plate1;
-   * agent1 crosses gate1, removes tray1 from plate2, and stages it on the ground at
-     location5 for the box1 subgoal;
-   * agent1 and agent1* return to location1; and
+   * agent1 puts connector1 on plate1;
+   * agent1* steps off plate1 and returns to location1; and
    * agent1* stops the recorder.
 
-   The validated closed checkpoint has connector1 on plate1, gate1 open, tray1 free at
-   location5, box1 still at location6, agent1 back at recorder1, and one recorder cycle
-   used.  This explicitly frees tray1 rather than relying on recorder cleanup to remove its
-   initial plate2 support relation.
-
-   A second START-RECORDER followed by agent1* walking through gate1 to location5 is also
-   executable.  However, that second start exposes an unresolved recorder representation
-   problem: forking connector1 onto the same fixed plate replaces the live ON fact with the
-   ghost ON fact.  The ghost can enter the box area, but connector1's persistence through a
-   later cycle ending is not yet established.  Repeated-cycle planning must not assume that
-   defect away.
+   The validated closed checkpoint has connector1 on plate1, gate1 open, tray1 still on
+   plate2, gate3 open, box1 still at location6, agent1 at location2, and one recorder cycle
+   used.  The layer-based support relation lets the live and ghost copies coexist on the
+   same fixed plate during a later recording cycle.  The second validated cycle confirms
+   that ending that cycle removes the ghost support facts without disturbing connector1 or
+   tray1.
 
 
 RECEIVER1 AND THE BEAM
@@ -112,9 +107,9 @@ Likely arrangement, checked directly in a constructed state:
 * Keep plate3 depressed so gate4 remains open.
 
 That arrangement colors connector1 red, activates receiver1, and opens gate8 in the
-current model.  A held tray can in principle provide a different elevated support, but it
-would tie up an agent and create more recorder dependencies; the box is the clearer working
-hypothesis.
+current model.  A held tray is now a validated temporary mobility support in the box-recovery
+cycle, but using the grounded box as the later connector support remains the clearer working
+hypothesis because it does not tie up an agent.
 
 
 REPEATER1
@@ -137,15 +132,25 @@ itself is intentionally changed.
 
 BOX1, SWITCH1, BLOWER1, AND GATE2
 
-Box1 starts at the elevated location6.  Gate2 is initially open because switch1 is off.  The
-first validated recorder cycle stages tray1 at location5 so that an agent can potentially
-stand on it to reach location6, retrieve box1, and bring it down to the ordinary floor area.
-That tray-assisted recovery is the next candidate subgoal and has not yet been validated.
+Box1 starts at elevated location6.  The second subgoal has now validated the exact use of
+switch1, blower1, and the ghost tray needed to recover it while preserving the two early live
+gate commitments:
 
-Turning switch1 on activates blower1 and closes gate2.  No necessary use for that change or
-for the blower has yet emerged from the backward chain.  The safe working assumption is to
-recover box1 while gate2 remains open and regard switch1/blower1 as optional until a forward
-resource plan demonstrates a use for them.
+* agent1* removes tray1* from recording plate2 and holds it at location5;
+* agent1 steps onto blower1 and turns switch1 on, closing ordinary gate2 and lifting agent1
+  to elevated location20;
+* agent1 jumps from location20 onto tray1* at location5;
+* agent1 turns switch1 off from the tray, reopening gate2 without falling;
+* agent1 jumps through gate2 to ground at location6 and picks up box1; and
+* agent1 returns through gate2 by location4, carries box1 through gate3, and grounds it at
+  location9.
+
+Agent1* then returns empty-handed to recorder1 and closes the cycle normally.  The complete
+27-action prefix—10 actions for the first cycle and 17 for this continuation—was accepted by
+VALIDATE-SOLUTION.  At its endpoint connector1 remains on plate1, tray1 remains on plate2,
+box1 is free at location9, switch1 and blower1 are off, gates1, 2, 3, and 5 are open, and all
+ghost-object state has been removed.  This continuation was inferred and replay-validated;
+no minimum-length search was run.
 
 
 THE LADDERS
@@ -180,8 +185,8 @@ should explicitly show when each is established, when its gate has been crossed 
 time, and when its occupant can be reclaimed.
 
 * plate1 occupied while leaving the starting area through gate1;
-* tray1 initially on plate2, then another occupant committed there while moving the required
-  resources through gate3;
+* tray1 on plate2 through the first two validated cycles, then another occupant committed
+  there if tray1 is reclaimed before every required resource has crossed gate3;
 * plate3 occupied while the transmitter beam must cross gate4;
 * an elevated connector arrangement maintained while receiver1 must hold gate8 open;
 * plate4 and plate5 occupied while reaching and returning from switch2 through gate6;

@@ -105,7 +105,7 @@
   (location-coords> location12 27 17)
   (location-coords> location13 27 18)
   (location-coords> location14 295/10 23)
-  (location-coords> location15 22 26)
+  (location-coords> location15 19 26)
   (location-coords> location16 9 25)
   (location-coords> location17 10 25)
   (location-coords> location18 11 25)
@@ -121,7 +121,7 @@
   (apparatus-coords> switch2 295/10 239/10)
 
   ;; Nondefault heights.
-  (has-height wall9 1)
+  (has-height wall9 1/2)
   (has-height wall10 1)
   (has-height edge1 3/2)
 

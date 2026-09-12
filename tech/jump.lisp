@@ -7,8 +7,9 @@
 ;;; same bound.  Level and downward landings are unrestricted.
 ;;;
 ;;; Jumping handles exclusively elevation-related moves: local support changes involve box
-;;; tops only (mounting and dismounting flush supports like plates and gears-mounted fans
-;;; belongs to the step technology; a fan resting on a box top is not a jump landing).
+;;; tops and trays currently held by another agent (mounting and dismounting flush supports
+;;; like plates and gears-mounted fans belongs to the step technology; a fan resting on a
+;;; box top is not a jump landing).  A grounded tray remains inert.
 ;;; Open gates and passable screens impose no clearance requirement.  Closed gates,
 ;;; non-passable screens, and walls contribute their top elevations; a multi-feature jump
 ;;; must clear the highest feature that is not currently passable.
@@ -20,21 +21,21 @@
 ;;; crossing earns depends on the state it is evaluated in.
 ;;;
 ;;; REQUIRES:
-;;;   types     : agent, location  --  box and wall are declared optional here
+;;;   types     : agent, location  --  box, tray, and wall are declared optional here
 ;;;   nested    : -vertical (top, location-elevation);
 ;;;               -support-elevation (support occupancy and *vertical-reach-limit*, which
 ;;;               this file reuses rather than defining its own jump-specific parameter);
 ;;;               -passability (holding and
 ;;;               obstacle-clear); -threat (safe); -traversal; -mobility-action
 ;;; PROVIDES:
-;;;   types     : box, wall  --  declared optional; jumping remains usable without them
+;;;   types     : box, tray, wall  --  declared optional; jumping remains usable without them
 ;;;               vaultable-object (either gate screen wall)
 ;;;   mode      : jumping, registered with -traversal
 ;;;   cache     : *vertical-reach-limit*, registered with -traversal's segment cache
 ;;;   queries   : jump-elevation-reachable, vaultable-object-passable,
 ;;;               jump-barrier-top-elevation, vaultable-object-list,
 ;;;               jump-required-clearance-height, jump-path-clear,
-;;;               jump-configuration-transitions
+;;;               jump-landing-support-at, jump-configuration-transitions
 ;;;   provider  : jump-configuration-transitions registered with
 ;;;               -configuration-transition
 ;;;   action    : move (grounded routes and support changes)
@@ -49,10 +50,11 @@
 (in-package :ww)
 
 
-(define-optional-types box wall)
+(define-optional-types box tray wall)
 
 
 (define-types
+  jump-landing-support (either box tray)
   vaultable-object (either gate screen wall))
 
 
@@ -153,6 +155,19 @@
 ;;;; the same JUMPING ones, read here with the same clause selection.
 
 
+(define-query jump-landing-support-at
+    (?agent agent ?support jump-landing-support ?location location)
+  ;; A located box always offers its top.  A tray offers its top only while another agent
+  ;; holds it: grounded trays are inert, and letting a holder mount its own tray would
+  ;; create a recursive support cycle.  SUPPORT-USE-ALLOWED below applies recorder-side
+  ;; policy separately, including live playback's use of a ghost-held tray.
+  (and (has-location ?support ?location)
+       (or (box ?support)
+           (and (tray ?support)
+                (bind (holding $holder ?support))
+                (different $holder ?agent)))))
+
+
 (define-problem-helper jump-configuration-transition-for-clause
     (state agent source-configuration source-elevation
            destination-configuration target-elevation clause)
@@ -199,42 +214,48 @@
                 (top $source-place)))
       (assign $transitions nil)
 
-      ;; Local box mounts and transfers.  A box may itself be part of a stack; its top
-      ;; elevation already follows that support chain through TOP.
-      (doall (?box box)
-        (if (and (has-location ?box $source-location)
-                 (different ?box $source-place)
-                 (cleartop ?box ?agent)
-                 (support-use-allowed ?agent ?box)
+      ;; Local mounts and transfers.  A box may itself be part of a stack; its top elevation
+      ;; already follows that support chain through TOP.  A held tray's top similarly
+      ;; follows its holder, while JUMP-LANDING-SUPPORT-AT excludes grounded and self-held
+      ;; trays.
+      (doall (?support jump-landing-support)
+        (if (and (jump-landing-support-at
+                   ?agent ?support $source-location)
+                 (different ?support $source-place)
+                 (cleartop ?support ?agent)
+                 (support-use-allowed ?agent ?support)
                  (jump-elevation-reachable
-                   ?agent $source-elevation (top ?box)))
+                   ?agent $source-elevation (top ?support)))
           (assign $transitions
                   (cons
                     (list 'jump ?source-configuration nil
-                          (list $source-location ?box))
+                          (list $source-location ?support))
                     $transitions))))
 
-      ;; A local drop belongs to jump only from a box top.  Flush plate/fan dismounts are
-      ;; supplied by the step provider.
+      ;; A local drop belongs to jump only from a raised jump support.  Flush plate/fan
+      ;; dismounts are supplied by the step provider.
       (if (and (not (eql $source-place 'ground))
-               (box $source-place))
+               (jump-landing-support $source-place))
         (assign $transitions
                 (cons
                   (list 'jump ?source-configuration nil
                         (list $source-location 'ground))
                   $transitions)))
 
-      ;; Remote clear-box landings are configuration transitions whether the launch is
-      ;; grounded or supported.
-      (doall (?landing-box box)
-        (if (and (bind (has-location ?landing-box $destination))
+      ;; Remote clear-support landings are configuration transitions whether the launch is
+      ;; grounded or supported.  For a tray, the destination remains legal only while a
+      ;; different agent holds it.
+      (doall (?landing-support jump-landing-support)
+        (if (and (bind (has-location ?landing-support $destination))
                  (different $source-location $destination)
-                 (cleartop ?landing-box ?agent)
-                 (support-use-allowed ?agent ?landing-box))
+                 (jump-landing-support-at
+                   ?agent ?landing-support $destination)
+                 (cleartop ?landing-support ?agent)
+                 (support-use-allowed ?agent ?landing-support))
           (do (assign $destination-configuration
-                      (list $destination ?landing-box))
+                      (list $destination ?landing-support))
               (assign $target-elevation
-                      (top ?landing-box))
+                      (top ?landing-support))
               (assign $symmetric-transition nil)
               (assign $directed-transition nil)
               (if (bind (traverse-via

@@ -1,6 +1,6 @@
 ;;; Filename: problem-jump-test.lisp
 
-;;; Combined stageable regression for jump.lisp.  Four independent planning lanes exercise:
+;;; Combined stageable regression for jump.lisp.  Six independent planning lanes exercise:
 ;;;
 ;;;   1. An agent mounts a box exactly at the fixed jump-elevation limit, then clears a wall
 ;;;      from the box top, itself exactly at the same fixed limit above that raised launch
@@ -16,6 +16,8 @@
 ;;;      at it.
 ;;;   5. A grounded agent jumps directly onto a remote clear box, exercising the remaining
 ;;;      ground-to-support configuration boundary.
+;;;   6. A grounded agent jumps directly onto a remote tray held by another agent.  The
+;;;      tray's top follows its holder and sits exactly at the fixed elevation limit.
 ;;;
 ;;; Independent stationary probes characterize the public clearance queries and inspect
 ;;; MOVE's and CHANGE-CONFIGURATION's real generated children.  They verify inclusive and
@@ -33,11 +35,11 @@
 ;;; transition (lane 4) is tagged VAULT, while a non-empty but fully passable feature list
 ;;; (the remote-mount canonicalization contract below) still tags JUMP.
 ;;;
-;;; Expected minimum solution (6 steps, in any interleaving): mount vault-box; cross
+;;; Expected minimum solution (7 steps, in any interleaving): mount vault-box; cross
 ;;; vault-start -> vault-goal; drop from drop-box; cross transfer-start -> transfer-goal
 ;;; directly onto transfer-target-box; move carry-approach -> carry-goal through stairs and
 ;;; jump segments while holding carried-box; jump from remote-mount-start directly onto
-;;; remote-target-box.
+;;; remote-target-box; jump from remote-tray-start directly onto remote-held-tray.
 
 
 (in-package :ww)
@@ -51,9 +53,9 @@
 
 (ww-set *tree-or-graph* graph)
 
-(ww-set *depth-cutoff* 6)
+(ww-set *depth-cutoff* 7)
 
-(setf *expected-min-length* 6)
+(setf *expected-min-length* 7)
 
 
 ;;;; TYPES ;;;;
@@ -62,15 +64,18 @@
 (define-types
   agent (vault-agent drop-agent transfer-agent carrying-agent
          boundary-agent screen-probe-agent unsafe-probe-agent
-         occupied-probe-agent tall-box-probe-agent remote-mount-agent)
+         occupied-probe-agent tall-box-probe-agent remote-mount-agent
+         remote-tray-mount-agent remote-tray-holder)
   location (vault-start vault-goal drop-site
             transfer-start transfer-goal carry-approach carry-start carry-goal
             boundary-site screen-probe-start screen-probe-goal
             unsafe-start unsafe-goal occupied-start occupied-goal
-            tall-box-site remote-mount-start remote-mount-goal)
+            tall-box-site remote-mount-start remote-mount-goal
+            remote-tray-start remote-tray-goal)
   box (vault-box drop-box transfer-source-box transfer-target-box carried-box
        transfer-base-box boundary-box occupied-target-box tall-local-box
        remote-target-box)
+  tray (remote-held-tray)
   connector (blocking-connector)
   gate (default-gate)
   screen (cargo-screen passable-screen)
@@ -178,7 +183,16 @@
   (has-location remote-mount-agent remote-mount-start)
   (has-location remote-target-box remote-mount-goal)
   (traverse-via jumping remote-mount-start () remote-mount-goal)
-  (traverse-via> jumping remote-mount-start ((passable-screen)) remote-mount-goal))
+  (traverse-via> jumping remote-mount-start ((passable-screen)) remote-mount-goal)
+
+  ;; A held tray is a jump landing support only for another agent.  The holder's unit
+  ;; height puts the zero-thickness tray top exactly one unit above the source floor.
+  (has-location remote-tray-mount-agent remote-tray-start)
+  (has-location remote-tray-holder remote-tray-goal)
+  (has-height remote-tray-holder 1)
+  (holding remote-tray-holder remote-held-tray)
+  (has-location remote-held-tray remote-tray-goal)
+  (traverse-via jumping remote-tray-start () remote-tray-goal))
 
 
 (define-init-action initialize-derived-state
@@ -273,6 +287,14 @@
             (remote-mount-goal remote-target-box)))))
 
 
+(define-test-claim jump-held-tray-landing-contract
+  (equal
+    (configuration-transition-results
+      *start-state* 'remote-tray-mount-agent)
+    '((jump (remote-tray-start ground) nil
+            (remote-tray-goal remote-held-tray)))))
+
+
 (define-test-claim jump-vaultable-object-excludes-edge
   ;; A genuine wall passes TRAVERSAL-INIT-CHECK's per-mode clause type check unchanged.
   (null
@@ -363,6 +385,12 @@
     (has-location remote-mount-agent remote-mount-goal)
     (on remote-mount-agent remote-target-box)
     (support-occupied remote-target-box)
+
+    ;; A remote held-tray landing uses the holder's raised top and leaves the tray held.
+    (has-location remote-tray-mount-agent remote-tray-goal)
+    (on remote-tray-mount-agent remote-held-tray)
+    (holding remote-tray-holder remote-held-tray)
+    (= (top remote-held-tray) 1)
 
     ;; Barrier default, explicit override, top elevation, feature typing, and maximum
     ;; non-passable height.  The passable screen contributes nothing to the mixed list.

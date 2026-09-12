@@ -2,10 +2,10 @@
 
 ;;; Zero-action characterization of recorder cross-layer isolation.  It exercises the
 ;;; installed generic pickup and connector actions in the initial state, inspects exact
-;;; placement and physical-landing choices, and probes malformed initial HOLDING, ON, and
-;;; PAIRED facts.  Recorder's private shadow components are included first to verify that
-;;; nested-hook deduplication keeps their overrides in force when the shared action
-;;; technologies are spliced later.
+;;; placement, jump-support, and physical-landing choices, and probes malformed initial
+;;; HOLDING, ON, and PAIRED facts.  Recorder's private shadow components are included first
+;;; to verify that nested-hook deduplication keeps their overrides in force when the shared
+;;; action technologies are spliced later.
 ;;; Expected minimum path length: zero.
 
 (in-package :ww)
@@ -57,6 +57,7 @@
 (include-tech -recorder-init-checks)
 (include-tech plate)
 (include-tech box)
+(include-tech jump)
 (include-tech -gears-fan)
 (include-tech beam-relay)
 (include-tech visibility)
@@ -115,6 +116,7 @@
   (has-location ghost-held-tray place-site)
   (has-location live-ground-tray place-site)
   (has-location ghost-ground-tray place-site)
+  (traverse-via jumping pickup-site () place-site)
 
   ;; Physical landing matrix used by -gears-fan's shared landing-support query.
   (has-location live-landing-box landing-site)
@@ -264,11 +266,32 @@
 
 
 (define-query recorder-isolation-landing-valid ()
-  ;; Environmental landings use the same mobile-support isolation.
-  (and (eql (landing-support landing-site live-pickup-box nil)
-            'live-landing-box)
-       (eql (landing-support landing-site ghost-pickup-box nil)
-            'ghost-landing-box)))
+  ;; Environmental and jump landings use the same mobile-support isolation.  Rule 19 lets
+  ;; the live agent land on the ghost-held tray, but not a grounded ghost tray; the ghost
+  ;; agent may use only its own held tray.
+  (do (assign $live-transitions
+        (configuration-transition-results live-pickup-agent))
+      (assign $ghost-transitions
+        (configuration-transition-results ghost-pickup-agent))
+      (and (eql (landing-support landing-site live-pickup-box nil)
+                'live-landing-box)
+           (eql (landing-support landing-site ghost-pickup-box nil)
+                'ghost-landing-box)
+           (member '(jump (pickup-site ground) nil
+                           (place-site live-held-tray))
+                   $live-transitions :test #'equal)
+           (member '(jump (pickup-site ground) nil
+                           (place-site ghost-held-tray))
+                   $live-transitions :test #'equal)
+           (not (member '(jump (pickup-site ground) nil
+                                (place-site ghost-ground-tray))
+                        $live-transitions :test #'equal))
+           (member '(jump (pickup-site ground) nil
+                           (place-site ghost-held-tray))
+                   $ghost-transitions :test #'equal)
+           (not (member '(jump (pickup-site ground) nil
+                                (place-site live-held-tray))
+                        $ghost-transitions :test #'equal)))))
 
 
 (define-query recorder-isolation-pairing-valid ()

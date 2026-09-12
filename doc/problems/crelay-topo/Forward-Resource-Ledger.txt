@@ -81,9 +81,9 @@ First closed-cycle subgoal -- validated
 Target checkpoint:
 
   one recorder cycle has ended by a normal ghost STOP
-  A is back at recorder1 at location1
+  A is at location2
   C is on plate1 at location2 and gate1 is open
-  T is free on the ground at location5 for the box1 subgoal
+  T remains on plate2 at location7 and gate3 is open
   B remains at elevated location6 and gate2 remains open
 
 Exact action sequence accepted by VALIDATE-SOLUTION:
@@ -94,36 +94,56 @@ Exact action sequence accepted by VALIDATE-SOLUTION:
    4. A walks location1 -> location9 through gates1 and 3
    5. A picks up C at location9
    6. A walks location9 -> location2 through gates3 and 1
-   7. A* steps from plate1 to ground
-   8. A puts C on plate1
-   9. A walks location2 -> location7 through gate1
-  10. A picks up T from plate2 at location7
-  11. A walks location7 -> location5
-  12. A puts T on the ground at location5
-  13. A walks location5 -> location1 through gate1
-  14. A* walks location2 -> location1
-  15. STOP-RECORDER A*
+   7. A puts C on plate1
+   8. A* steps from plate1 to ground
+   9. A* walks location2 -> location1
+  10. STOP-RECORDER A*
 
 Validated final facts include DEPRESSED plate1, ON C plate1, OPEN gate1,
-HAS-LOCATION T location5, HAS-LOCATION B location6, RECORDER-CYCLES-USED 1,
-RECORDER-CYCLE-CLOSED, and RECORDER-CYCLE-STOPPED-BY-GHOST.  Gate3 is closed
-because the cycle deliberately reclaims T from plate2 after C has crossed it.
-The recorder-specific whole-cycle validator also returned VALID T with no
-diagnostic.
+ON T plate2, OPEN gate3, HAS-LOCATION B location6, RECORDER-CYCLES-USED 1,
+RECORDER-CYCLE-CLOSED, and RECORDER-CYCLE-STOPPED-BY-GHOST.  The current
+layer-based support rule permits each live object and its ghost copy to coexist
+on the same fixed support during later cycles; ending the cycle removes the
+ghost copy without disturbing the live commitment.
 
-The explicit pickup and placement of T are important.  A shorter 11-action
-candidate that left T untouched also executed, but recorder forking had already
-displaced the live ON T plate2 fact when T* was forked onto that same fixed
-support.  The 15-action sequence gives T's final ground state a real live-side
-cause instead of relying on that representation defect.
 
-A 17-action continuation probe (the 15 actions above, then a second
-START-RECORDER and A* walking location1 -> location5 through gate1) was fully
-executable.  It confirms that the next ghost can reach the tray/box area.
-Nevertheless, the second start similarly replaces live ON C plate1 with ON C*
-plate1.  This is an unresolved interaction between recorder forking and ON's
-bijective fixed-support index.  Do not yet assume that C remains physically on
-plate1 after the second cycle closes.
+Second closed-cycle subgoal -- validated
+----------------------------------------
+
+Target checkpoint:
+
+  two recorder cycles have ended by normal ghost STOPs
+  C remains on plate1 and gate1 remains open
+  T remains on plate2 and gate3 remains open
+  B is grounded and free at location9 for the beam-support subgoal
+  A is at location9
+  switch1 and blower1 are off, so gate2 is open
+
+The 17-action continuation from the first checkpoint was accepted by
+VALIDATE-SOLUTION as part of the complete 27-action prefix:
+
+   1. A walks location2 -> location1
+   2. START-RECORDER A
+   3. A* walks location1 -> location7 through gate1
+   4. A* picks up T* from plate2
+   5. A* walks location7 -> location5 while holding T*
+   6. A walks location1 -> location4 through gate1
+   7. A steps onto blower1
+   8. A toggles switch1 on and is blown to location20
+   9. A jumps from location20 onto T* held by A* at location5
+  10. A toggles switch1 off, reopening gate2
+  11. A jumps from T* through gate2 to ground at location6
+  12. A picks up B
+  13. A jumps through gate2 to location4 and walks through gate3 to location9
+  14. A puts B on the ground at location9
+  15. A* walks location5 -> location1 through gate1 while holding T*
+  16. A* puts T* on the ground at location1
+  17. STOP-RECORDER A*
+
+At the endpoint all four checkpoint conjuncts are present: ON C plate1, ON T
+plate2, HAS-LOCATION B location9, and GHOST-STOPS-RECORDER.  Gates1, 2, 3, and
+5 are open.  No ghost-object state remains.  This is an inferred executable
+continuation, not a minimum-length result from search.
 
 
 Gate and station ledger
@@ -216,32 +236,36 @@ PHASE 0 -- Fork the execution and open gate1
   Validated full cycle:
     A* opens gate1 from plate1.
     A retrieves C through initially open gate3 and puts C on plate1.
-    A frees T from plate2 and stages it at location5.
-    A and A* return to recorder1 and A* stops the recorder.
+    A* returns to recorder1 and stops the recorder.
 
   Exit condition:
-    C holds plate1, gate1 is open, T is free at location5, A is at recorder1,
-    and the first recorder cycle is normally closed.
+    C holds plate1, T still holds plate2, gates1 and 3 are open, A is at
+    location2, and the first recorder cycle is normally closed.
 
 
 PHASE 1 -- Recover the elevated box resources
 
-  Keep switch1 off and gate2 open.  Use the now-free T at location5 as the
-  candidate standing support for reaching location6 and recovering B.  Determine
-  separately whether B* must also be recovered.  Do not toggle switch1 merely
-  because it is accessible.  Blower1 is useful only if the forward plan identifies
-  an exact resource, source, and destination for the blow.
+  Validated full cycle:
+    A* temporarily removes T* from recording plate2 and holds it at location5.
+    A steps onto blower1 and turns switch1 on, which lifts A to location20 and
+    closes ordinary gate2.
+    A jumps onto the ghost-held tray at location5, turns switch1 off to reopen
+    gate2, and jumps to location6.
+    A retrieves B, returns through gate2 by location4, carries B through gate3,
+    and puts it on the ground at location9.
+    A* returns empty-handed to recorder1 and stops the recorder.
 
   Exit condition:
-    The required box or boxes are recoverable on the intended side of gate2.
+    B is grounded at location9, C still holds plate1, T still holds plate2,
+    switch1 and blower1 are off, gates1-3 remain open as required, and the second
+    recorder cycle is normally closed.  Whether B* is also needed remains open.
 
 
 PHASE 2 -- Open gate3 and stage the middle resources
 
-  T no longer occupies plate2 after Phase 0, so recommit one resource to plate2.
-  Move every resource needed for the beam,
-  plates3-5, the switch2 trip, and the final plate allocation beyond gate3 before
-  releasing plate2.
+  T still occupies plate2 after the first two validated cycles.  Move every
+  resource needed for the beam, plates3-5, the switch2 trip, and the final plate
+  allocation beyond gate3 before releasing or replacing T.
 
   Exit condition:
     The complete post-gate3 inventory has crossed in the necessary view or views.
@@ -364,15 +388,13 @@ locations rather than descriptions such as "left side" or "near gate8."
 Open allocation decisions
 -------------------------
 
-  1. How should recorder ON-forking be corrected so C remains on plate1 across
-     later cycle starts and endings?
-  2. Must both B and B* be recovered, or can one remain unused?
-  3. Which side supplies the box, connector, and plate3 occupant for gate8?
-  4. Which exact resources are staged beyond gate5 before switch2 is turned on?
-  5. Which three non-A resources occupy plates6, 7, and 8?
-  6. Is one final open recording cycle sufficient, or are intermediate closed
+  1. Must both B and B* be recovered, or can one remain unused?
+  2. Which side supplies the box, connector, and plate3 occupant for gate8?
+  3. Which exact resources are staged beyond gate5 before switch2 is turned on?
+  4. Which three non-A resources occupy plates6, 7, and 8?
+  5. Is one final open recording cycle sufficient, or are intermediate closed
      cycles useful enough to justify the return cost?
-  7. Does any proposed cross-side handoff actually validate under the recorder
+  6. Does any proposed cross-side handoff actually validate under the recorder
      rules, or has it only been assumed in the paper plan?
 
 
@@ -401,10 +423,12 @@ Validation checkpoints
 
 For a candidate forward solution, validate in this order:
 
-  [x] The exact 15-action first recorder cycle succeeds and reaches its checkpoint.
+  [x] The exact 10-action first recorder cycle succeeds and reaches its checkpoint.
+  [x] The 17-action second-cycle continuation succeeds as part of the cumulative
+      27-action prefix and reaches the box-at-location9 checkpoint.
   [ ] Each release of plates1 and 2 leaves no required resource behind.
-  [ ] Every box required by the allocation is actually recoverable before gate2
-      can close.
+  [x] Live B is recovered from location6 and grounded at location9 while gate2
+      is reopened and the first two gate commitments are preserved.
   [ ] The beam station opens gate8 in the required live/recording view.
   [ ] Every post-switch resource is beyond gate5 before switch2 is turned on.
   [ ] The plate4/plate5 operator returns before either occupant is reclaimed.
