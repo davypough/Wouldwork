@@ -410,10 +410,16 @@
 
 (defparameter *topo-derived-relations*
   '(traverse-via traverse-via> los-via los-barrier-crossings>
-    beam-crossing> crossings-along-beam> beam-crossings-before-gate>)
+    beam-crossing> crossings-along-beam> beam-crossings-before-gate>
+    reach-via)
   "The relations the coordinate derivations produce.  Every one is derived rather than
    authored, so anything that moves in them means a derivation moved -- which is the thing
-   the topo problems have no other guard against, since none of them is in (TEST-TALOS).")
+   the topo problems have no other guard against, since none of them is in (TEST-TALOS).
+   REACH-VIA is listed even though a problem may still author rows of its own: the
+   derivation is additive, so an authored row and a derived one land in the same relation
+   and both belong in the digest.  REACH-VIA> and REACH-DISALLOWED> are deliberately
+   absent -- no derivation ever writes either, so tracking them here would claim a guard
+   that does not exist.")
 
 
 (defun test-topo ()

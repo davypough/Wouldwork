@@ -18,7 +18,12 @@
 ;;;
 ;;; Two bounds decide whether a pair reaches at all.  The horizontal one is
 ;;; *HORIZONTAL-REACH-LIMIT*, a static bound on how far apart two points may be for a reach
-;;; edge to exist between them.  It is deliberately NOT the vertical limit, and the two are
+;;; edge to exist between them -- bounded below as well as above, since two points sharing a
+;;; horizontal position are not horizontally separated at all.  One is directly above the
+;;; other, and what joins them is the vertical model rather than an arm swung sideways: a
+;;; stream destination hovering over the location its blower is aimed at is the case in
+;;; point, and it is the vertical tests that should decide what an actor there can lift or
+;;; set down, from whatever it is standing on at the time.  It is deliberately NOT the vertical limit, and the two are
 ;;; not the same quantity: -support-elevation's *VERTICAL-REACH-LIMIT* is an agent
 ;;; capability applied at action time, measured by WITHIN-AGENT-VERTICAL-REACH from wherever
 ;;; the actor currently stands -- including on top of a box it has just climbed -- while this
@@ -131,12 +136,17 @@
 
 
 (defun reachability-coordinates-within-limit-p (x1 y1 x2 y2 limit)
-  "True when the horizontal separation between the two points is at most LIMIT.  Compared
-   squared on purpose: a square root would turn every authored fraction into a float, and the
-   derived fact set would then depend on rounding rather than on the authored coordinates."
-  (<= (+ (* (- x2 x1) (- x2 x1))
-         (* (- y2 y1) (- y2 y1)))
-      (* limit limit)))
+  "True when the two points are horizontally separated at all, and by no more than LIMIT.
+   Zero separation is excluded rather than admitted as the easiest case: two points at the
+   same horizontal position are stacked, not side by side, and the relationship between them
+   belongs wholly to the vertical model -- see the file header.
+   Compared squared on purpose: a square root would turn every authored fraction into a
+   float, and the derived fact set would then depend on rounding rather than on the authored
+   coordinates."
+  (let ((separation (+ (* (- x2 x1) (- x2 x1))
+                       (* (- y2 y1) (- y2 y1)))))
+    (and (plusp separation)
+         (<= separation (* limit limit)))))
 
 
 (defun reachability-coordinates-span-meets-p (record low high)

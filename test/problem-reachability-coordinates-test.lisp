@@ -2,7 +2,7 @@
 ;;;
 ;;; Dedicated regression coverage for coordinate-derived manipulation reach.
 ;;;
-;;; One rectangular boundary holds fifteen independent scenarios, each a pair of points
+;;; One rectangular boundary holds sixteen independent scenarios, each a pair of points
 ;;; two units apart and every scenario at least four units from its neighbours, so that
 ;;; *HORIZONTAL-REACH-LIMIT* can never join one scenario's points to another's and each
 ;;; assertion below characterizes exactly the geometry it names.
@@ -17,6 +17,9 @@
 ;;; barrier; REACH-DISALLOWED> read in both directions; reach from a location to a
 ;;; wall-mounted switch; and two switches a single unit apart, between which no reach is
 ;;; ever derived because REACHABLE's second argument is always the actor's own location.
+;;; STACK-LOWER and STACK-UPPER share a horizontal position and differ only in level: they
+;;; are stacked rather than side by side, so no reach edge joins them at any limit, and the
+;;; vertical model owns what passes between them.
 ;;;
 ;;; AUTHORED-A and AUTHORED-B are in range and geometrically clear, so the derivation
 ;;; would emit an empty barrier list for them; the problem authors LOCKED-DOOR instead, and
@@ -46,6 +49,7 @@
 
 (define-types
   location (near-left near-right
+            stack-lower stack-upper
             limit-a limit-b over-a over-b
             wall-left wall-right
             window-left window-right
@@ -121,6 +125,8 @@
   ;; Scenario coordinates.  The optional third coordinate is the location's own level.
   (location-coords> near-left 2 2)
   (location-coords> near-right 4 2)
+  (location-coords> stack-lower 8 2)
+  (location-coords> stack-upper 8 2 3/2)
   (location-coords> limit-a 2 6)
   (location-coords> limit-b 9/2 6)
   (location-coords> over-a 8 6)
@@ -182,7 +188,8 @@
 (define-test-claim horizontal-reach-limit-is-exact
   (= *horizontal-reach-limit* 5/2)
   (reachability-coordinates-within-limit-p 0 0 3/2 2 *horizontal-reach-limit*)
-  (not (reachability-coordinates-within-limit-p 0 0 3/2 21/10 *horizontal-reach-limit*)))
+  (not (reachability-coordinates-within-limit-p 0 0 3/2 21/10 *horizontal-reach-limit*))
+  (not (reachability-coordinates-within-limit-p 3 4 3 4 *horizontal-reach-limit*)))
 
 
 (define-test-claim door-span-meets-reach-line
@@ -226,6 +233,13 @@
     ;; suffix, so the derivation asserts one direction and WW mirrors it.
     (coordinate-reach-barriers-are near-left near-right nil)
     (coordinate-reach-barriers-are near-right near-left nil)
+
+    ;; Stacked points are not horizontally separated at all, so no reach edge joins them
+    ;; however close they stand.  The vertical model owns that relationship.
+    (= (location-elevation stack-lower) 0)
+    (= (location-elevation stack-upper) 3/2)
+    (coordinate-reach-absent stack-lower stack-upper)
+    (coordinate-reach-absent stack-upper stack-lower)
 
     ;; The limit is inclusive, and a tenth beyond it is out.
     (coordinate-reach-barriers-are limit-a limit-b nil)

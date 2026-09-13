@@ -96,7 +96,7 @@
   (location-coords> location3 31/10 3)
   (location-coords> location4 75/10 1)
   (location-coords> location5 65/10 1)
-  (location-coords> location6 75/10 -1 3/2)
+  (location-coords> location6 75/10 -19/10 3/2)  ;deep enough in the alcove to be out of reach from location4/5/20
   (location-coords> location7 14 65/10)
   (location-coords> location8 151/10 3)
   (location-coords> location9 19 115/10)
@@ -183,14 +183,6 @@
   (traverse-via> climbing location3 ((ladder1)) location1)
   (traverse-via> climbing location8 ((ladder2)) location5)
   (traverse-via> climbing location11 ((ladder3)) location10)
-
-  ;; Nearby manipulation across boundaries
-  (reach-via location4 () switch1)
-  (reach-via location5 () switch1)
-  (reach-via location20 () switch1)
-  (reach-via location20 () location5)
-  (reach-via location6 (gate2) switch1)
-  (reach-via location14 () switch2)
 )
 
 

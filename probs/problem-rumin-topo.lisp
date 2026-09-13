@@ -174,9 +174,12 @@
   ;(traverse-via> climbing location5 ((ladder1)) location13)
   (traverse-via> climbing location14 ((ladder2)) location5)
 
-  ;; Nearby manipulation across boundaries
-  (reach-via location4 () location2)
-  (reach-via location5 () location14)  ;across the loc15 ledge; the vertical tests bound each direction
+  ;; WINDOW1 is the see-through panel beside GATE1 in the same x=19 partition, not a second
+  ;; doorway.  Reach passes a window exactly as sight does, so the coordinate derivation
+  ;; joins the two locations flanking it; that one edge is withheld here because it would
+  ;; let an actor at LOCATION17 work on LOCATION10 -- CONNECTOR2's starting place, in a
+  ;; different walking zone -- with GATE1 still shut.
+  (reach-disallowed> location10 location17)
 )
 
 

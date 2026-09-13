@@ -16,6 +16,13 @@
 ;;; absent from OPEN.  There are no actions or derived-state updates, so the initial state
 ;;; must satisfy every positive and negative assertion directly.  The expected minimum path
 ;;; length is therefore zero.
+;;;
+;;; This problem carries no segment geometry, so -REACHABILITY-COORDINATES' derivation is inert
+;;; here and every REACH-VIA fact in the staged database is one authored below.  That inertness
+;;; is the property this file guards: a problem that hand-authors its own reach must keep
+;;; working exactly as it did before reach became derivable.  Do not add WALL-SEGMENT>,
+;;; EDGE-SEGMENT>, or BOUNDARY-WALL to it -- any one of them arms the derivation and the guard
+;;; is gone.
 
 
 (in-package :ww)
