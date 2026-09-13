@@ -897,6 +897,7 @@
 
 (defun check-problem-parameter (param val)
   (case param
+    (*worker-read-snapshots* (check-type val boolean))
     (*problem-name* t)
     (*depth-cutoff* (unless (typep val 'fixnum)
                       (error "Can't set *depth-cutoff* to ~S. Must be an integer

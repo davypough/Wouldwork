@@ -4,6 +4,11 @@
 
 (in-package :ww)
 
+(defvar *worker-read-snapshots* nil
+  "Opt-in Claustro-Topo experiment. Reset by STAGE; deliberately not persisted.")
+(defvar *worker-static-read-view* nil)
+(defvar *worker-code-read-view* nil)
+
 
 (declaim (special *recorder-prefix-pruning*
                   *min-steps-fallback-warmup*
@@ -134,6 +139,7 @@ must return unknown rather than :IMPOSSIBLE.")
   (format t "~&  MIN STEPS REMAINING? => ~A"
           (when (min-steps-remaining-available-p) 'YES))
   (when (> *threads* 0)
+    (format t "~&  *WORKER-READ-SNAPSHOTS* => ~S (experimental)" *worker-read-snapshots*)
     (format t "~&~%  For parallel settings: (display-parallel-parameters)"))
   (terpri) (terpri))
 
@@ -714,6 +720,7 @@ treat their arguments as read-only and be safe to call concurrently."
     (*debug* . 0)
     (*goal*)
     (*threads* . 0)
+    (*worker-read-snapshots*)
     (*max-recorder-cycles* . 1)
     (*recorder-prefix-pruning*)
     (*auto-wait*)
@@ -752,6 +759,7 @@ treat their arguments as read-only and be safe to call concurrently."
 
 (defun reset-problem-parameters-to-defaults (&optional (problem-name 'unspecified))
   "Restore every managed parameter before a new problem specification is loaded."
+  (reject-worker-read-write 'reset-problem-parameters-to-defaults)
   (dolist (entry *problem-parameter-defaults*)
     (set (car entry) (cdr entry)))
   (setf *problem-name* problem-name

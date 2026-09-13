@@ -209,6 +209,7 @@ is staged again.
 (defun refresh ()
   "Refreshes the current problem.lisp file--eg, after editing it.
    Preserves the current parameter settings instead of reapplying problem-file settings."
+  (reject-worker-read-write 'refresh)
   (save-globals)
   (setf *goal* nil
         *final-goal* nil)
@@ -363,6 +364,7 @@ is staged again.
 
 (defun load-problem (problem-name-str)
   "Stage a named or project-relative problem file, then reload Wouldwork."
+  (reject-worker-read-write 'load-problem)
   (when (ensure-problem-staged problem-name-str)
     (asdf:load-system :wouldwork :force t)))
 
@@ -398,6 +400,7 @@ is staged again.
    This allows the user to verify/debug their problem specification, and check the current parameters,
    without asking wouldwork to solve it as run does.
    Once the problem loads correctly, it can then be solved with a follow-up (solve) command."
+  (reject-worker-read-write '%stage)
   (let ((problem-file (resolve-problem-file problem-name-str)))
     (unless problem-file
     (format t "The problem ~A was not found." problem-name-str)
@@ -412,6 +415,7 @@ is staged again.
 
 (defun solve ()
   "Solve the current problem, or finish an active goal chain through its policy."
+  (reject-worker-read-write 'solve)
   (cond
     ((null *final-goal*)
      (ww-solve))

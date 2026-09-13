@@ -9,8 +9,12 @@
   "Set a problem parameter. During refresh, problem-file ww-set forms are ignored
    so current parameter settings are preserved."
   `(unless (and *refreshing* *ww-loading*)
+     (reject-worker-read-write 'ww-set)
      (check-problem-parameter ',param ',val)  ;catch syntax errors before setting
      (case ',param
+       (*worker-read-snapshots*
+         (setf *worker-read-snapshots* ',val)
+         (format t "~&Worker read snapshots: ~S (experimental, not persisted)~%" ',val))
        ((*depth-cutoff* *progress-reporting-interval* *randomize-search*
          *branch* *auto-wait* *tasks-per-thread* *min-tasks* *split-depth-max*
          *bound-refresh-interval* *donation-check-interval* *donation-threshold*

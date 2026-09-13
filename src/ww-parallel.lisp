@@ -459,7 +459,78 @@
 ;;; COORDINATOR: Partitioned Parallel Search
 ;;; ============================================================
 
+(defun request-parallel-worker-shutdown (task-queue)
+  (sb-thread:with-mutex ((tq-mutex task-queue))
+    (setf *shutdown-requested* t)
+    (sb-thread:condition-broadcast (tq-waitqueue task-queue))))
+
+(defun call-parallel-worker-safely (worker-id queue view function errors)
+  (let ((completed nil))
+    (sb-sys:without-interrupts
+      (unwind-protect
+          (sb-sys:with-local-interrupts
+            (handler-case
+                (prog1
+                    (call-with-worker-read-view
+                      view (lambda () (funcall function worker-id queue)))
+                  (setf completed t))
+              (error (condition)
+                ;; One writer per slot; coordinator reads only after joins.
+                (setf (aref errors worker-id) condition))))
+        ;; Also covers a thread abort/nonlocal exit, which is not an ERROR.
+        (unless completed (request-parallel-worker-shutdown queue))))))
+
+(defun start-parallel-worker (worker-id queue view function errors maker)
+  (funcall maker
+           (lambda ()
+             (call-parallel-worker-safely worker-id queue view function errors))
+           :name (format nil "ww-worker-~D" worker-id)))
+
+(defun run-parallel-worker-group (queue count &key (function #'parallel-worker)
+                                                 (maker #'bt:make-thread)
+                                                 (view-maker #'make-current-worker-read-view)
+                                                 after-start)
+  "Own startup, all joins and snapshot lifetime. Keyword seams are for focused tests."
+  (let ((context nil) (threads nil) (completed nil)
+        (errors (make-array count :initial-element nil)))
+    (sb-sys:without-interrupts
+      (unwind-protect
+          (progn
+            ;; Acquisition and recording are one uninterruptible operation.
+            (setf context (begin-worker-read-phase count view-maker))
+            (dotimes (i count)
+              (push (start-parallel-worker
+                      i queue (when context (nth i (worker-read-context-views context)))
+                      function errors maker)
+                    threads))
+            (sb-sys:with-local-interrupts
+              (when after-start (funcall after-start))
+              (dolist (thread threads) (bt:join-thread thread))
+              (let ((failure (find-if #'identity errors)))
+                (when failure (error failure)))
+              (setf completed t)))
+        (unless completed (request-parallel-worker-shutdown queue))
+        ;; JOIN with :DEFAULT also reaps an abnormally terminated worker. Never
+        ;; release the freeze merely because the normal join signaled an error.
+        (dolist (thread threads) (sb-thread:join-thread thread :default nil))
+        (end-worker-read-phase context)))
+    t))
+
+(defun call-with-parallel-search-lifetime (function)
+  (reject-worker-read-write 'process-partitioned-parallel)
+  (validate-worker-read-snapshot-mode)
+  (when *parallel-search-active* (error "A parallel search is already active."))
+  (sb-sys:without-interrupts
+    (unwind-protect
+        (progn
+          (setf *parallel-search-active* t)
+          (sb-sys:with-local-interrupts (funcall function)))
+      (setf *parallel-search-active* nil))))
+
 (defun process-partitioned-parallel ()
+  (call-with-parallel-search-lifetime #'process-partitioned-parallel-body))
+
+(defun process-partitioned-parallel-body ()
   "Main entry point for partitioned parallel search.
    Generates tasks, spawns workers, waits for completion, aggregates results."
   
@@ -512,7 +583,7 @@
                 (round (* 1000 (/ (- (get-internal-real-time) total-start)
                                   internal-time-units-per-second))))
           (setf *parallel-search-active* nil)
-          (return-from process-partitioned-parallel))
+          (return-from process-partitioned-parallel-body))
         
         ;; Load tasks into queue
         (format t "Loading ~D tasks into queue...~%" (length tasks))
@@ -526,29 +597,7 @@
         (setf phase-start (get-internal-real-time))
         (format t "~%Starting ~D workers...~%" *threads*)
         
-        ;; Spawn worker threads
-        (let ((threads nil))
-          (dotimes (i *threads*)
-            (let ((worker-id i))  ; Capture for closure
-              (push (bt:make-thread 
-                     (lambda () 
-                       (parallel-worker worker-id task-queue))
-                     :name (format nil "ww-worker-~D" worker-id))
-                    threads)))
-          
-          ;; Wait for all workers; on abnormal exit only, signal shutdown
-          (let ((completed-normally nil))
-            (unwind-protect
-                (progn
-                  (dolist (thread threads)
-                    (bt:join-thread thread))
-                  (setf completed-normally t))
-              (unless completed-normally
-                (setf *shutdown-requested* t)
-                (sb-thread:condition-broadcast (tq-waitqueue task-queue))
-                (dolist (thread threads)
-                  (when (sb-thread:thread-alive-p thread)
-                    (sb-thread:join-thread thread :default nil))))))
+        (run-parallel-worker-group task-queue *threads*)
         
         ;; Record worker search time
         (setf (pt-worker-search-ms *parallel-timing*)
@@ -574,7 +623,7 @@
                               internal-time-units-per-second))))
       
       ;; Cleanup
-      (setf *parallel-search-active* nil)))))
+      (setf *parallel-search-active* nil))))
 
 
 ;;; ============================================================

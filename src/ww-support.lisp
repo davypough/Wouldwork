@@ -303,6 +303,7 @@
    *SYMMETRY-IDB-ACC*, setting *SYMMETRY-IDB-TOUCHED-P* so callers know the slice
    changed. An idempotent re-store leaves every accumulator unchanged."
   (declare (type hash-table db))
+  (reject-worker-static-write db)
   (when int-db
     (multiple-value-bind (old present) (gethash key db)
       (unless (and present (equal old value))
@@ -337,6 +338,7 @@
    and folds fixed entries out of *FIXED-IDB-HASH-ACC*. A missing key leaves every
    accumulator unchanged."
   (declare (type hash-table db))
+  (reject-worker-static-write db)
   (when int-db
     (multiple-value-bind (old present) (gethash key db)
       (when present
@@ -567,6 +569,8 @@
                                    (bt:with-lock-held (*integer-lock*)
                                      (or (gethash item *constant-integers*)
                                          (progn
+                                           (reject-worker-read-write
+                                             (list 'convert-fluentless-prop-to-integer item))
                                            (when (>= *last-object-index* 999)
                                              (error "Design Limit Error: Total # of actual + derived planning objects > 999"))
                                            (incf *last-object-index*)

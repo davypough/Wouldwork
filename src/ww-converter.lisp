@@ -10,6 +10,7 @@
   "Convert propositions in databases to integer keys and store in integer databases.
    This can be called multiple times to convert newly-added propositions."
   ;; Convert type propositions
+  (reject-worker-read-write 'convert-databases-to-integers)
   (iter (for (type constants) in-hashtable *types*)
     (iter (for constant in constants)
       (when (or (symbolp constant) (realp constant) (characterp constant))
@@ -46,6 +47,7 @@
    and SBCL reports each dropped form as \"deleting unreachable code\" on every (stage ...).
    Warnings and errors are deliberately left alone: only notes are suppressed, and only over
    generated code -- the hand-written sources in src/ and tech/ still report theirs."
+  (reject-worker-read-write 'compile-all-functions)
   (handler-bind (#+sbcl (sb-ext:compiler-note #'muffle-warning))
     (format t "~&Optimizing lambda expressions and compiling...")
     ;; Compile action preconditions and effects
@@ -117,6 +119,7 @@
 (defun do-integer-conversion ()
   "Convert all objects to integers, populate integer databases, and compile all functions.
    This is the main initialization function called during problem loading."
+  (reject-worker-read-write 'do-integer-conversion)
   (clrhash *prop-key-cache*)
   (associate-objects-with-integers)
   (convert-databases-to-integers)
@@ -125,6 +128,7 @@
 
 (defun associate-objects-with-integers ()
   "Build list of all object constants requiring conversion."
+  (reject-worker-read-write 'associate-objects-with-integers)
   (let (objects)    
     (push 'always-true objects)
     (push 'waiting objects)
@@ -225,12 +229,14 @@
    ;; (beam-segment $new-beam ?source ?target $x $y)"
   (declare (type symbol object type-name))
   ;; Input validation
+  (reject-worker-read-write 'register-dynamic-object)
   (check-type object symbol "a symbol")
   (check-type type-name symbol "a symbol")
   ;; Register object in integer constants system
   ;; This enables convert-to-integer to process propositions containing this object
   (unless (gethash object *constant-integers*)
     (bt:with-lock-held (*integer-lock*)
+      (reject-worker-read-write 'register-dynamic-object)
       ;; Double-check pattern: object might have been added by another thread
       (unless (gethash object *constant-integers*)
         (when (>= *last-object-index* 999)
@@ -366,7 +372,7 @@
                                   ((equal (third item) '(problem-state.idb state-or-state+))
                                      '(problem-state.idb state-or-state+))
                                   ((eql (third item) '*static-db*)
-                                     '*static-idb*)
+                                     '(or *worker-static-read-view* *static-idb*))
                                   ;((eql (third item) 'idb)
                                   ;   'idb)
                                   ((equal (third item) '(merge-idb-hidb state))
@@ -402,6 +408,7 @@
                           ;; Double-check pattern: item might have been added by another thread
                           (or (gethash item *constant-integers*)
                               (progn
+                                (reject-worker-read-write (list 'convert-to-integer item))
                                 (when (>= *last-object-index* 999)
                                   (error "Design Limit Error: Total # of actual + derived planning objects > 999"))
                                 (incf *last-object-index*)
@@ -422,7 +429,7 @@
                               ((and (symbolp item)
                                     (or (char= (char (symbol-name item) 0) #\$)
                                         (char= (char (symbol-name item) 0) #\?)))
-                                 `(* (gethash ,item *constant-integers*) ,multiplier))
+                                 `(* (worker-object-code ,item) ,multiplier))
                               ((numberp item)
                                  (* (gethash item *constant-integers*) multiplier))
                               ((error "Error in convert-prop-list: ~A invalid in ~A"

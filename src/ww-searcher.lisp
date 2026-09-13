@@ -389,6 +389,8 @@
 
 (defun dfs ()
   "Main search program."
+  (reject-worker-read-write 'dfs)
+  (validate-worker-read-snapshot-mode)
   (reset-symmetry-statistics)
   (when *global-invariants*
     (unless (validate-global-invariants nil *start-state*)
@@ -2041,6 +2043,8 @@ different acceptable milestone state."
 
 (defun ww-solve ()
   "Runs a branch & bound search on the problem specification."
+  (reject-worker-read-write 'ww-solve)
+  (validate-worker-read-snapshot-mode)
   ;; A prior result stops being a continuation candidate as soon as another search starts.
   ;; Clear here rather than relying on DFS, whose initial-invariant failure exits before
   ;; DFS's own search-statistics reset.

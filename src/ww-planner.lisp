@@ -38,6 +38,7 @@
   "Checks precondition of each init-action and applies updates.
    For backtracking algorithm, uses incremental updates within each assert."
   (declare (type problem-state state))
+  (reject-worker-read-write 'do-init-action-updates)
   (when *init-actions*
     (format t "~&Adding init-action propositions to initial database...~%"))
   (iter (for init-action in *init-actions*)

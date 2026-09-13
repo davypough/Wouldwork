@@ -42,6 +42,7 @@
 
 (defun predeclare-type-names (types&instances)
   "Register type names before problem translation; real INSTALL-TYPES installs instances."
+  (reject-worker-read-write 'predeclare-type-names)
   (loop for (type) on types&instances by #'cddr
         do (check-type type symbol)
            (setf (gethash type *types*) nil)))
@@ -51,6 +52,7 @@
   "Register each of TYPE-NAMES before problem translation, exactly like
    PREDECLARE-TYPE-NAMES, so a bare optional type is a recognized *TYPES* key
    regardless of where its DEFINE-OPTIONAL-TYPES form falls in the spliced file."
+  (reject-worker-read-write 'predeclare-optional-type-names)
   (dolist (type-name type-names)
     (check-type type-name symbol)
     (setf (gethash type-name *types*) nil)))
@@ -68,6 +70,7 @@
 
 
 (defun install-types (types&instances)
+  (reject-worker-read-write 'install-types)
   (format t "~&Installing object types...")
   (check-type types&instances cons)
   (iter (for (type instances) on types&instances by #'cddr)
@@ -100,6 +103,7 @@
    INSTALL-TYPES call ever populates, to detect that case and avoid clobbering it.  Unlike
    an (either ...)-wrapped alias, a type left at NIL here is a genuine empty instance list,
    so CHECK-ACTION-PARAMETER-INSTANTIABILITY correctly skips any action parameterized on it."
+  (reject-worker-read-write 'install-optional-types)
   (format t "~&Installing optional types...")
   (dolist (type-name type-names)
     (check-type type-name symbol)
@@ -309,6 +313,7 @@
 
 
 (defun install-dynamic-relations (relations)
+  (reject-worker-read-write 'install-dynamic-relations)
   (format t "~&Installing dynamic relations...")
   (iter (for raw-relation in relations)
         (register-dynamic-relation-signature raw-relation)
@@ -336,6 +341,7 @@
 
 (defun install-derived-relations (relations)
   "Register dynamic RELATIONS whose facts DEFINE-INIT must not author."
+  (reject-worker-read-write 'install-derived-relations)
   (dolist (relation relations)
     (check-type relation symbol)
     (unless (nth-value 1 (gethash relation *relations*))
@@ -349,6 +355,7 @@
 
 
 (defun install-static-relations (relations)
+  (reject-worker-read-write 'install-static-relations)
   (format t "~&Installing static relations...")
   (iter (for raw-relation in relations)
         (register-static-relation-signature raw-relation)
@@ -373,6 +380,7 @@
 
 
 (defun install-complementary-relations (positives->negatives)
+  (reject-worker-read-write 'install-complementary-relations)
   (format t "~&Installing complementary relations...")
   (register-complementary-relation-signatures positives->negatives))
 
@@ -455,6 +463,7 @@
 
 
 (defun install-happening (object plist)
+  (reject-worker-read-write 'install-happening)
   (format t "~&Installing happening for ~A ..." object)
   (check-happening object plist)
   (setf (symbol-plist object) nil)  ;overwrite any settings from a prior problem
@@ -521,6 +530,7 @@
   "Revised query function installation with read-only semantics.
    Every parameter in ARGS is a ?variable optionally followed by a Wouldwork
    object type."
+  (reject-worker-read-write 'install-query)
   (format t "~&Installing ~A query-fn..." name)
   (check-query/update-function name args body)
   (pushnew name *query-names*)
@@ -560,6 +570,7 @@
    Init-action processing (do-init-action-updates) handles both formats:
    - Depth-first: changes as hash-table with integer keys
    - Backtracking: changes as list of (forward inverse) pairs"
+  (reject-worker-read-write 'install-update)
   (format t "~&Installing ~A update-fn..." name)
   (check-query/update-function name args body)
   (pushnew name *update-names*)
@@ -598,6 +609,7 @@
 
 
 (defun install-constraint (form)
+  (reject-worker-read-write 'install-constraint)
   (format t "~&Installing constraint...")
   (check-type form list)
   (let (($vars (get-all-nonspecial-vars #'$varp form)))
@@ -635,6 +647,7 @@
 
 
 (defun install-action (name duration pre-params precondition eff-params effect)
+  (reject-worker-read-write 'install-action)
   (format t "~&Installing ~A action..." name)
   (let ((pre-param-types (nth-value 1 (dissect-pre-params
                                         (if (member (first pre-params) *parameter-headers*)
@@ -655,6 +668,7 @@
 
 (defun install-init-action (name duration pre-params precondition eff-params effect)
   (declare (ignore duration))
+  (reject-worker-read-write 'install-init-action)
   (format t "~&Installing ~A init action..." name)
   (let ((pre-param-types (nth-value 1 (dissect-pre-params
                                         (if (member (first pre-params) *parameter-headers*)
@@ -881,6 +895,7 @@
 
 (defun install-init (literals)
   ;(declare (special *relations* *db* *static-db*))
+  (reject-worker-read-write 'install-init)
   (format t "~&Creating initial propositional database...")
   (check-type literals cons)
   (let ((literals (mapcar #'pad-init-literal
@@ -910,6 +925,7 @@
 
 
 (defun install-goal (form)
+  (reject-worker-read-write 'install-goal)
   (format t "~&Installing goal...")
   (check-type form list)
   (when (eql (char (format nil "~S" form) 0) #\`)  ;eval backquoted form once at install

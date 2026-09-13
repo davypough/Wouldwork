@@ -5,6 +5,18 @@
 
 (in-package :ww)
 
+;; Defined before any reset/staging entry point. Never dynamically bind the
+;; freeze flag: every worker must observe the same publication lifetime.
+(sb-ext:defglobal *worker-read-phase* nil)
+
+(define-condition worker-read-snapshot-error (simple-error) ())
+
+(defun reject-worker-read-write (operation)
+  (when *worker-read-phase*
+    (error 'worker-read-snapshot-error
+           :format-control "Worker read snapshots are frozen; rejected ~S."
+           :format-arguments (list operation))))
+
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *threads* 0
@@ -362,6 +374,7 @@
 (defun ww-reset ()
   "Discard generated problem and saved settings, then reload the default problem.
    Allows recovery if wouldwork loading fails with error in problem file."
+  (reject-worker-read-write 'ww-reset)
   (format t "~%Loading wouldwork defaults...~2%")
   (let* ((root (asdf:system-source-directory :wouldwork))
          (problem-file (instance-problem-file root))
@@ -445,6 +458,7 @@
 
 (defun reset-user-syms (symbols)
   "Unintern symbols and unbind any functions stored in function name lists."
+  (reject-worker-read-write 'reset-user-syms)
   (dolist (symbol symbols)
     (when (boundp symbol)
       ;; If this symbol holds a list of function names, unbind each function
@@ -476,6 +490,7 @@
    This function executes AFTER read-init-vals has restored *threads* from
    vals.lisp, so that the recreated tables carry the correct :synchronized value."
   ;; CLEARED: fixed-size tables, write-only during init, lock-free during search
+  (reject-worker-read-write 'reset-global-hash-tables)
   (when (and (boundp '*types*) (hash-table-p *types*))
     (clrhash *types*))
   (when (and (boundp '*type-signatures*) (hash-table-p *type-signatures*))
@@ -674,6 +689,7 @@
    is consulted.  Prints the inclusion trace only if this pass actually spliced
    something and the explicit-name branch didn't already show the identical content
    moments ago -- see *staging-trace-already-shown*.  Always returns NIL in this case."
+  (reject-worker-read-write 'ensure-problem-staged)
   (if problem-name-designator
     (let* ((root (asdf:system-source-directory :wouldwork))
            (target-file (instance-problem-file root))
