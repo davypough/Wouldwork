@@ -1,16 +1,37 @@
+# Current status: serial comparison complete, continuation ready (2026-09-14)
+
+All approved solves complete. Serial before/after A/B/B/A passed identical work,
+identical paths and depth-33 replay. Before mean 103.1502 s, after 107.3993825 s:
++4.119% wall, +4.109% CPU; paired wall differences +4.251% and +3.986%.
+Evidence supports roughly 4.1% bounded serial overhead, not isolated causation.
+Parallel ON means: one worker 100.814285 s, two 54.874345 s (3 samples), four
+35.017955 s (2 samples); four-worker efficiency 72.0% vs one parallel worker.
+Default off. No more solves or implementation changes authorized. Read
+parallel-efficiency-continuation.md and the final baseline/serial-plan entries.
+Preserve diagnostics and artifacts/serial-01 worktrees/caches/reports. Main source
+is still checkpoint 4421433; later documents/helper are uncommitted. A1 setup
+metadata omission remains recorded. All Lisp remains user-run.
+
+The historical handoff follows; latest appended entries supersede old statuses.
+
 # Parallel graph-search diagnostics handoff
 
-## Latest user result: all four full-search cases PASS
+## Latest user result: reverse-order repeat pair complete -- PASS
 
-One worker OFF/ON: 100.391365 / 100.814285 seconds.
-Two workers OFF/ON: 122.35287 / 54.1521 seconds.
-All completed with successful depth-33 replay. Two-worker ON is 2.26x faster
-than OFF; enabled one-to-two-worker scaling is 1.86x, with nearly identical
-work. This establishes initial bounded full-search benefit, not repeatability
-or general-domain ownership safety. Full details at the end of parallel-baseline.md.
-All four approved solves are complete; no further solves authorized.
-Keep default off and preserve diagnostics. Next recommendation: review and
-consolidate for a clean checkpoint; agree cleanup scope before deleting files.
+Checkpoint 4421433 on main preserves implementation and initial four cases.
+Two-worker OFF: 122.35287 and 121.2312 s. ON: 54.1521 and 55.116688 s.
+One-worker OFF/ON: 100.391365 / 100.814285 s. All six full solves completed
+and replayed depth-33 solutions successfully; focused suite passed twice.
+Reverse pair reproduced 2.20x benefit with only 0.169% state-count difference.
+Enabled mean two-worker time 54.634394 s gives 1.845x scaling / 92.3%
+efficiency relative to one parallel worker (not true serial).
+
+All authorized solves are complete. User requested a continuation prompt for
+next phase. Recommend inspecting CPU topology and proposing four-worker enabled
+scaling next; true-serial overhead needs a separate matched design. Neither
+measurement is authorized yet. Default stays off; no general-domain safety claim.
+All Lisp remains user-run. Source unchanged since checkpoint; documentation
+updates after checkpoint remain uncommitted. Preserve diagnostics and evidence.
 
 ## Focused validation: second snapshot run PASS
 
@@ -362,3 +383,393 @@ list, not by launching Lisp. Default-off general modes have not received broad
 regression testing; this checkpoint is the bounded experiment, not a production
 rollout. Next recommended action: save this reviewed state in Git with the
 retained helpers and documentation. No further solve is needed for that action.
+
+## CPU topology inspected; four-worker solve approval pending
+
+Windows reports i9-14900K, 24 enabled physical cores and 32 logical processors;
+Intel specifies 8 P-cores plus 16 E-cores. REPL affinity/worker placement remains
+unknown. Proposed next measurement is ONE freshly staged four-worker snapshot-ON
+full solve using the existing baseline helper and unchanged search controls.
+The default root-task target remains 256 at two/four workers. See the final
+parallel-baseline.md section for controls, metrics and a separate matched
+true-serial design. Obtain solve approval before providing execution commands;
+review the result before proposing another run. No Lisp launched, no source
+changes, no diagnostics removed. Existing uncommitted evidence is preserved.
+
+## Four-worker snapshot-ON measurement approved
+
+User approved ONE full solve: claustro-snapshot-on-4-01. Commands supplied for
+fresh staging, WW-SET threads=4, then snapshots=T, and the explicitly loaded
+baseline helper. Preconditions check all branches, no probe, inactive lifecycle
+flags and the unchanged default task target controls. The helper checks the
+remaining baseline search controls and replays the best path outside timing.
+Await user results before any further run; no Lisp execution by Codex.
+
+## Latest result: four-worker snapshot ON -- PASS
+
+claustro-snapshot-on-4-01 completed and replayed depth 33 successfully.
+Wall 33.62575 s; CPU 111.03125 s; states 6,480,743; cycles 1,030,899.
+Same 343 root tasks and approved controls; no worker donations.
+Versus two-worker ON mean: 1.625x speedup, 38.45% less elapsed, but 4.264%
+more states. Versus one-worker ON: 2.998x speedup / 74.95% worker-count
+efficiency, not true-serial or physical-core efficiency. All seven full runs
+passed replay; four-worker repeatability remains unmeasured. Full evidence
+is appended to parallel-baseline.md. No additional solve authorized.
+Recommend approval for one fresh two-worker ON control in the same session,
+then review before considering a four-worker repeat. Default off; true-serial
+comparison separate. Source and diagnostics unchanged; no Lisp by Codex.
+
+## Two-worker snapshot-ON control approved; awaiting result
+
+User approved ONE freshly staged two-worker ON control in the same REPL session,
+label claustro-snapshot-on-2-03, following four-worker ON 33.62575 s. Use the
+existing baseline helper and unchanged search/split/shard/donation controls;
+set threads via WW-SET after STAGE, then enable snapshots. Replay remains
+outside timing. Purpose: check the historical two-worker 54-55 s reference
+under current conditions. Review the returned report before proposing any
+further solve; no four-worker repeat is authorized. No Lisp launched or source
+changed by Codex; all existing evidence and diagnostics preserved.
+
+## Latest result: two-worker ON control -- PASS
+
+claustro-snapshot-on-2-03 completed/replayed depth 33 successfully, with matching
+controls: wall 55.354248 s, CPU 104.296875 s, states 6,228,618, cycles 991,269.
+Same 343 root tasks, no donations. Time is +1.318% versus previous two-run ON
+mean and +0.431% versus latest prior ON; the 54-55 s reference is reproduced.
+Preceding four-worker run is 1.646x faster (39.25% less time) than this control,
+with 4.048% more states. All eight full searches passed replay.
+Recommended next: approval for ONE fresh four-worker ON repeat, label
+claustro-snapshot-on-4-02, completing four/two/four. No solve currently authorized;
+provide execution only after approval and review each result. Four-worker
+repeatability remains unmeasured. Default off; true-serial question separate.
+Full evidence in parallel-baseline.md; no Lisp/source changes or deletions.
+
+## Four-worker snapshot-ON repeat approved; awaiting result
+
+User approved ONE freshly staged four-worker ON repeat in the same REPL session,
+label claustro-snapshot-on-4-02. This completes the proposed four/two/four
+sequence after 33.62575 s (four) and 55.354248 s (two). Use the existing
+explicitly loaded baseline helper, unchanged controls and replay outside timing.
+STAGE first, WW-SET threads=4, then snapshots=T. Review the returned result
+before proposing further work. No other solve is authorized. No Lisp launched,
+source changed or diagnostics removed by Codex.
+
+## Latest result: four-worker repeat PASS; scaling sequence complete
+
+claustro-snapshot-on-4-02: wall 36.41016 s, CPU 120.828125 s, states 6,453,081,
+cycles 1,026,785; matching controls, 343 root tasks, no donations, depth-33
+replay PASS. Four/two/four times: 33.62575 / 55.354248 / 36.41016 s.
+Repeat is +8.281% wall with 0.427% fewer states; GC wall increase 0.342 s
+does not explain the 2.78441 s difference alone. Cause remains unisolated.
+The additional four-worker gain repeats with appreciable timing variation.
+
+ON means: one worker 100.814285 s (n=1), two 54.874345 s (n=3), four
+35.017955 s (n=2). Four-worker speedup 2.879x / efficiency 72.0% relative
+to one parallel worker, not true serial or physical cores. Two/four mean
+speedup 1.567x; four has about 3.969% more mean states. All nine full solves
+passed replay. All solve approvals are exhausted; default stays off.
+
+Next recommendation: pause solves and prepare/review a matched true-serial
+overhead comparison, preserving this checkout and using isolated references
+and compiled caches. Execution requires separate approval. No broad ownership
+or default change. Full evidence in parallel-baseline.md. Source remains at
+4421433; documentation is uncommitted; diagnostics preserved; no Lisp by Codex.
+
+## True-serial comparison prepared for review; no Lisp or solve
+
+Source comparison identifies parent e89a246 as the matched pre-implementation
+reference for 4421433; probs/tech and dependencies are unchanged. New
+src/ww-serial-baseline.lisp is a neutral explicitly loaded helper usable in
+both versions, with expected-root/version/zero-worker preflight and standard
+solve-envelope timing plus replay. It does not load or solve automatically.
+LF and static source checks only; user compilation/preflight remains pending.
+See doc/parallel-serial-overhead-plan.md for isolated checkout/cache setup,
+fresh-image A/B/B/A proposal, work-equality gates and limits. No reference
+checkout or Lisp process created; no solves authorized. Next review is setup
+and user-run no-solve preflight, before separate timing approval. Default off;
+existing source implementation, diagnostics and evidence preserved.
+
+## Isolated references created; A no-solve preflight ready
+
+User approved setup. Detached worktrees are now artifacts/serial-01/a at
+ e89a246b206c7208918004ad782821eaa0b961d4 and artifacts/serial-01/b at
+44214337614130462360d82f0741d9a2fa77cdb1. Both were verified clean after creation;
+main and its uncommitted documents/helper are preserved. Git required elevated
+metadata access to register worktrees; no Lisp process was launched.
+Checkout used core.autocrlf=false to preserve LF. Tracked-file SHA-256 manifests
+are a-source-sha256.txt and b-source-sha256.txt inside that investigation directory.
+
+Identical neutral helper copied to artifacts/serial-01/ww-serial-baseline.lisp:
+SHA-256 EADD21ADA1BF8E87EDA595C884D1403AB18FC1A733B28B8F3417050312421A99.
+Setup-manifest.json records setup/helper/source-manifest hashes. The user-run
+start-a-preflight.ps1 checks A commit/cleanliness and helper hash, uses instance
+serial-a-preflight and cache-a-preflight, launches SBCL with 4096 MiB, and restores
+its PowerShell environment/location when SBCL exits. It passes no Lisp startup
+commands and never launches a solve. PowerShell parser check passed; not launched.
+
+User then LOADs preflight-a.lisp at the fresh REPL. It checks a fresh package
+state, explicitly loads the A ASD, verifies source root, Quickloads, stages
+Claustro, sets threads zero and loads the neutral helper. It verifies the serial
+controls and snapshot absence, prints settings/environment/compiler policy,
+checks the translated FASL lies in the private cache, and reports dependency
+versions/roots before SERIAL A PREFLIGHT PASS -- NO SOLVE RUN.
+Compiler policy reporting uses the documented SBCL function:
+https://www.sbcl.org/manual/#Compiler-Policy
+Preflight LF/delimiter checks passed, but runtime compilation/loading is still
+unverified. Stop on the first failure and review it; do not run a solve.
+
+Only A setup commands supplied this turn. Await its user report before B setup.
+No full solve authorized. Measured cases will use fresh instances/caches, not
+these preflight images. Preserve all reference/setup files until agreed closeout.
+
+## A preflight source-selection failure and repair
+
+User's A preflight stopped at the source-root assertion BEFORE Quickload,
+staging or solve: ASDF returned the main checkout despite explicit LOAD-ASD.
+Local ASDF source SEARCH-FOR-SYSTEM-DEFINITION searches definition functions
+again, and Quicklisp installs a local-projects searcher. Explicit LOAD-ASD alone
+therefore did not pin this reference. Keep the assertion; do not continue past it.
+
+Updated artifacts/serial-01/preflight-a.lisp defines and prepends a named
+SERIAL-REFERENCE-SYSTEM-SEARCH returning A's ASD only for system "wouldwork";
+other names return NIL and retain normal dependency discovery. Clear the
+registered Wouldwork system, load the intended ASD, then run the unchanged
+root check before Quickload. Rule persists in this disposable image for staging
+reloads. Apply the same exact-name pin with the corresponding path to B later.
+No production/reference source change. Both worktrees remain tracked-clean.
+
+Preserved previous setup as preflight-a.before-source-fix.lisp and
+setup-manifest.before-source-fix.json; updated setup-manifest.json hashes.
+Main now has untracked src/problem-serial-a-preflight.lisp, consistent with
+ASD bootstrap during incorrect rediscovery. It is preserved, not deleted or
+used for measurement. No full solve ran. Static delimiter/LF checks passed;
+user execution is still required to validate the fix.
+
+Next user step: exit this failed disposable SBCL image, rerun the same A
+launcher and LOAD the corrected preflight file. No CONTINUE/ignore-error
+restart and no solve. Review A's returned roots/settings/preflight before B.
+
+## Reference A no-solve preflight PASS; reference B ready
+
+User confirms SERIAL A PREFLIGHT PASS -- NO SOLVE RUN after the searcher fix.
+Root is artifacts/serial-01/a/, SNAPSHOT-CODE NIL, THREADS=0, all expected
+Claustro controls. SBCL 2.6.8, ASDF 3.3.1, X86-64; instance serial-a-preflight;
+translated searcher FASL is inside cache-a-preflight/sbcl-2.6.8-win-x64/.
+Printed global basic compiler qualities are all 1 (compilation-speed, debug,
+safety, space, speed, inhibit-warnings). :POLICY NIL is the reporting function's
+return value, not an absent policy; the preceding printed qualities are evidence.
+
+Reported dependencies: Alexandria 1.0.1 (alexandria-20241012-git), Iterate 1.5.2
+(iterate-release-b0f9a9c6-git), lparallel 2.8.4 (lparallel-20160825-git),
+Bordeaux-Threads 0.9.4 (bordeaux-threads-v0.9.4), usocket 0.8.8 (usocket-0.8.8),
+cl-json 0.6.0 (cl-json-20220707-git), flexi-streams 1.0.20
+(flexi-streams-20241012-git). All under D:/quicklisp/dists/quicklisp/software/.
+The report validates setup/helper loading and preflight only, not timing or replay.
+
+Prepared start-b-preflight.ps1 and preflight-b.lisp in artifacts/serial-01/,
+matching the now-passing A setup except B commit/path, instance/cache, expected
+snapshot-code T and output label. Snapshot option remains NIL with zero workers.
+Named ASDF searcher pins B during loading/restaging. Same neutral helper bytes;
+setup-b-manifest.json records hashes. B worktree remains tracked-clean.
+Launcher parsing and Lisp delimiter/LF checks passed; no Lisp launched by Codex.
+
+Next user step: exit disposable A image, start fresh B via its launcher, LOAD
+preflight-b.lisp and return compiler-policy/settings/root/cache/dependency output.
+Expected SERIAL B PREFLIGHT PASS -- NO SOLVE RUN. Review B against A before any
+timing approval. No solves authorized; source and diagnostics preserved.
+
+## Reference B preflight PASS; matched setup gate complete
+
+User confirms SERIAL B PREFLIGHT PASS -- NO SOLVE RUN, returning T.
+Root artifacts/serial-01/b/, SNAPSHOT-CODE T, THREADS=0; the neutral preflight
+also asserts snapshot enable/freeze/read views NIL. B's translated searcher
+FASL is inside cache-b-preflight/sbcl-2.6.8-win-x64/ and its instance is
+serial-b-preflight. Both source worktrees remain tracked-clean on inspection.
+
+B matches A in all reported search controls, SBCL 2.6.8, ASDF 3.3.1, X86-64,
+all printed basic/dependent compiler qualities, and all seven dependency
+versions/source directories listed above. Intended differences are reference
+source root/code presence and isolated instance/cache paths. :POLICY NIL is
+again just the reporting function return. Setup checks do not measure overhead
+or exercise the helper's full timing/replay path.
+
+Both user-run loading/staging/preflight gates passed. Recommended next is
+separate approval for four full true-serial solves, A1 / B1 / B2 / A2, fresh
+user-started images/instances/caches and fresh staging for every case. Issue
+one case at a time and review each complete outcome, work counts and depth-33
+replay before continuing. Stop on any error/mismatch. No additional warmup
+solves. Do not time the already-used preflight images. Runtime overhead remains
+unmeasured; do not interpret parallel evidence as serial overhead.
+
+No full solve is currently authorized and no solve command supplied. Existing
+source, diagnostics, failed-bootstrap artifact and uncommitted evidence are
+preserved. Default snapshots off; no ownership-policy change; no Lisp by Codex.
+
+## Four true-serial solves approved; A1 supplied
+
+User approved A1 / B1 / B2 / A2, with fresh image, instance, cache and staging
+for each case; supply and review one run at a time. Both setup preflights passed.
+First case is A1 at e89a246, label claustro-serial-before-a1, expected snapshot
+code absent. New start-a1.ps1 launches the same SBCL/4096 MiB configuration with
+instance serial-a1 and empty cache-a1; setup-a1.lisp uses the proven A preflight
+with only instance/cache and completion-label substitutions. Setup performs no
+solve. The separately supplied RUN-SERIAL-BASELINE invocation runs exactly one
+full serial search and replays the best path outside timing. Enter package WW
+at the interactive prompt after LOAD before calling the helper.
+
+Launcher parsing, LF and setup-template comparison passed. Setup A1 manifest
+retains script/helper hashes. No Lisp launched by Codex; setup/timing execution
+awaits user report. Return setup diagnostics and ordinary TIME/summary plus one
+BASELINE RESULT and replay validity, or stop on first error. Review A1 before
+providing B1. Remaining approved cases after A1 are B1, B2, A2; no extra solves.
+Existing source, worktrees, diagnostics and uncommitted evidence preserved.
+
+## True-serial A1 -- completed and replay PASS; B1 supplied
+
+User report claustro-serial-before-a1: SBCL 2.6.8 X86-64,
+:EXHAUSTED-WITH-SOLUTIONS / :COMPLETE, depth 33, :REPLAY-VALID T.
+All actions succeeded and goal satisfied. Baseline controls match true serial
+Claustro DFS graph/min-length cutoff 34, symmetry T, randomization NIL, debug 0,
+all branches, progress 1,000,000. Wall 103.828125 s; process CPU 103.5 s;
+GC counter 5.09375 s; allocation 58,807,886,704 bytes; throughput 74,296.766.
+States 7,714,094; cycles 1,877,372; duplicates 7,044,735; symmetry 623,614:
+all exactly match the historical serial work reference. Nested TIME wall
+103.827 s; GC wall 5.129 s; allocation agrees with baseline. The retained path
+routes JAMMER2 through LOCATION4/GATE3 then PLATE2, unlike some parallel paths.
+
+The paste begins at the final search summary; A1 setup environment/cache/policy
+and source report were omitted. Helper run-time preflight precedes this result,
+but do not claim the omitted A1 setup metadata was independently reviewed.
+Request confirmation of A1 SETUP PASS and no setup errors with the next report;
+retain B1 setup reports to verify matching fresh-image conditions. No rerun of
+A1 is requested. Both reference worktrees still have no tracked changes.
+No overhead inference is possible from A1 alone.
+
+Next already-approved case B1: claustro-serial-after-b1, checkpoint 4421433,
+zero workers, snapshot code present but disabled. Prepared start-b1.ps1 and
+setup-b1.lisp from passing B preflight with only instance/cache/label changes;
+new serial-b1 instance and empty cache-b1, same neutral helper and memory limit.
+Launcher parse/LF checks passed; setup-b1-manifest.json retains hashes.
+User starts a fresh image, loads setup, then invokes exactly one baseline/replay.
+Review B1 before providing B2. Remaining approved after B1: B2, A2.
+No Lisp launched or production source edited by Codex; all evidence preserved.
+
+## True-serial B1 PASS; first pair shows candidate overhead, repeats pending
+
+User supplied B1 setup and full result, claustro-serial-after-b1. Correct B root,
+instance serial-b1, private cache-b1 FASL path, snapshot code T but option/views
+NIL as asserted, zero workers and matching search controls. SBCL 2.6.8, ASDF
+3.3.1, compiler qualities and all seven dependency versions/roots match the
+preflights. SERIAL B1 SETUP PASS reported. A1 setup-output confirmation remains
+omitted; retain this evidence gap without requesting an extra solve.
+
+B1 :EXHAUSTED-WITH-SOLUTIONS / :COMPLETE, best depth 33, replay T; all actions
+succeeded and goal satisfied. Wall 108.241875 s; CPU 107.84375 s; GC counter
+5.15625 s; allocation 58,808,077,440 bytes; throughput 71,267.19 states/s.
+States 7,714,094; cycles 1,877,372; duplicates 7,044,735; symmetry 623,614:
+exactly equal to A1. Whitespace-normalized BEST-PATH text matches A1 exactly.
+Nested TIME wall 108.241 s, GC wall 5.166 s, consed 58,808,044,688 bytes
+(32,752 below baseline envelope; use baseline consistently).
+
+B1 versus A1: +4.41375 s wall (+4.251%), +4.34375 s CPU (+4.197%),
++190,736 allocated bytes. GC wall differs by only +0.037 s. Equal work and
+path make this a candidate implementation overhead signal, but one pair cannot
+separate it from run-to-run variation/order effects. Do not report established
+4.25% overhead before completing the approved B2/A2 reverse pair.
+
+Next already-approved case B2, label claustro-serial-after-b2. Prepared new
+start-b2.ps1/setup-b2.lisp from passing B1 setup with only case identifiers,
+cache path and message substitutions. Fresh serial-b2 instance/cache-b2; same
+reference and helper, source still tracked-clean. Launcher parse/LF checks
+passed, setup-b2-manifest.json recorded. User starts fresh SBCL, loads setup,
+then runs exactly one baseline/replay. Review B2 before issuing final A2.
+No Lisp by Codex, no production changes, no diagnostics removed.
+
+## True-serial B2 PASS; final approved A2 supplied
+
+User supplied B2 setup and full report, claustro-serial-after-b2. Correct B
+source, serial-b2 instance, cache-b2 FASL path, zero workers, matching controls,
+SBCL 2.6.8/ASDF 3.3.1, compiler policy and seven dependency versions/roots.
+SERIAL B2 SETUP PASS confirms the setup. Snapshot code is present but disabled.
+A1's omitted setup-output confirmation remains an evidence gap.
+
+B2 :EXHAUSTED-WITH-SOLUTIONS / :COMPLETE, depth 33, replay T. Wall 106.55689 s;
+CPU 106.328125 s; GC counter 4.921875 s; allocated 58,808,032,064 bytes;
+throughput 72,394.13 states/s. States 7,714,094; cycles 1,877,372; duplicates
+7,044,735; symmetry 623,614 all exactly match A1/B1. Whitespace-normalized
+BEST-PATH matches A1 (and therefore B1) exactly. Nested TIME wall 106.556 s,
+GC wall 5.011 s; allocation agrees with baseline. All replay actions succeeded.
+
+B2 is 1.684985 s faster than B1 (-1.557%) and 2.628% slower than A1.
+This preserves a possible overhead signal but also demonstrates run variation.
+Wait for A2 before computing final paired/mean comparisons or drawing a
+conclusion. No additional solve is needed beyond the already-approved A2.
+
+Prepared start-a2.ps1 and setup-a2.lisp by substituting case/instance/cache
+identifiers in A1 setup. Fresh serial-a2 instance/cache-a2, same A commit and
+neutral helper. Launcher parsing/LF checks passed; setup-a2-manifest.json
+records hashes. A source remains tracked-clean. Next user run only:
+claustro-serial-before-a2, expected snapshot code NIL, with replay outside timing.
+After this result, all four serial solve approvals will be exhausted. No Lisp
+launched or production source changed by Codex; evidence/diagnostics preserved.
+
+## Final true-serial A2 PASS; A/B/B/A complete (2026-09-14)
+
+A2 claustro-serial-before-a2: correct A root, serial-a2 instance/cache-a2,
+SNAPSHOT-CODE NIL, zero workers; settings, compiler policy and dependency
+versions/roots match prior preflights and B1/B2. SERIAL A2 SETUP PASS reported.
+Outcome :EXHAUSTED-WITH-SOLUTIONS / :COMPLETE, depth 33, replay T.
+Wall 102.472275 s; CPU 102.21875 s; GC counter 4.90625 s;
+allocated 58,807,972,688 bytes; throughput 75,279.81 states/s.
+Nested TIME wall 102.472 s, GC wall 4.987 s, allocation agrees with baseline.
+
+All four cases have exactly 7,714,094 states, 1,877,372 cycles, 7,044,735
+duplicates and 623,614 symmetry-pruned. All four whitespace-normalized best
+paths match and all 33 replay actions succeed with goal satisfaction.
+
+| Case | Version | Wall s | CPU s | GC counter s | Allocated bytes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| A1 | Before e89a246 | 103.828125 | 103.5 | 5.09375 | 58807886704 |
+| B1 | After 4421433 | 108.241875 | 107.84375 | 5.15625 | 58808077440 |
+| B2 | After 4421433 | 106.55689 | 106.328125 | 4.921875 | 58808032064 |
+| A2 | Before e89a246 | 102.472275 | 102.21875 | 4.90625 | 58807972688 |
+
+Before mean 103.1502 s; after mean 107.3993825 s: +4.2491825 s (+4.1194%).
+Mean CPU increase +4.1091%. Forward B1/A1 wall +4.2510%, reverse B2/A2
++3.9861%. A repeat improved 1.306%; B repeat improved 1.557%. GC wall pair
+differences are only 0.037 and 0.024 s. Equal work/path, both paired orders
+and matching CPU increase support approximately 4.1% serial implementation
+overhead in this bounded configuration. This is two samples per version,
+not a precise statistical estimate or proof of which selector/guard causes it.
+A1 setup/environment output was omitted and never separately confirmed;
+its run-time helper preflight passed, but retain the metadata evidence gap.
+
+This measures the combined implementation with snapshots disabled at THREADS=0,
+not snapshot copying or parallel-worker overhead. Do not silently substitute
+this new serial reference into prior worker-count efficiency calculations:
+serial and parallel explore different work. No source optimization is yet made.
+Both reference worktrees remain tracked-clean. Raw serial reports are retained
+under artifacts/serial-01/result-a1.txt, result-b1.txt, result-b2.txt, result-a2.txt.
+
+All four serial solves and all earlier nine current-implementation parallel
+comparison/scaling cases are complete and replay-valid. No further solves
+remain authorized. Default remains off; preserve ownership/guards and diagnostics.
+Next recommended source-only investigation: identify opportunities to avoid
+repeated read-selector/static-guard overhead in ordinary serial execution while
+retaining correct worker routing, freeze/write protection and restage semantics.
+Compare generated-form specialization against per-read dynamic selection, but
+present tradeoffs and a focused validation plan before implementation approval.
+Keep residual four-worker scheduling/shared-access/GC/work-order questions
+separate; propose measurements rather than presuming their cause or more cores.
+Continuation prompt is doc/parallel-efficiency-continuation.md. No Lisp by Codex.
+
+## Continuation focus clarified by user
+
+User requests next session investigate repeated selectors and guards. Updated
+parallel-efficiency-continuation.md to prioritize per-read/per-update cost,
+inlining and safe mode-selection/specialization alternatives. Measured 4.1%
+serial overhead is not the sequential fraction of parallel execution and must
+not be inserted into Amdahl's law. It does not establish the primary cause of
+diminishing returns. CPU clarification: 8 P-cores (two hardware threads each)
+plus 16 E-cores (one each) = 24 physical cores / 32 logical processors; actual
+worker placement remains unverified. No new production edit or solve approved.
