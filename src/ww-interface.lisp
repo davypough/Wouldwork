@@ -225,10 +225,50 @@ is staged again.
   (reset-problem-parameters-to-defaults))
 
 
+(defun encode-parameter-value (value)
+  "Encode finite parameter trees, including hash-table goal fluents, as data."
+  (typecase value
+    (cons (list :cons (encode-parameter-value (car value))
+                      (encode-parameter-value (cdr value))))
+    (hash-table
+     (list :hash-table (hash-table-test value) (hash-table-size value)
+           (hash-table-rehash-size value) (hash-table-rehash-threshold value)
+           (sb-ext:hash-table-synchronized-p value)
+           (loop for key being the hash-keys of value using (hash-value item)
+                 collect (cons (encode-parameter-value key)
+                               (encode-parameter-value item)))))
+    (t (list :value value))))
+
+
+(defun decode-parameter-table (encoded)
+  (destructuring-bind (tag test size rehash-size threshold synchronized entries) encoded
+    (declare (ignore tag))
+    (let ((table (make-hash-table :test test :size size :rehash-size rehash-size
+                                 :rehash-threshold threshold :synchronized synchronized)))
+      (dolist (entry entries)
+        (setf (gethash (decode-parameter-value (car entry)) table)
+              (decode-parameter-value (cdr entry))))
+      table)))
+
+
+(defun decode-parameter-value (encoded)
+  (ecase (first encoded)
+    (:cons (cons (decode-parameter-value (second encoded))
+                 (decode-parameter-value (third encoded))))
+    (:hash-table (decode-parameter-table encoded))
+    (:value (second encoded))))
+
+
 (defun save-globals ()
-  "Save the values of the globals in the vals.lisp file."
-  (save-to-file (mapcar #'symbol-value *persisted-problem-parameters*)
-                *globals-file*))
+  "Save parameter data without printing unreadable hash-table goal objects."
+  (let ((*print-readably* t) (*print-circle* t))
+    (save-to-file
+      (mapcar (lambda (name)
+                (if (eq name '*goal*)
+                    (list :wouldwork-goal-v1 (encode-parameter-value *goal*))
+                    (symbol-value name)))
+              *persisted-problem-parameters*)
+      *globals-file*)))
 
 
 (defun retired-recorder-settings-p (params)
@@ -274,7 +314,11 @@ is staged again.
            (normalize-persisted-problem-parameters saved-params)))
     (loop for parameter in *persisted-problem-parameters*
           for value in current-params
-          do (set parameter value))))
+          do (set parameter
+                  (if (and (eq parameter '*goal*) (consp value)
+                           (eq (first value) :wouldwork-goal-v1))
+                      (decode-parameter-value (second value))
+                      value)))))
 
 
 ;; -------------------- problem.lisp file handling ------------------------ ;;
@@ -366,7 +410,12 @@ is staged again.
   "Stage a named or project-relative problem file, then reload Wouldwork."
   (reject-worker-read-write 'load-problem)
   (when (ensure-problem-staged problem-name-str)
-    (asdf:load-system :wouldwork :force t)))
+    (let ((mode (current-generated-read-mode)))
+      (asdf:load-system :wouldwork :force t)
+      ;; A problem can declare its own worker count. Rebuild outside the
+      ;; first ASDF operation if that declaration changed compilation mode.
+      (unless (eq mode (current-generated-read-mode))
+        (asdf:load-system :wouldwork :force t)))))
 
 
 (declaim (ftype (function () t) solve))  ;function ww-solve located in searcher.lisp

@@ -14,7 +14,7 @@
      (case ',param
        (*worker-read-snapshots*
          (setf *worker-read-snapshots* ',val)
-         (format t "~&Worker read snapshots: ~S (experimental, not persisted)~%" ',val))
+         (format t "~&Worker read snapshots: ~S (STAGE restores T)~%" ',val))
        ((*depth-cutoff* *progress-reporting-interval* *randomize-search*
          *branch* *auto-wait* *tasks-per-thread* *min-tasks* *split-depth-max*
          *bound-refresh-interval* *donation-check-interval* *donation-threshold*
@@ -108,8 +108,11 @@
           (let ((crossing-boundary (or (and (zerop *threads*) (> ',val 0))
                                        (and (zerop ',val) (> *threads* 0)))))
             (setf ,param ',val)
-            (save-globals)
-            (if crossing-boundary
-              (with-silenced-compilation
-                (asdf:load-system :wouldwork :force t))
-              (display-current-parameters)))))))
+            ;; Problem declarations run inside ASDF. The staging entry point
+            ;; completes any required mode rebuild after that load returns.
+            (unless *ww-loading*
+              (save-globals)
+              (if crossing-boundary
+                (with-silenced-compilation
+                  (asdf:load-system :wouldwork :force t))
+                (display-current-parameters))))))))

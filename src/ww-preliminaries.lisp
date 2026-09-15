@@ -27,6 +27,21 @@
       2 means two or more parallel processing threads
       N up to the number of available CPU threads"))
 
+(defvar *generated-read-mode* nil
+  "Completed generated-code mode, or NIL until the compilation pass succeeds.")
+
+
+(defun current-generated-read-mode ()
+  (if (zerop *threads*) :serial :worker-capable))
+
+
+(defun validate-generated-read-mode ()
+  "Reject incomplete or stale generated code at entry, never per lookup."
+  (unless (eq *generated-read-mode* (current-generated-read-mode))
+    (error "Generated read mode ~S does not match THREADS=~S. Rebuild through WW-SET or STAGE."
+           *generated-read-mode* *threads*))
+  t)
+
 
 (defmacro with-search-structures-lock (&body body)
   "Protects composite operations on *open* and *closed* search structures."
@@ -459,6 +474,7 @@
 (defun reset-user-syms (symbols)
   "Unintern symbols and unbind any functions stored in function name lists."
   (reject-worker-read-write 'reset-user-syms)
+  (setf *generated-read-mode* nil)
   (dolist (symbol symbols)
     (when (boundp symbol)
       ;; If this symbol holds a list of function names, unbind each function
@@ -491,6 +507,7 @@
    vals.lisp, so that the recreated tables carry the correct :synchronized value."
   ;; CLEARED: fixed-size tables, write-only during init, lock-free during search
   (reject-worker-read-write 'reset-global-hash-tables)
+  (setf *generated-read-mode* nil)
   (when (and (boundp '*types*) (hash-table-p *types*))
     (clrhash *types*))
   (when (and (boundp '*type-signatures*) (hash-table-p *type-signatures*))

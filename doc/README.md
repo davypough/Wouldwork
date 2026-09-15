@@ -40,6 +40,22 @@ Raw analysis material for individual problems: goal deductions, solution traces,
 
 ---
 
+## Parallel-search investigation
+
+Start with [parallel-search-defaults.md](parallel-search-defaults.md): completed integration, default operation and validation. Earlier investigation documents below retain historical results.
+The maintained design and evidence are:
+
+- [Snapshot audit](parallel-snapshot-audit.md): ownership and lifecycle protections.
+- [Traversal cache results](parallel-traversal-cache-results.md): completed bounded diagnostic; its recommended integration is now installed.
+- [Corner support and generalization](parallel-snapshot-generalization.md): historical extension and user-reported result; superseded by the default closeout.
+- [Selector review](parallel-selector-review.md) and [timing](parallel-selector-timing.md): retained patch and validation.
+- [Baseline](parallel-baseline.md) and [handoff](parallel-search-handoff.md): detailed evidence and investigation context; earlier status/approval entries are chronological, not current instructions.
+
+The original snapshot proposal, completed serial-overhead plan and old selector
+continuation were removed during the 2026-09-14 documentation cleanup because
+the retained documents supersede them. Raw reports, diagnostics, caches and
+reference worktrees remain preserved.
+
 ## Conventions
 
 - **Markdown for anything maintained as reference.** Generated artifacts meant to be read rather than edited go to `artifacts/` as HTML.

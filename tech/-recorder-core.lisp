@@ -122,6 +122,7 @@
 
 (defun register-recorder-shadow-lifecycle (component resetter &optional seeder)
   "Register COMPONENT's reset callback and optional seed callback for cycle preparation."
+  (reject-worker-read-write 'register-recorder-shadow-lifecycle)
   (when (assoc component *recorder-shadow-lifecycles*)
     (error "Recorder shadow lifecycle registered twice for ~S." component))
   (setf *recorder-shadow-lifecycles*

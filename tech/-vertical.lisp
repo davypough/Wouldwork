@@ -245,3 +245,7 @@
       cached
       (setf (gethash location *location-elevation-cache*)
             (funcall (symbol-function 'location-level) state location)))))
+
+;; Each worker owns the lazy technology caches it can populate.
+(register-worker-read-memo '*vertical-type-cache* :empty-table)
+(register-worker-read-memo '*location-elevation-cache* :empty-table)

@@ -39,6 +39,7 @@
 
 (defun register-recorder-fork-clause (relation clause)
   "Register CLAUSE as RELATION's contribution to START-RECORDER's ghost fork."
+  (reject-worker-read-write 'register-recorder-fork-clause)
   (when (assoc relation *recorder-fork-clauses*)
     (error "Recorder fork clause registered twice for ~S." relation))
   (setf *recorder-fork-clauses*

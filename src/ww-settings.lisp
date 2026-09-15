@@ -4,8 +4,9 @@
 
 (in-package :ww)
 
-(defvar *worker-read-snapshots* nil
-  "Opt-in Claustro-Topo experiment. Reset by STAGE; deliberately not persisted.")
+(defvar *worker-read-snapshots* t
+  "Use worker-owned static reads and registered technology memos in parallel DFS.
+Enabled by default on STAGE. Serial searches use canonical reads without copying.")
 (defvar *worker-static-read-view* nil)
 (defvar *worker-code-read-view* nil)
 
@@ -29,6 +30,7 @@ MIN-STEPS-REMAINING? query remains the final fallback, preserving problem-specif
 (defun register-min-steps-remaining-contributor
     (function-name &key (priority 0))
   "Register FUNCTION-NAME as an admissible cheap pruning precheck."
+  (reject-worker-read-write 'register-min-steps-remaining-contributor)
   (check-type function-name symbol)
   (check-type priority integer)
   (setf *min-steps-remaining-contributors*
@@ -83,6 +85,7 @@ must return unknown rather than :IMPOSSIBLE.")
 (defun register-candidate-state-screener
     (name function-name &key (priority 0))
   "Register a problem-local sound checkpoint screener."
+  (reject-worker-read-write 'register-candidate-state-screener)
   (unless (symbolp name)
     (error "Candidate-state screener name must be a symbol: ~S" name))
   (unless (and (symbolp function-name) (fboundp function-name))
@@ -139,7 +142,7 @@ must return unknown rather than :IMPOSSIBLE.")
   (format t "~&  MIN STEPS REMAINING? => ~A"
           (when (min-steps-remaining-available-p) 'YES))
   (when (> *threads* 0)
-    (format t "~&  *WORKER-READ-SNAPSHOTS* => ~S (experimental)" *worker-read-snapshots*)
+    (format t "~&  *WORKER-READ-SNAPSHOTS* => ~S" *worker-read-snapshots*)
     (format t "~&~%  For parallel settings: (display-parallel-parameters)"))
   (terpri) (terpri))
 
@@ -348,6 +351,7 @@ successor may be discarded.  ENABLED-P prevents disabled policies from entering 
 search hot path.  RESETTER, when supplied, is called before every search.  Pruners used
 in parallel search must synchronize their own mutable policy state.  Every supplied
 function argument must name an already-defined function."
+  (reject-worker-read-write 'register-search-successor-pruner)
   (dolist (function-name (remove nil (list pruner enabled-p resetter)))
     (unless (and (symbolp function-name) (fboundp function-name))
       (error "Search-successor pruner requires a defined function: ~S"
@@ -398,6 +402,7 @@ prefix can still lead to a valid solution.  ENABLED-P is a zero-argument functio
 symbol.  TRIGGER-P, when supplied, receives START-STATE, the newest MOVE, and
 CURRENT-STATE; returning NIL avoids reconstructing and validating an irrelevant path.
 All supplied functions must be read-only and safe to call concurrently."
+  (reject-worker-read-write 'register-search-prefix-validator)
   (dolist (function-name (remove nil (list validator enabled-p trigger-p)))
     (unless (and (symbolp function-name) (fboundp function-name))
       (error "Search-prefix validator requires a defined function: ~S" function-name)))
@@ -498,6 +503,7 @@ the first rejection, so a rejected path is attributed to one validator only."
 
 (defun register-symmetry-coupling (relation)
   "Require symmetry to preserve every tuple of static RELATION column by column."
+  (reject-worker-read-write 'register-symmetry-coupling)
   (unless (symbolp relation)
     (error "Symmetry coupling must name a relation: ~S" relation))
   (pushnew relation *symmetry-coupling-relations* :test #'eq)
@@ -528,6 +534,7 @@ the first rejection, so a rejected path is attributed to one validator only."
 
 SUBGOAL-SOLVER names a function of one goal-form argument.  FINAL-SOLVER names a
 function of no arguments.  Staging another problem clears the policy."
+  (reject-worker-read-write 'register-goal-chaining-policy)
   (dolist (function-name
            (remove nil
              (list subgoal-solver final-solver search-runner prefix-validator
@@ -552,6 +559,7 @@ function of no arguments.  Staging another problem clears the policy."
 
 (defun register-goal-chaining-checkpoint-extension (name snapshotter restorer)
   "Register problem-local checkpoint state without specializing UNDO-CHECKPOINT."
+  (reject-worker-read-write 'register-goal-chaining-checkpoint-extension)
   (when (assoc name *goal-chaining-checkpoint-extensions*)
     (error "Goal-chaining checkpoint extension registered twice: ~S" name))
   (setf *goal-chaining-checkpoint-extensions*
@@ -584,6 +592,7 @@ The function receives START-STATE, PATH, and GOAL-STATE.  It returns true to acc
 candidate.  A false result may be accompanied by a second diagnostic value.  A plist with
 :PHASE and :REASON fields produces the most useful grouped search report.  Validators must
 treat their arguments as read-only and be safe to call concurrently."
+  (reject-worker-read-write 'register-solution-validator)
   (unless (and (symbolp validator) (fboundp validator))
     (error "Solution validator must name a defined function: ~S" validator))
   (unless (member validator *solution-validators*)
@@ -594,6 +603,7 @@ treat their arguments as read-only and be safe to call concurrently."
 
 (defun register-solution-report-printer (printer)
   "Register a function symbol to print a supplement after each displayed solution."
+  (reject-worker-read-write 'register-solution-report-printer)
   (unless (and (symbolp printer) (fboundp printer))
     (error "Solution report printer must name a defined function: ~S" printer))
   (unless (member printer *solution-report-printers*)
@@ -720,7 +730,7 @@ treat their arguments as read-only and be safe to call concurrently."
     (*debug* . 0)
     (*goal*)
     (*threads* . 0)
-    (*worker-read-snapshots*)
+    (*worker-read-snapshots* . t)
     (*max-recorder-cycles* . 1)
     (*recorder-prefix-pruning*)
     (*auto-wait*)

@@ -1008,6 +1008,41 @@
   (terpri))
 
 
+(defun test-threads ()
+  "Time the currently staged problem at each of several *THREADS* settings and report
+   the fastest. Intended as a quick probe before a long run, so stage a reduced
+   *DEPTH-CUTOFF* first. All SOLVE output is discarded; *THREADS* is restored on exit.
+   Requires *THREADS* > 0 on entry: crossing the zero boundary is what reloads the
+   system with synchronized global hash tables, and only WW-SET does that."
+  (assert (> *threads* 0) ()
+    "Enter (ww-set *threads* 4) before calling TEST-THREADS.")
+  (let ((entry-threads *threads*)
+        (saved-output (sb-ext:symbol-global-value '*standard-output*))
+        (sink (make-broadcast-stream))
+        (results nil))
+    (format t "~2&Timing ~A, ~A, depth-cutoff ~D~%"
+            *problem-name* *solution-type* *depth-cutoff*)
+    (dolist (n '(4 8 12 16 20))
+      (setf *threads* n)
+      (let ((start (get-internal-real-time)))
+        (unwind-protect
+            (let ((*standard-output* sink))
+              (setf (sb-ext:symbol-global-value '*standard-output*) sink)
+              (solve))
+          (setf (sb-ext:symbol-global-value '*standard-output*) saved-output))
+        (push (cons n (/ (- (get-internal-real-time) start)
+                         (float internal-time-units-per-second)))
+              results)
+        (format t "~&  threads ~2D   ~8,2F sec   ~A~%"
+                n (cdr (first results))
+                (search-outcome-status *last-search-outcome*))
+        (finish-output)))
+    (setf *threads* entry-threads)
+    (let ((best (first (sort results #'< :key #'cdr))))
+      (format t "~&~%Fastest: ~D threads, ~,2F sec.  Adopt with (ww-set *threads* ~D).~%"
+              (car best) (cdr best) (car best))
+      (car best))))
+
 ;;; ============================================================
 ;;; CLOSED SHARD DIAGNOSTICS
 ;;; ============================================================

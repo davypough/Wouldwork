@@ -317,7 +317,7 @@ continuation, and :UNKNOWN otherwise."
   "Install GOAL-FORM, compile GOAL-FN, and refresh goal-constrained symmetry."
   (install-goal goal-form)
   (when (boundp 'goal-fn)
-    (compile 'goal-fn (subst-int-code (symbol-value 'goal-fn))))
+    (compile-generated-function 'goal-fn (symbol-value 'goal-fn)))
   (refresh-symmetry-detection)
   goal-form)
 

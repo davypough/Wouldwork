@@ -81,6 +81,7 @@
    normalized (label source witness destination) segment, or NIL when that clause does not
    permit the crossing.  Registering a mode twice, or one outside TRAVERSAL-MODE, is an
    authoring error rather than a silent overwrite."
+  (reject-worker-read-write 'register-traversal-mode)
   (unless (member mode (gethash 'traversal-mode *types*))
     (error "Traversal mode must be an instance of TRAVERSAL-MODE: ~S" mode))
   (when (assoc mode *traversal-modes*)
@@ -266,6 +267,8 @@
   "Declare that a builder reads SYMBOL's value, so the cache key carries it.  A separate
    registrar rather than a fifth argument to REGISTER-TRAVERSAL-MODE: the parameter belongs
    to the technology that reads it, and not every mode has one."
+  (reject-worker-read-write 'register-traversal-cache-parameter)
+  (register-worker-read-configuration symbol)
   (pushnew symbol *traversal-cache-parameters* :test #'eq)
   symbol)
 
@@ -405,3 +408,8 @@
         (declare (ignore source destination))
         (init-check-dnf-list-items-have-types
           literal clauses (third (traversal-mode-entry mode)))))))
+
+(register-worker-read-memo '*traversal-canonical-families* :empty-table)
+(register-worker-read-memo '*traversal-dependency-key-cache* :empty-table)
+(register-worker-read-configuration '*traversal-state-dependencies*
+                                    '*traversal-cache-parameters* '*traversal-modes*)

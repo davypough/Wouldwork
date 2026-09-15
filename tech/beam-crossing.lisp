@@ -330,3 +330,5 @@
                  do (if (member $e ?active)
                       (assign $cut t))))
       $cut))
+
+(register-worker-read-memo '*beam-crossing-cache* :nil)

@@ -1,12 +1,32 @@
-;;; Bounded worker read experiment; no snapshots survive a worker group.
+;;; Worker-owned reads and technology memos; no views survive a worker group.
 (in-package :ww)
 
 (defstruct worker-read-view static codes memo-symbols memo-tables)
-(defstruct worker-read-context sources copies object-index generation views)
+(defstruct worker-read-context sources copies object-index generation views configuration)
 
-(defparameter *worker-read-memo-symbols*
-  '(*vertical-type-cache* *location-elevation-cache*
-    *mobility-route-keys* *traversal-canonical-families*))
+(defparameter *worker-read-memo-symbols* nil)
+(defparameter *worker-read-memo-policies* nil)
+(defparameter *worker-read-configuration-symbols* nil)
+
+(defun register-worker-read-memo (name policy)
+  "A loaded technology declares a cold table or NIL-initialized worker memo."
+  (reject-worker-read-write 'register-worker-read-memo)
+  (check-type name symbol)
+  (check-type policy (member :empty-table :nil))
+  (when (assoc name *worker-read-memo-policies*)
+    (error "Worker memo ~S is already registered." name))
+  (setf *worker-read-memo-symbols* (append *worker-read-memo-symbols* (list name))
+        *worker-read-memo-policies* (append *worker-read-memo-policies* (list (cons name policy))))
+  name)
+
+(defun register-worker-read-configuration (&rest names)
+  "Declare values which must remain fixed while worker views are published."
+  (reject-worker-read-write 'register-worker-read-configuration)
+  (dolist (name names) (pushnew name *worker-read-configuration-symbols*))
+  names)
+
+(defun worker-read-snapshots-active-p ()
+  (and *worker-read-snapshots* (plusp *threads*) (eq *algorithm* 'depth-first)))
 
 (declaim (inline worker-object-code))
 (defun worker-object-code (object)
@@ -18,38 +38,22 @@
       (gethash object *constant-integers*)))
 
 (defun validate-worker-read-snapshot-mode ()
-  (when *worker-read-snapshots*
-    (unless (and (eq *problem-name* 'claustro-topo)
-                 (eq *algorithm* 'depth-first)
-                 (eq *tree-or-graph* 'graph)
-                 (eq *problem-type* 'planning)
-                 (eq *solution-type* 'min-length)
-                 (plusp *threads*) (null *happening-names*)
-                 (null *randomize-search*) (zerop *debug*) (null *probe*))
-      (error "Worker read snapshots require Claustro-Topo parallel DFS graph/min-length, no happenings, randomization or debug/probe."))
-    ;; Arbitrary callbacks could invalidate the source-backed worker audit.
-    (dolist (name '(*global-invariants* *solution-validators*
-                    *search-prefix-validators* *search-successor-pruners*
-                    *candidate-state-screeners* *min-steps-remaining-contributors*))
-      (when (symbol-value name)
-        (error "Worker read snapshot audit does not admit callbacks in ~S." name)))
-    (dolist (name '(heuristic? prune-state? bounding-function? min-steps-remaining?
-                    state-feasible?))
-      (when (fboundp name)
-        (error "Worker read snapshot audit does not admit ~S." name)))
-    (validate-worker-read-registries))
+  (validate-generated-read-mode)
+  (check-type *worker-read-snapshots* boolean)
   t)
 
 (defun validate-worker-read-registries ()
-  (assert (equal (symbol-value '*mobility-providers*) '(traversal-segments)))
-  (assert (alexandria:set-equal
-            (symbol-value '*configuration-transition-providers*)
-            '(jump-configuration-transitions ladder-configuration-transitions)))
-  (assert (alexandria:set-equal
-            (mapcar #'second (symbol-value '*traversal-modes*))
-            '(walking-segment-for-clause stairs-segment-for-clause
-              jump-segment-for-clause ladder-segment-for-clause)))
-  (assert (equal (symbol-value '*traversal-cache-parameters*) '(*vertical-reach-limit*))))
+  (assert (equal *worker-read-memo-symbols* (mapcar #'car *worker-read-memo-policies*)))
+  (dolist (entry *worker-read-memo-policies*)
+    (ecase (cdr entry)
+      (:empty-table (check-type (symbol-value (car entry)) hash-table))
+      (:nil (assert (boundp (car entry))))))
+  t)
+
+(defun worker-read-configuration ()
+  (list (copy-tree *worker-read-memo-policies*)
+        (loop for name in *worker-read-configuration-symbols*
+              collect (cons name (worker-read-copy-value (symbol-value name))))))
 
 (declaim (inline reject-worker-static-write))
 (defun reject-worker-static-write (table)
@@ -67,7 +71,7 @@
 
 (defun worker-read-copy-value (value &optional ancestors)
   "Own finite cons trees and strings. Atoms retain identity; other types fail.
-   No general vectors/structures or circular graphs are admitted by this pilot."
+   General vectors/structures and circular static payloads are unsupported."
   (cond ((or (symbolp value) (numberp value) (characterp value)) value)
         ((stringp value) (copy-seq value))
         ((consp value)
@@ -95,14 +99,21 @@
              table)
     copy))
 
+(defun current-worker-read-memo-symbols ()
+  (copy-list *worker-read-memo-symbols*))
+
+(defun make-worker-read-memo (name)
+  (ecase (cdr (assoc name *worker-read-memo-policies*))
+    (:empty-table (worker-read-empty-table (symbol-value name)))
+    (:nil nil)))
+
 (defun make-current-worker-read-view ()
-  (make-worker-read-view
-    :static (worker-read-copy-table *static-idb*)
-    :codes (worker-read-copy-table *constant-integers*)
-    :memo-symbols (copy-list *worker-read-memo-symbols*)
-    :memo-tables (mapcar (lambda (name)
-                          (worker-read-empty-table (symbol-value name)))
-                        *worker-read-memo-symbols*)))
+  (let ((names (current-worker-read-memo-symbols)))
+    (make-worker-read-view
+      :static (worker-read-copy-table *static-idb*)
+      :codes (worker-read-copy-table *constant-integers*)
+      :memo-symbols names
+      :memo-tables (mapcar #'make-worker-read-memo names))))
 
 (defun call-with-worker-read-view (view function)
   (if (null view)
@@ -114,12 +125,13 @@
           (funcall function)))))
 
 (defun worker-read-source-tables ()
-  (list *static-idb* *constant-integers* *integer-constants*))
+  (list *static-idb* *constant-integers* *integer-constants* *bijective-canonical*))
 
 (defun begin-worker-read-phase (count &optional (view-maker #'make-current-worker-read-view))
   "Coordinator only, AFTER root task generation and BEFORE thread creation."
-  (when *worker-read-snapshots*
+  (when (worker-read-snapshots-active-p)
     (validate-worker-read-snapshot-mode)
+    (validate-worker-read-registries)
     (bt:with-lock-held (*integer-lock*)
       (reject-worker-read-write 'begin-worker-read-phase)
       (setf *worker-read-phase* t)
@@ -131,6 +143,7 @@
                   :copies (mapcar #'worker-read-copy-table (worker-read-source-tables))
                   :object-index *last-object-index*
                   :generation *goal-chain-stage-generation*
+                  :configuration (worker-read-configuration)
                   :views (loop repeat count collect (funcall view-maker)))
               (setf published t))
           (unless published (setf *worker-read-phase* nil)))))))
@@ -140,6 +153,7 @@
                      (worker-read-source-tables)))
   (assert (= (worker-read-context-object-index context) *last-object-index*))
   (assert (= (worker-read-context-generation context) *goal-chain-stage-generation*))
+  (assert (equal (worker-read-context-configuration context) (worker-read-configuration)))
   (assert (every #'equalp (worker-read-context-copies context)
                          (worker-read-source-tables)))
   (dolist (view (worker-read-context-views context))

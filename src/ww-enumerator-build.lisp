@@ -544,7 +544,7 @@ Checks dynamic binding first (for temporary overrides), then declaration order."
           (when lam
             ;; Fallback for callers that use enumeration without a prior
             ;; COMPILE-ALL-FUNCTIONS pass.
-            (let ((fn (compile nil (subst-int-code lam))))
+            (let ((fn (compile-generated-function nil lam)))
               (setf (getf meta :requires-predicate) fn)
               fn))))))
 
@@ -559,7 +559,7 @@ Checks dynamic binding first (for temporary overrides), then declaration order."
                   (let ((lam (and meta (getf meta :requires-lambda))))
                     (when lam
                       (setf (getf meta :requires-predicate)
-                            (compile nil (subst-int-code lam))))))
+                            (compile-generated-function nil lam)))))
                 table))))
     (compile-meta-table *enum-relation-metadata*)
     (when (and (boundp '*problem-name*) *problem-name*)
@@ -705,7 +705,7 @@ Checks dynamic binding first (for temporary overrides), then declaration order."
   ;; Uses Wouldwork's normal goal installation (translate -> goal-fn lambda-expr).
   (install-goal goal-form)
   ;; Compile with integer-substitution so GOAL-FN runs on integer databases.
-  (compile 'goal-fn (subst-int-code (symbol-value 'goal-fn)))
+  (compile-generated-function 'goal-fn (symbol-value 'goal-fn))
   (symbol-function 'goal-fn))
 
 

@@ -615,8 +615,10 @@
    call. Used both for sequential bodies (do, progn, assert) and as the
    fallback for unspecialized list forms."
   (let ((current env))
-    (dolist (sub forms)
-      (setf current (walk-fluent-types action-name sub current)))
+    ;; Destructuring patterns may have an atomic dotted tail.
+    (loop for tail = forms then (cdr tail)
+          while (consp tail)
+          do (setf current (walk-fluent-types action-name (car tail) current)))
     current))
 
 

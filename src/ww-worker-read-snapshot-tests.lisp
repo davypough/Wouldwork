@@ -86,9 +86,12 @@
     (loop for name in (worker-read-view-memo-symbols first)
           for a in (worker-read-view-memo-tables first)
           for b in (worker-read-view-memo-tables second)
-          do (snapshot-test-table-settings (symbol-value name) a)
-             (assert (not (eq a b)))
-             (assert (zerop (hash-table-count a))))
+          do (ecase (cdr (assoc name *worker-read-memo-policies*))
+               (:empty-table
+                (snapshot-test-table-settings (symbol-value name) a)
+                (assert (not (eq a b)))
+                (assert (zerop (hash-table-count a))))
+               (:nil (assert (and (null a) (null b))))))
     (call-with-worker-read-view
       first
       (lambda ()
@@ -114,7 +117,19 @@
                  (install-update nil nil nil) (install-constraint nil)
                  (install-action nil nil nil nil nil nil)
                  (install-init-action nil nil nil nil nil nil)
-                 (install-init nil) (install-goal nil)))
+                 (install-init nil) (install-goal nil)
+                 (register-worker-read-memo unused :nil)
+                 (register-worker-read-configuration unused)
+                 (register-min-steps-remaining-contributor unused)
+                 (register-candidate-state-screener unused unused)
+                 (register-search-successor-pruner unused unused)
+                 (register-search-prefix-validator unused unused)
+                 (register-symmetry-coupling unused)
+                 (register-goal-chaining-policy unused unused)
+                 (register-goal-chaining-checkpoint-extension unused unused unused)
+                 (register-solution-validator unused)
+                 (register-solution-report-printer unused)
+                 (register-relaxed-hmax-model-builder unused)))
     (snapshot-test-signals
       'worker-read-snapshot-error
       (lambda () (apply (symbol-function (first form)) (rest form))))
@@ -312,7 +327,8 @@
   (let* ((expected (mapcar (lambda (seed)
                              (mapcar #'snapshot-test-state-signature
                                      (snapshot-test-expand seed nil))) seeds))
-         (memos (mapcar #'symbol-value *worker-read-memo-symbols*))
+         (memos (loop for (name . policy) in *worker-read-memo-policies*
+                      when (eq policy :empty-table) collect (symbol-value name)))
          (copies (mapcar #'worker-read-copy-table memos))
          (old-shutdown *shutdown-requested*))
     (unwind-protect

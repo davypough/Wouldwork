@@ -24,6 +24,7 @@
 
 (define-problem-helper register-mobility-provider (provider)
   "Register a pure traversal-provider query for the staged problem."
+  (reject-worker-read-write 'register-mobility-provider)
   (unless (and (symbolp provider)
                (member provider *query-names* :test #'eq))
     (error "Mobility provider must name an installed query: ~S" provider))
@@ -139,3 +140,6 @@
 
 (define-query traversable (?agent agent ?from location ?to location)
   (not (null (assoc ?to (mobility-results ?agent ?from) :test #'eq))))
+
+(register-worker-read-memo '*mobility-route-keys* :empty-table)
+(register-worker-read-configuration '*mobility-providers*)

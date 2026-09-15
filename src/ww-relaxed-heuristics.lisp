@@ -92,6 +92,7 @@
 
 (defun register-relaxed-hmax-model-builder (builder)
   "Register a staged problem's relaxed-model BUILDER once."
+  (reject-worker-read-write 'register-relaxed-hmax-model-builder)
   (unless (and (symbolp builder) (fboundp builder))
     (error "Relaxed h-max model builder requires a defined function: ~S" builder))
   (pushnew builder *relaxed-hmax-model-builders* :test #'eq)

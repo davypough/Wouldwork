@@ -2033,3 +2033,28 @@ finite-resource bound.  Without such a budget, abstain."
   'topo-finite-resource-budget
   'screen-topo-candidate-state
   :priority 20)
+
+;; Lazy models contain structures/tables; rebuild them in each worker.
+(register-worker-read-memo '*topo-relaxed-static-operators* :nil)
+(register-worker-read-memo '*topo-relaxed-all-operators* :nil)
+(register-worker-read-memo '*topo-relaxed-all-operators-built-p* :nil)
+(register-worker-read-memo '*topo-relaxed-static-relevance* :nil)
+(register-worker-read-memo '*topo-relaxed-static-indexed-model* :nil)
+(register-worker-read-memo '*topo-relaxed-static-goals* :nil)
+(register-worker-read-memo '*topo-beam-link-static-goals* :nil)
+(register-worker-read-memo '*topo-beam-link-static-relevance* :nil)
+(register-worker-read-memo '*topo-beam-link-static-indexed-model* :nil)
+(register-worker-read-memo '*topo-resource-static-context-built-p* :nil)
+(register-worker-read-memo '*topo-resource-locations* :nil)
+(register-worker-read-memo '*topo-resource-reaches* :nil)
+(register-worker-read-memo '*topo-resource-routes* :nil)
+(register-worker-read-memo '*topo-resource-recording-sides* :nil)
+(register-worker-read-memo '*topo-resource-recording-sides-built-p* :nil)
+(register-worker-read-memo '*topo-resource-side-agents* :nil)
+(register-worker-read-memo '*topo-resource-side-agents-built-p* :nil)
+(register-worker-read-memo '*topo-beam-static-links* :nil)
+(register-worker-read-memo '*topo-beam-static-links-built-p* :nil)
+(register-worker-read-memo '*topo-relaxed-static-propositions* :nil)
+(register-worker-read-memo '*topo-relaxed-static-propositions-built-p* :nil)
+(register-worker-read-memo '*topo-relaxed-static-positions* :nil)
+(register-worker-read-memo '*topo-relaxed-static-positions-built-p* :nil)

@@ -36,7 +36,27 @@
         (setf (gethash iproposition (problem-state.hidb *start-state*)) value)))
 
 
+(defun compile-generated-function (name form)
+  "Translate and compile one generated function; failed compilation closes admission."
+  (reject-worker-read-write 'compile-generated-function)
+  (handler-case
+      (multiple-value-bind (function warnings failure)
+          (compile name (subst-int-code form))
+        (declare (ignore warnings))
+        (when failure (error "Generated function compilation failed: ~S." name))
+        function)
+    (error (condition)
+      (setf *generated-read-mode* nil)
+      (error condition))))
+
 (defun compile-all-functions ()
+  "Publish the read mode only after the complete generated pass succeeds."
+  (reject-worker-read-write 'compile-all-functions)
+  (setf *generated-read-mode* nil)
+  (compile-problem-functions)
+  (setf *generated-read-mode* (current-generated-read-mode)))
+
+(defun compile-problem-functions ()
   "Compile all action preconditions/effects, queries, updates, goal, and constraint functions.
    Should only be called once during initialization.
    Optimization notes are muffled across the whole pass.  Every lambda compiled here was
@@ -47,7 +67,8 @@
    and SBCL reports each dropped form as \"deleting unreachable code\" on every (stage ...).
    Warnings and errors are deliberately left alone: only notes are suppressed, and only over
    generated code -- the hand-written sources in src/ and tech/ still report theirs."
-  (reject-worker-read-write 'compile-all-functions)
+  (reject-worker-read-write 'compile-problem-functions)
+  (setf *generated-read-mode* nil)
   (handler-bind (#+sbcl (sb-ext:compiler-note #'muffle-warning))
     (format t "~&Optimizing lambda expressions and compiling...")
     ;; Compile action preconditions and effects
@@ -55,20 +76,20 @@
           (format t "~&  ~A...~%" (action.name action))
           (finish-output)
           (with-slots (pre-defun-name eff-defun-name precondition-lambda effect-lambda) action
-            (compile pre-defun-name (subst-int-code precondition-lambda))
-            (compile eff-defun-name (subst-int-code effect-lambda))))
+            (compile-generated-function pre-defun-name precondition-lambda)
+            (compile-generated-function eff-defun-name effect-lambda)))
     ;; Compile query and update functions
     (iter (for fname in (append *query-names* *update-names*))
           (format t "~&  ~A...~%" fname)
           (finish-output)
-          (compile fname (subst-int-code (symbol-value fname))))
+          (compile-generated-function fname (symbol-value fname)))
     ;; Compile base filter if present
     (if *enumerator-base-filter-form*
         (progn
           (format t "~&  ~A (base-filter)...~%" *enumerator-base-filter-name*)
           (finish-output)
           (setf *enumerator-prefilter*
-                (compile nil (subst-int-code *enumerator-base-filter-form*))))
+                (compile-generated-function nil *enumerator-base-filter-form*)))
         ;; Ensure old filter state does not leak when a problem defines no base filter.
         (setf *enumerator-prefilter* nil))
     ;; Compile enum :REQUIRES predicates if the enumerator module is loaded.
@@ -82,44 +103,45 @@
           (finish-output)
           (when (get obj :interrupt)
             (setf (get obj :interrupt)
-                  (compile nil (subst-int-code (get obj :interrupt-lambda))))))
+                  (compile-generated-function nil (get obj :interrupt-lambda)))))
     ;; Compile happening rebound functions
     (iter (for obj in *happening-names*)
           (when (get obj :rebound-lambda)
             (format t "~&  ~A rebound...~%" obj)
             (finish-output)
             (setf (get obj :rebound)
-                  (compile nil (subst-int-code (get obj :rebound-lambda))))))
+                  (compile-generated-function nil (get obj :rebound-lambda)))))
     ;; Compile happening kill functions
     (iter (for obj in *happening-names*)
           (when (get obj :kill-lambda)
             (format t "~&  ~A kill...~%" obj)
             (finish-output)
             (setf (get obj :kill)
-                  (compile nil (subst-int-code (get obj :kill-lambda))))))
+                  (compile-generated-function nil (get obj :kill-lambda)))))
     ;; Compile happening aftereffect functions
     (iter (for obj in *happening-names*)
           (when (get obj :aftereffect-lambda)
             (format t "~&  ~A aftereffect...~%" obj)
             (finish-output)
             (setf (get obj :aftereffect)
-                  (compile nil (subst-int-code (get obj :aftereffect-lambda))))))
+                  (compile-generated-function nil (get obj :aftereffect-lambda)))))
     ;; Compile goal function
     (when (boundp 'goal-fn)
       (format t "~&  ~A...~%" 'goal-fn)
       (finish-output)
-      (compile 'goal-fn (subst-int-code (symbol-value 'goal-fn))))
+      (compile-generated-function 'goal-fn (symbol-value 'goal-fn)))
     ;; Compile constraint function
     (when (boundp 'constraint-fn)
       (format t "~&  ~A...~%" 'constraint-fn)
       (finish-output)
-      (compile 'constraint-fn (subst-int-code (symbol-value 'constraint-fn))))))
+      (compile-generated-function 'constraint-fn (symbol-value 'constraint-fn)))))
 
 
 (defun do-integer-conversion ()
   "Convert all objects to integers, populate integer databases, and compile all functions.
    This is the main initialization function called during problem loading."
   (reject-worker-read-write 'do-integer-conversion)
+  (setf *generated-read-mode* nil)
   (clrhash *prop-key-cache*)
   (associate-objects-with-integers)
   (convert-databases-to-integers)
@@ -350,6 +372,17 @@
                    ,(int-write-value-form prop-form fluent-indexes)))))))))
 
 
+(defun generated-static-read-table ()
+  "Choose expressions at generation, without capturing a staged table object."
+  (if (zerop *threads*)
+      '*static-idb*
+      '(or *worker-static-read-view* *static-idb*)))
+
+(defun generated-object-code (object)
+  (if (zerop *threads*)
+      `(gethash ,object *constant-integers*)
+      `(worker-object-code ,object)))
+
 (defun subst-int-code (code-tree)
   (labels ((process-item (item)
              (cond ((atom item) item)
@@ -372,7 +405,7 @@
                                   ((equal (third item) '(problem-state.idb state-or-state+))
                                      '(problem-state.idb state-or-state+))
                                   ((eql (third item) '*static-db*)
-                                     '(or *worker-static-read-view* *static-idb*))
+                                     (generated-static-read-table))
                                   ;((eql (third item) 'idb)
                                   ;   'idb)
                                   ((equal (third item) '(merge-idb-hidb state))
@@ -429,7 +462,7 @@
                               ((and (symbolp item)
                                     (or (char= (char (symbol-name item) 0) #\$)
                                         (char= (char (symbol-name item) 0) #\?)))
-                                 `(* (worker-object-code ,item) ,multiplier))
+                                 `(* ,(generated-object-code item) ,multiplier))
                               ((numberp item)
                                  (* (gethash item *constant-integers*) multiplier))
                               ((error "Error in convert-prop-list: ~A invalid in ~A"

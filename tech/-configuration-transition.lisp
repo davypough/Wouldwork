@@ -43,6 +43,7 @@
 
 (define-problem-helper register-configuration-transition-provider (provider)
   "Register a pure configuration-transition provider query for the staged problem."
+  (reject-worker-read-write 'register-configuration-transition-provider)
   (unless (and (symbolp provider)
                (member provider *query-names* :test #'eq))
     (error "Configuration-transition provider must name an installed query: ~S"
@@ -141,3 +142,5 @@
       (if (and (bind (holding ?agent $held))
                (tray $held))
         (relocate-tray-and-riders! $held (first ?destination-configuration)))))
+
+(register-worker-read-configuration '*configuration-transition-providers*)
